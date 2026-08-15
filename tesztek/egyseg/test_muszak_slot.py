@@ -244,6 +244,49 @@ def test_foglalasi_kod_egyedi(kapcsolat):
         _foglalas_beszur(kapcsolat, torzs, slot_2, foglalasi_kod=kozos_kod)
 
 
+def test_fk_elutasitja_slot_beszurast_nemletezo_muszakra(kapcsolat):
+    torzs = _torzsadat_beszur(kapcsolat)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        kapcsolat.execute(
+            "INSERT INTO slot (id, szervezet_id, muszak_id, kezdet, veg, letrehozva) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                _uuid(),
+                torzs["szervezet_id"],
+                _uuid(),  # nem létező muszak_id
+                "2026-08-18T08:00:00Z",
+                "2026-08-18T08:30:00Z",
+                _MOST,
+            ),
+        )
+
+
+def test_fk_elutasitja_foglalas_beszurast_nemletezo_slotra(kapcsolat):
+    torzs = _torzsadat_beszur(kapcsolat)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        _foglalas_beszur(kapcsolat, torzs, _uuid())  # nem létező slot_id
+
+
+def test_fk_elutasitja_hold_beszurast_nemletezo_slotra(kapcsolat):
+    torzs = _torzsadat_beszur(kapcsolat)
+
+    with pytest.raises(sqlite3.IntegrityError):
+        kapcsolat.execute(
+            "INSERT INTO hold (id, szervezet_id, slot_id, session_id, letrejott, lejar) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                _uuid(),
+                torzs["szervezet_id"],
+                _uuid(),  # nem létező slot_id
+                "session-1",
+                _MOST,
+                "2026-08-15T10:03:00Z",
+            ),
+        )
+
+
 def test_muszak_blokk_tipus_ervenytelen_erteket_elutasit(kapcsolat):
     torzs = _torzsadat_beszur(kapcsolat)
     muszak_id = _muszak_beszur(kapcsolat, torzs)

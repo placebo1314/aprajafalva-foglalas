@@ -9,6 +9,15 @@
 -- (platform-varrat, blueprint 13. szakasz). A kereszttáblás konzisztenciát
 -- (pl. hogy a muszak.szervezet_id megegyezik a pult.szervezet_id-jével)
 -- a mag/repo/ réteg tartja fenn íráskor, ugyanúgy, mint a 0001-ben.
+--
+-- Az összes időoszlopon (kezdet, veg, letrehozva, letrejott, lejar,
+-- idobelyeg) a `LIKE '____-__-__T__:__:__Z'` kényszer FORMAI, nem
+-- tartalmi ellenőrzés: az aláhúzás bármilyen karakterre illeszkedik, nem
+-- csak számjegyre (pl. 'aaaa-aa-aaTaa:aa:aaZ' is átmenne rajta). A valódi
+-- számjegy-validálás az alkalmazásrétegben (mag/repo/) történik — a
+-- SQLite-specifikus, motorfüggő mintaillesztő kulcsszó tiltott
+-- (db-hordozhatosag skill), digit-only CHECK pedig motorfüggetlenül nem
+-- írható le ennél egyszerűbben.
 
 -- Műszak: a rendszer központi entitása. A snapshot-mezők (idotartam_perc,
 -- puffer_utana_perc, min_racs_perc) a feloldott öröklődési lánc
@@ -70,6 +79,12 @@ CREATE INDEX ix_muszak_szolgaltatas ON muszak(szolgaltatas_id);
 -- (blueprint 4. szakasz). Hogy a blokk kezdete/vége a saját műszakján
 -- belül marad-e ("a szünet nem lóghat ki a műszakból"), azt szintén a
 -- mag/repo/ ellenőrzi írásnál — egy CHECK nem tud másik sorra hivatkozni.
+--
+-- A `legkorabban`/`legkesobb` ablakhatár-mezők (docs/domain.md, "ebéd
+-- ablakon belül mozgatható") TUDATOSAN hiányoznak: v1-ben kizárólag a
+-- FixBlokk stratégia fut, ami nem mozgat (ADR-009), ezért nincs, ami
+-- ezeket olvasná. Ha a MohoAthelyezo stratégia bekapcsolásra kerül
+-- (ADR-009 kiváltó feltétele teljesül), ez új migrációt igényel.
 CREATE TABLE muszak_blokk (
     id                    TEXT PRIMARY KEY,
     szervezet_id          TEXT NOT NULL REFERENCES szervezet(id),
@@ -102,6 +117,10 @@ CREATE INDEX ix_muszak_blokk_muszak ON muszak_blokk(muszak_id);
 -- garantálja (lásd lent, ADR-003). A slot állapotát (szabad/foglalt) soha
 -- nem tároljuk külön mezőn: azt a hozzá tartozó aktív foglalás/hold léte
 -- dönti el (docs/domain.md, "Slot"; ADR-008, "nincs foglalási ablak").
+--
+-- A kezdet/veg-nek a saját műszakja időablakán (muszak.kezdet/veg) belülre
+-- kell esnie — ezt itt nem lehet CHECK-kel kikényszeríteni (másik sorra
+-- hivatkozna), ezt a slotgenerátor garantálja létrehozáskor.
 CREATE TABLE slot (
     id            TEXT PRIMARY KEY,
     szervezet_id  TEXT NOT NULL REFERENCES szervezet(id),
@@ -199,6 +218,11 @@ CREATE INDEX ix_hold_lejar ON hold(lejar);
 CREATE TABLE esemenyek (
     id              TEXT PRIMARY KEY,
     szervezet_id    TEXT NOT NULL REFERENCES szervezet(id),
+    -- Szándékosan nincs CHECK IN (...) a tipus oszlopon: az eseménykatalógus
+    -- bővül (foglalasi-mag skill, "Eseménykibocsátás" felsorolása csak a
+    -- mai készlet), és rajta semmilyen DB-szintű logika nem múlik — ellentétben
+    -- a muszak.allapot / foglalas.allapot zárt halmazaival, amelyeket az
+    -- egyediségi indexek (pl. ix_foglalas_slot_aktiv) szemantikája használ.
     tipus           TEXT NOT NULL,
     entitas_tipus   TEXT NOT NULL,
     entitas_id      TEXT NOT NULL,
