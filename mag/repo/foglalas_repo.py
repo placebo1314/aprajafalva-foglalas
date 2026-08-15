@@ -303,3 +303,50 @@ def foglalas_lemond(conn: sqlite3.Connection, foglalasi_kod: str) -> Eredmeny:
     else:
         conn.execute("COMMIT")
         return Eredmeny.SIKERES
+
+
+def szabad_slotok_keresese(
+    conn: sqlite3.Connection,
+    *,
+    szervezet_id: str,
+    bolt_id: str | None = None,
+    szolgaltatas_id: str | None = None,
+) -> list[tuple[str, str, str]]:
+    """Szabad (sem hold, sem aktív foglalás nélküli) slotokat listáz,
+    kezdet szerint rendezve — `(slot_id, kezdet, veg)` hármasokként.
+
+    Ez NEM az ajánlatpontozó (ADR-006) — puszta, rendezetlen szűrés,
+    pontozás/rangsorolás nélkül. A pontozó egy külön, ennél nagyobb
+    komponens, ami még nem íródott meg; ez a függvény addig is használható
+    egyenes listázásra (pl. a CLI `keres` parancsához).
+    """
+    sorok = conn.execute(
+        "SELECT slot.id, slot.kezdet, slot.veg "
+        "FROM slot JOIN muszak ON muszak.id = slot.muszak_id "
+        "WHERE muszak.szervezet_id = ? "
+        "AND (? IS NULL OR muszak.bolt_id = ?) "
+        "AND (? IS NULL OR muszak.szolgaltatas_id = ?) "
+        "AND NOT EXISTS (SELECT 1 FROM hold WHERE hold.slot_id = slot.id) "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM foglalas "
+        "  WHERE foglalas.slot_id = slot.id AND foglalas.allapot <> 'lemondva'"
+        ") "
+        "ORDER BY slot.kezdet",
+        (szervezet_id, bolt_id, bolt_id, szolgaltatas_id, szolgaltatas_id),
+    ).fetchall()
+    return [(sor[0], sor[1], sor[2]) for sor in sorok]
+
+
+def foglalas_lekerdezes_idempotencia_szerint(
+    conn: sqlite3.Connection, idempotencia_kulcs: str
+) -> dict | None:
+    """Egy korábban létrehozott foglalás alapadatai — pl. a CLI `foglal`
+    parancsának, hogy a `foglalasi_kod`-ot vissza tudja adni idempotens
+    ismétlés esetén is (amikor `foglalas_letrehoz` nem hoz létre új sort)."""
+    sor = conn.execute(
+        "SELECT id, slot_id, foglalasi_kod, allapot FROM foglalas WHERE idempotencia_kulcs = ?",
+        (idempotencia_kulcs,),
+    ).fetchone()
+    if sor is None:
+        return None
+    return {"id": sor[0], "slot_id": sor[1], "foglalasi_kod": sor[2], "allapot": sor[3]}
