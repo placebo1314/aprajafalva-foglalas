@@ -1,0 +1,6 @@
+# Minden szöveges fájl LF sorvéggel tárolódik a repóban,
+# a checkout-kori CRLF/LF konverziót Git dönti el platform szerint.
+* text=auto eol=lf
+
+# Shell szkriptek mindig LF-fel, Windowsön is (WSL/Git Bash futtatja).
+*.sh text eol=lf
