@@ -17,8 +17,9 @@ from __future__ import annotations
 import re
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
+
+from mag.ido import most_iso
 
 GYOKER = Path(__file__).resolve().parents[2]
 MIGRACIOK_KONYVTAR = GYOKER / "migraciok"
@@ -136,10 +137,6 @@ def _lefutott_sorszamok(conn: sqlite3.Connection) -> set[str]:
     return {sor[0] for sor in conn.execute("SELECT sorszam FROM sema_verzio")}
 
 
-def _most_iso() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def migral(conn: sqlite3.Connection) -> list[str]:
     """A még le nem futott migrációkat sorszám szerint, egyenként végrehajtja.
 
@@ -159,7 +156,7 @@ def migral(conn: sqlite3.Connection) -> list[str]:
                 conn.execute(allitas)
             conn.execute(
                 "INSERT INTO sema_verzio (sorszam, nev, lefutott) VALUES (?, ?, ?)",
-                (m.sorszam, m.nev, _most_iso()),
+                (m.sorszam, m.nev, most_iso()),
             )
         except Exception:
             conn.execute("ROLLBACK")
