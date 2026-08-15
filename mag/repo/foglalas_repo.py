@@ -81,15 +81,19 @@ def _esemeny_ir(
 
 
 def slot_szabad(conn: sqlite3.Connection, slot_id: str) -> bool:
-    """Igaz, ha a slot létezik, és nincs rajta sem hold, sem aktív foglalás.
+    """Igaz, ha a slot létezik, nincs rajta MÉG ÉRVÉNYES hold (`lejar` a
+    jelen időnél későbbi), és nincs aktív foglalás sem.
 
-    Nem néz hold-TTL-t: egy lejárt, de még nem takarított hold is foglaltnak
-    számít itt — a takarítás a `lejart_holdok_takaritasa()` dolga, külön
-    ütemezve, nem ennek a függvénynek olvasáskor.
+    Egy lejárt, de még nem takarított hold NEM számít blokkolónak — a
+    takarítás (`lejart_holdok_takaritasa()`) csak a táblát tisztítja,
+    magát a szabadságot nem ez dönti el, hanem a `lejar` mező.
     """
     if conn.execute("SELECT 1 FROM slot WHERE id = ?", (slot_id,)).fetchone() is None:
         return False
-    if conn.execute("SELECT 1 FROM hold WHERE slot_id = ?", (slot_id,)).fetchone() is not None:
+    van_ervenyes_hold = conn.execute(
+        "SELECT 1 FROM hold WHERE slot_id = ? AND lejar > ?", (slot_id, most_iso())
+    ).fetchone()
+    if van_ervenyes_hold is not None:
         return False
     van_aktiv_foglalas = conn.execute(
         "SELECT 1 FROM foglalas WHERE slot_id = ? AND allapot <> 'lemondva'", (slot_id,)
@@ -312,8 +316,12 @@ def szabad_slotok_keresese(
     bolt_id: str | None = None,
     szolgaltatas_id: str | None = None,
 ) -> list[tuple[str, str, str]]:
-    """Szabad (sem hold, sem aktív foglalás nélküli) slotokat listáz,
-    kezdet szerint rendezve — `(slot_id, kezdet, veg)` hármasokként.
+    """Szabad — sem MÉG ÉRVÉNYES hold, sem aktív foglalás nélküli —
+    slotokat listáz, kezdet szerint rendezve — `(slot_id, kezdet, veg)`
+    hármasokként.
+
+    Egy lejárt, de még nem takarított hold NEM zárja ki a slotot (lásd
+    `slot_szabad` azonos indoklása).
 
     Ez NEM az ajánlatpontozó (ADR-006) — puszta, rendezetlen szűrés,
     pontozás/rangsorolás nélkül. A pontozó egy külön, ennél nagyobb
@@ -326,13 +334,13 @@ def szabad_slotok_keresese(
         "WHERE muszak.szervezet_id = ? "
         "AND (? IS NULL OR muszak.bolt_id = ?) "
         "AND (? IS NULL OR muszak.szolgaltatas_id = ?) "
-        "AND NOT EXISTS (SELECT 1 FROM hold WHERE hold.slot_id = slot.id) "
+        "AND NOT EXISTS (SELECT 1 FROM hold WHERE hold.slot_id = slot.id AND hold.lejar > ?) "
         "AND NOT EXISTS ("
         "  SELECT 1 FROM foglalas "
         "  WHERE foglalas.slot_id = slot.id AND foglalas.allapot <> 'lemondva'"
         ") "
         "ORDER BY slot.kezdet",
-        (szervezet_id, bolt_id, bolt_id, szolgaltatas_id, szolgaltatas_id),
+        (szervezet_id, bolt_id, bolt_id, szolgaltatas_id, szolgaltatas_id, most_iso()),
     ).fetchall()
     return [(sor[0], sor[1], sor[2]) for sor in sorok]
 

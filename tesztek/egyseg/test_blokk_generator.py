@@ -129,9 +129,9 @@ def test_szabad_sav_a_muszak_vegehez_illesztve():
 
 def test_szabad_sav_es_szunetmintazat_nem_fedi_egymast():
     """Regresszióteszt: ha egyszerre van szünetmintázat ÉS foglalhato_arany
-    < 1.0, a szünetciklusok nem lóghatnak bele a szabad sávba — a
-    szünetgenerálás a szabad sáv kezdetéig tart, nem a műszak tényleges
-    végéig (lásd mag/slot/blokk.py, FixBlokk.general)."""
+    < 1.0, a szünetciklusok nem lóghatnak bele a szabad sávba — a szünet
+    elsőbbrendű, a szabad sáv az adott órában lerövidül vagy elmarad
+    (lásd mag/slot/blokk.py, FixBlokk._szabad_sav)."""
     muszak = _muszak(
         idotartam_perc=10,
         puffer_utana_perc=0,
@@ -147,11 +147,44 @@ def test_szabad_sav_es_szunetmintazat_nem_fedi_egymast():
     eredmeny = generator.general(muszak, _STRATEGIA)
 
     szabad_sav = [b for b in eredmeny.blokkok if b.tipus == "szabad_sav"]
-    assert len(szabad_sav) == 1
+    assert len(szabad_sav) > 0
     szunet_blokkok = [b for b in eredmeny.blokkok if b.tipus == "szunet"]
-    assert all(b.veg <= szabad_sav[0].kezdet for b in szunet_blokkok), (
-        "egy szünetblokk belelóg a szabad sávba"
+    for szunet in szunet_blokkok:
+        for sav in szabad_sav:
+            atfed = szunet.kezdet < sav.veg and szunet.veg > sav.kezdet
+            assert not atfed, f"szünet és szabad sáv átfedésben: {szunet} / {sav}"
+    _nincs_atfedes(eredmeny)
+
+
+def test_szabad_sav_oranta_elosztva_nyolcoras_muszakban():
+    """8 órás műszak, szünet nélkül, foglalhato_arany=0.8 -> legalább 4
+    szabad sáv blokk, óránként egyenletesen elosztva — nem egyetlen blokk
+    a műszak végén (ADR-011: "elnyeli a csúszást", ami csak akkor igaz,
+    ha a szabad idő a nap egészében jelen van)."""
+    muszak = _muszak(
+        idotartam_perc=15,
+        puffer_utana_perc=0,
+        min_racs_perc=15,
+        blokk_szabaly={"szunetek": []},
+        foglalhato_arany=0.8,
+        kezdet="2026-08-18T08:00:00Z",
+        veg="2026-08-18T16:00:00Z",
     )
+
+    eredmeny = generator.general(muszak, _STRATEGIA)
+
+    szabad_sav = sorted(
+        (b for b in eredmeny.blokkok if b.tipus == "szabad_sav"), key=lambda b: b.kezdet
+    )
+    assert len(szabad_sav) >= 4
+
+    # "Egyenletesen elosztva": a blokkok között nincs 2 óránál nagyobb rés,
+    # tehát nem torlódnak egyetlen szakaszba.
+    hatarpontok = [muszak.kezdet, *[b.kezdet for b in szabad_sav], muszak.veg]
+    resek = [
+        perc_kulonbseg(hatarpontok[i], hatarpontok[i + 1]) for i in range(len(hatarpontok) - 1)
+    ]
+    assert all(res <= 120 for res in resek), f"nem egyenletes eloszlás: {resek}"
     _nincs_atfedes(eredmeny)
 
 

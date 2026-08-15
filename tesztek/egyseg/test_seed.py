@@ -59,19 +59,40 @@ def test_kivetel_napra_is_letrejon_a_muszak_sor_a_db_ben(db_utvonal):
         conn.close()
 
 
-def test_gipszjakab_egy_napja_konzisztens_szammal(db_utvonal):
-    """8 órás műszak, (10+10) perces ciklusokkal ÉS foglalhato_arany=0.8
-    szabad sávval — a szabad sáv lerövidíti a szünetciklusok munkasávját
-    (lásd mag/slot/blokk.py, FixBlokk.general), ezért nem pontosan 8×3, de
-    minden nap ugyanannyi slotot/blokkot kell adjon (determinisztikus)."""
+def test_gipszjakab_egy_napja_8x3_slot_es_blokk(db_utvonal):
+    """8 órás műszak, (10+10) perces ciklusokkal, foglalhato_arany=1.0
+    (nincs szabad sáv GipszJakabnál — a saját szünetritmusa már
+    meghatározza a napját) -> óránként pontosan 3 slot + 3 szünetblokk,
+    tehát a teljes napra 8×3 = 24."""
     adat = betolt(db_utvonal)
     gipszjakab_muszakok = [
         m for m in adat["muszakok"] if m["alkalmazott"] == "GipszJakab" and not m["kihagyva"]
     ]
-    slot_szamok = {m["slot_szam"] for m in gipszjakab_muszakok}
-    blokk_szamok = {m["blokk_szam"] for m in gipszjakab_muszakok}
-    assert len(slot_szamok) == 1, f"nem minden nap egyforma: {slot_szamok}"
-    assert len(blokk_szamok) == 1, f"nem minden nap egyforma: {blokk_szamok}"
+    assert gipszjakab_muszakok
+    assert all(m["slot_szam"] == 8 * 3 for m in gipszjakab_muszakok)
+    assert all(m["blokk_szam"] == 8 * 3 for m in gipszjakab_muszakok)
+
+
+def test_szabad_sav_csak_torpillanal_es_hulk_hugannal(db_utvonal):
+    adat = betolt(db_utvonal)
+    conn = sqlite3.connect(db_utvonal)
+    try:
+        for muszak in adat["muszakok"]:
+            if muszak["kihagyva"]:
+                continue
+            van_szabad_sav = (
+                conn.execute(
+                    "SELECT 1 FROM muszak_blokk WHERE muszak_id = ? AND tipus = 'szabad_sav'",
+                    (muszak["muszak_id"],),
+                ).fetchone()
+                is not None
+            )
+            if muszak["alkalmazott"] == "GipszJakab":
+                assert not van_szabad_sav, "GipszJakabnál nem lehet szabad sáv"
+            else:
+                assert van_szabad_sav, f"{muszak['alkalmazott']}nél kellene legyen szabad sáv"
+    finally:
+        conn.close()
 
 
 def test_nincs_atfedes_egyetlen_muszakon_sem(db_utvonal):

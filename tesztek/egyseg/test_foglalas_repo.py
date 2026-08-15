@@ -132,6 +132,28 @@ def slot(kapcsolat) -> str:
     return _slot_beszur(kapcsolat, torzs, muszak_id)
 
 
+def _lejart_hold_beszur(conn, slot_id: str, session_id: str = "session-lejart") -> None:
+    """Egy MÁR LEJÁRT holdot szúr be közvetlenül — a `hold_letrehoz` a
+    `lejar > letrejott` CHECK miatt nem tudna ilyet létrehozni (a
+    `letrejott` mindig a valódi 'most'). Mindkét időpont biztonságosan a
+    múltban van a valódi rendszerórához képest."""
+    (szervezet_id,) = conn.execute(
+        "SELECT szervezet_id FROM slot WHERE id = ?", (slot_id,)
+    ).fetchone()
+    conn.execute(
+        "INSERT INTO hold (id, szervezet_id, slot_id, session_id, letrejott, lejar) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (
+            _uuid(),
+            szervezet_id,
+            slot_id,
+            session_id,
+            "2020-01-01T00:00:00Z",
+            "2020-01-01T00:00:01Z",
+        ),
+    )
+
+
 # --- slot_szabad ---------------------------------------------------------
 
 
@@ -146,6 +168,14 @@ def test_slot_szabad_hamis_nemletezo_slotra(kapcsolat):
 def test_slot_szabad_hamis_ha_van_hold(kapcsolat, slot):
     foglalas_repo.hold_letrehoz(kapcsolat, slot, "session-1", _jovoben())
     assert foglalas_repo.slot_szabad(kapcsolat, slot) is False
+
+
+def test_slot_szabad_igaz_lejart_hold_utan_takaritas_nelkul_is(kapcsolat, slot):
+    """Egy lejárt, de még nem takarított hold nem blokkolhat — a
+    takarítás (lejart_holdok_takaritasa) csak a táblát tisztítja, a
+    szabadságot a lejar mező dönti el."""
+    _lejart_hold_beszur(kapcsolat, slot)
+    assert foglalas_repo.slot_szabad(kapcsolat, slot) is True
 
 
 def test_slot_szabad_hamis_ha_van_aktiv_foglalas(kapcsolat, slot):
@@ -343,3 +373,47 @@ def test_foglalas_lemond_esemenyeket_ir(kapcsolat, slot):
         )
     ]
     assert set(tipusok) == {"foglalas_lemondva", "slot_felszabadult"}
+
+
+# --- szabad_slotok_keresese -------------------------------------------
+
+
+def test_szabad_slotok_keresese_megtalalja_az_uj_slotot(kapcsolat, slot):
+    torzs = kapcsolat.execute("SELECT szervezet_id FROM slot WHERE id = ?", (slot,)).fetchone()
+    (szervezet_id,) = torzs
+    talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=szervezet_id)
+    assert slot in [t[0] for t in talalatok]
+
+
+def test_szabad_slotok_keresese_kizarja_az_ervenyes_holdot(kapcsolat, slot):
+    (szervezet_id,) = kapcsolat.execute(
+        "SELECT szervezet_id FROM slot WHERE id = ?", (slot,)
+    ).fetchone()
+    foglalas_repo.hold_letrehoz(kapcsolat, slot, "session-1", _jovoben())
+    talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=szervezet_id)
+    assert slot not in [t[0] for t in talalatok]
+
+
+def test_szabad_slotok_keresese_nem_zarja_ki_a_lejart_holdot_takaritas_nelkul(kapcsolat, slot):
+    """A kért javítás lényege: lejárt hold után a slot újra megjelenik a
+    keresésben, takarítás (lejart_holdok_takaritasa) nélkül is."""
+    (szervezet_id,) = kapcsolat.execute(
+        "SELECT szervezet_id FROM slot WHERE id = ?", (slot,)
+    ).fetchone()
+    _lejart_hold_beszur(kapcsolat, slot)
+
+    # A hold sora még mindig ott van — nem takarítottunk.
+    meg_van_a_hold = kapcsolat.execute("SELECT 1 FROM hold WHERE slot_id = ?", (slot,)).fetchone()
+    assert meg_van_a_hold is not None
+
+    talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=szervezet_id)
+    assert slot in [t[0] for t in talalatok]
+
+
+def test_szabad_slotok_keresese_kizarja_az_aktiv_foglalast(kapcsolat, slot):
+    (szervezet_id,) = kapcsolat.execute(
+        "SELECT szervezet_id FROM slot WHERE id = ?", (slot,)
+    ).fetchone()
+    foglalas_repo.foglalas_letrehoz(kapcsolat, slot, "a" * 64, _uuid(), "session-1")
+    talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=szervezet_id)
+    assert slot not in [t[0] for t in talalatok]

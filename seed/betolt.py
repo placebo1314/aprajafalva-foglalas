@@ -57,7 +57,11 @@ _TORPILLA_PULTOK = [
         "idotartam_perc": 10,
         "puffer_utana_perc": 0,
         "min_racs_perc": 10,
-        "foglalhato_arany": 0.8,
+        # A saját szünetritmusa (10 perc vásárlás + 10 perc szünet, minden
+        # vásárlás után) már önmagában kitölti és meghatározza a napját —
+        # egy emellé rendelt szabad sáv ellentmondásos lenne. Szabad sáv
+        # csak Törpilla és Hulk Hugan pultján van.
+        "foglalhato_arany": 1.0,
         "blokk_szabaly": {
             "szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "minden_slot_utan"}]
         },
@@ -83,7 +87,11 @@ _TORPILLA_PULTOK = [
         "idotartam_perc": 15,
         "puffer_utana_perc": 0,
         "min_racs_perc": 15,
-        "foglalhato_arany": 1.0,
+        # "Szünet nélkül" = nincs generált szünetblokk, de ettől függetlenül
+        # lehet szabad sáv (a kettő nem ugyanaz — a szabad sáv nem
+        # munkamegszakítás, csak be nem osztott, walk-in vásárlóra
+        # tartogatott idő, blueprint 4. szakasz).
+        "foglalhato_arany": 0.8,
         "blokk_szabaly": {"szunetek": []},
         "kezdet_ora": 8,
         "veg_ora": 12,  # 4 órás műszak
