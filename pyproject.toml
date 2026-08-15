@@ -3,7 +3,12 @@ name = "aprajafalva-foglalas"
 version = "0.1.0"
 description = "Magyar nyelvű, lokálisan futó időpontfoglaló Aprajafalva három boltjához."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    # A zoneinfo (stdlib) Windows/macOS friss telepítésen nem talál
+    # rendszer-tzdatabázist — a DST-számításokhoz (mag/slot/generator.py,
+    # seed/betolt.py) ez explicit futásidejű függőség, nem csak dev-eszköz.
+    "tzdata>=2024.1",
+]
 
 # A hun-date-parser és a huspacy tudatosan nincs itt — csak az M4
 # (Asszisztens) mérföldkőnél kellenek, addig a mag/ LLM és dátumparser

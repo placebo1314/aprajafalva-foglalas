@@ -12,6 +12,7 @@ itt — az a `mag/szabalyok/kenyszerek.py` dolga, a stratégián kívül
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Protocol
 
 from mag.modell.muszak import Blokk, Muszak
@@ -36,19 +37,23 @@ class FixBlokk:
     nélkül"). A szabad sávot a `muszak.foglalhato_arany`-ból generálja, a
     műszak VÉGÉHEZ illesztve, egyetlen blokkként.
 
-    Ismert korlát: ha egyszerre van szünet-mintázat ÉS `foglalhato_arany <
-    1.0`, a két generálás nem ellenőrzi egymást átfedésre — v1-ben ez nem
-    fordul elő a seed adatban (lásd seed/betolt.py), de ha egy jövőbeli
-    profil mindkettőt egyszerre használná szoros időzítéssel, ütközés
-    keletkezhet. Ezt a `mag/szabalyok/kenyszerek.py` sem fogja el (az csak
-    a műszakon-belüliséget és a szünetmennyiséget nézi, nem az átfedést).
+    A szabad sáv és a szünet-mintázat nem fedheti egymást: a szünetgenerálás
+    a szabad sáv KEZDETÉT tekinti a munkasáv végének, nem a műszak tényleges
+    végét — így ha egyszerre van jelen mindkettő (pl. GipszJakab, ahol
+    `foglalhato_arany < 1.0` ÉS van szünetmintázat), a szünetciklusok
+    egyszerűen korábban leállnak, nem lógnak bele a szabad sávba.
     """
 
     def general(self, muszak: Muszak) -> list[Blokk]:
-        blokkok: list[Blokk] = []
+        szabad_sav = self._szabad_sav(muszak)
+        # A szünetgenerálás a szabad sáv kezdetéig tart, nem a műszak
+        # tényleges végéig — ez zárja ki az átfedést a két generálás közt.
+        munka_veg = szabad_sav[0].kezdet if szabad_sav else muszak.veg
+        munka_muszak = replace(muszak, veg=munka_veg)
+
+        blokkok: list[Blokk] = list(szabad_sav)
         for szabaly in muszak.blokk_szabaly.get("szunetek", []):
-            blokkok.extend(self._szunet_generalas(muszak, szabaly))
-        blokkok.extend(self._szabad_sav(muszak))
+            blokkok.extend(self._szunet_generalas(munka_muszak, szabaly))
         return sorted(blokkok, key=lambda b: b.kezdet)
 
     def _szunet_generalas(self, muszak: Muszak, szabaly: dict) -> list[Blokk]:

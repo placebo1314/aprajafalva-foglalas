@@ -30,8 +30,9 @@ def muszak_letrehoz(
     min_racs_perc: int,
     foglalhato_arany: float,
     blokk_szabaly: dict,
+    id_: str | None = None,
 ) -> str:
-    muszak_id = uj_uuid()
+    muszak_id = id_ or uj_uuid()
     conn.execute(
         "INSERT INTO muszak "
         "(id, szervezet_id, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, "

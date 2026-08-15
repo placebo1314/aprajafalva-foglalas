@@ -20,7 +20,10 @@ GYOKER = Path(__file__).parent
 
 
 def fut(parancs: list[str], kornyezet: dict | None = None) -> int:
-    korny = {**os.environ, **(kornyezet or {})}
+    # PYTHONUTF8=1: a kimenet magyar ékezetes karaktereket (ő, ű) tartalmaz,
+    # amit Windowson az örökölt konzol-kódlap (cp1252) nem tud kódolni —
+    # UTF-8 módban ez a probléma platformfüggetlenül nem áll fenn.
+    korny = {**os.environ, "PYTHONUTF8": "1", **(kornyezet or {})}
     print(f"$ {' '.join(parancs)}")
     return subprocess.run(parancs, cwd=GYOKER, env=korny).returncode
 

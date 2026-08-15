@@ -127,6 +127,34 @@ def test_szabad_sav_a_muszak_vegehez_illesztve():
     _nincs_atfedes(eredmeny)
 
 
+def test_szabad_sav_es_szunetmintazat_nem_fedi_egymast():
+    """Regresszióteszt: ha egyszerre van szünetmintázat ÉS foglalhato_arany
+    < 1.0, a szünetciklusok nem lóghatnak bele a szabad sávba — a
+    szünetgenerálás a szabad sáv kezdetéig tart, nem a műszak tényleges
+    végéig (lásd mag/slot/blokk.py, FixBlokk.general)."""
+    muszak = _muszak(
+        idotartam_perc=10,
+        puffer_utana_perc=0,
+        min_racs_perc=10,
+        blokk_szabaly={
+            "szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "minden_slot_utan"}]
+        },
+        foglalhato_arany=0.8,
+        kezdet="2026-08-18T08:00:00Z",
+        veg="2026-08-18T16:00:00Z",
+    )
+
+    eredmeny = generator.general(muszak, _STRATEGIA)
+
+    szabad_sav = [b for b in eredmeny.blokkok if b.tipus == "szabad_sav"]
+    assert len(szabad_sav) == 1
+    szunet_blokkok = [b for b in eredmeny.blokkok if b.tipus == "szunet"]
+    assert all(b.veg <= szabad_sav[0].kezdet for b in szunet_blokkok), (
+        "egy szünetblokk belelóg a szabad sávba"
+    )
+    _nincs_atfedes(eredmeny)
+
+
 def test_foglalhato_arany_egy_eseten_nincs_szabad_sav():
     muszak = _muszak(15, 0, 15, {"szunetek": []}, foglalhato_arany=1.0)
     eredmeny = generator.general(muszak, _STRATEGIA)

@@ -200,6 +200,11 @@ def visszagorget(conn: sqlite3.Connection, sorszamig: str | None = None) -> list
 def _fo() -> None:
     import sys
 
+    # Lásd seed/betolt.py::_fo() azonos kommentje — Windowson a konzol
+    # örökölt kódlapja nem mindig kódolja az ékezetes karaktereket.
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+
     if len(sys.argv) < 2:
         print("Használat: python -m mag.repo.migracio <db_utvonal> [--vissza [sorszamig]]")
         raise SystemExit(1)
