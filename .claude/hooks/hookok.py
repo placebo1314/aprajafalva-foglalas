@@ -199,7 +199,9 @@ def migracio_lint() -> None:
         hibak.append("Hiányzik a '-- down' szakasz. Minden migráció visszafordítható.")
 
     if hibak:
-        blokkol(f"HORDOZHATÓSÁGI HIBA ({fajl.name})", hibak, "Lásd db-hordozhatosag skill / ADR-004.")
+        blokkol(
+            f"HORDOZHATÓSÁGI HIBA ({fajl.name})", hibak, "Lásd db-hordozhatosag skill / ADR-004."
+        )
 
 
 def formaz() -> None:
@@ -207,10 +209,15 @@ def formaz() -> None:
     fajl = erintett_fajl(bemenet())
     if not fajl or fajl.suffix != ".py":
         return
-    for parancs in (["ruff", "format", str(fajl)], ["ruff", "check", "--fix", str(fajl)]):
+    for parancs in (
+        [sys.executable, "-m", "ruff", "format", str(fajl)],
+        [sys.executable, "-m", "ruff", "check", "--fix", str(fajl)],
+    ):
         try:
             subprocess.run(parancs, capture_output=True, timeout=30)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        except subprocess.TimeoutExpired:
+            return
+        except FileNotFoundError:
             return  # ruff nincs telepítve: csendben kihagyjuk
 
 

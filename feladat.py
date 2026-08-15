@@ -53,7 +53,10 @@ def seed(_: list[str]) -> int:
 
 
 def lint(_: list[str]) -> int:
-    for parancs in (["ruff", "format", "--check", "."], ["ruff", "check", "."]):
+    for parancs in (
+        [sys.executable, "-m", "ruff", "format", "--check", "."],
+        [sys.executable, "-m", "ruff", "check", "."],
+    ):
         if kod := fut(parancs):
             return kod
     return 0
