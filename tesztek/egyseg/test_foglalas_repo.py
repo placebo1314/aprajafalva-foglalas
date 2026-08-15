@@ -214,6 +214,18 @@ def test_hold_letrehoz_megeloztek_masik_hold_miatt(kapcsolat, slot):
     assert kapcsolat.execute("SELECT COUNT(*) FROM hold").fetchone()[0] == 1
 
 
+def test_hold_letrehoz_sikeres_lejart_hold_utan(kapcsolat, slot):
+    """A lejárt hold nem blokkolja az újat: a hold_letrehoz a beszúrás
+    előtt, ugyanabban a tranzakcióban törli a slot lejárt holdjait."""
+    _lejart_hold_beszur(kapcsolat, slot)
+
+    eredmeny = foglalas_repo.hold_letrehoz(kapcsolat, slot, "session-uj", _jovoben())
+
+    assert eredmeny is Eredmeny.SIKERES
+    sorok = kapcsolat.execute("SELECT session_id FROM hold WHERE slot_id = ?", (slot,)).fetchall()
+    assert sorok == [("session-uj",)]  # a lejárt sor eltűnt, csak az új maradt
+
+
 def test_hold_letrehoz_megeloztek_aktiv_foglalas_miatt(kapcsolat, slot):
     foglalas_repo.foglalas_letrehoz(kapcsolat, slot, "a" * 64, _uuid(), "session-1")
     eredmeny = foglalas_repo.hold_letrehoz(kapcsolat, slot, "session-2", _jovoben())

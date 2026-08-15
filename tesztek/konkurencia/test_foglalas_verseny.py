@@ -299,6 +299,58 @@ def test_parhuzamos_hold_pontosan_egy_sikeres(db_utvonal, egy_slot):
         ellenorzo.close()
 
 
+def test_parhuzamos_hold_lejart_hold_utan_pontosan_egy_sikeres(db_utvonal, egy_slot):
+    """Ha a slotra már ül egy LEJÁRT hold, két szál egyszerre próbál új
+    holdot tenni rá — a hold_letrehoz a beszúrás előtt törli a lejárt
+    holdot, ezért pontosan egy szálnak kell nyernie, nem egyiknek sem
+    szabad MEGELOZTEK-et kapnia a régi (lejárt) sor miatt."""
+    elokeszito = migracio.kapcsolat_nyitas(db_utvonal)
+    try:
+        (szervezet_id,) = elokeszito.execute(
+            "SELECT szervezet_id FROM slot WHERE id = ?", (egy_slot,)
+        ).fetchone()
+        elokeszito.execute(
+            "INSERT INTO hold (id, szervezet_id, slot_id, session_id, letrejott, lejar) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                _uuid(),
+                szervezet_id,
+                egy_slot,
+                "session-regi",
+                "2020-01-01T00:00:00Z",
+                "2020-01-01T00:00:01Z",
+            ),
+        )
+    finally:
+        elokeszito.close()
+
+    def _feladat(i: int) -> Eredmeny:
+        conn = migracio.kapcsolat_nyitas(db_utvonal)
+        try:
+            return foglalas_repo.hold_letrehoz(conn, egy_slot, f"session-uj-{i}", _jovoben())
+        finally:
+            conn.close()
+
+    feladatok = [(lambda i=i: _feladat(i)) for i in range(2)]
+    eredmenyek, hibak = _egyszerre_inditva(feladatok)
+
+    assert hibak == [], f"a repo réteg kivételt dobott versenyhelyzetben: {hibak!r}"
+    sikeresek = [e for e in eredmenyek if e is Eredmeny.SIKERES]
+    megelozottek = [e for e in eredmenyek if e is Eredmeny.MEGELOZTEK]
+    assert len(sikeresek) == 1, f"pontosan egy szálnak kell nyernie, kapott: {eredmenyek!r}"
+    assert len(megelozottek) == 1
+
+    ellenorzo = migracio.kapcsolat_nyitas(db_utvonal)
+    try:
+        sorok = ellenorzo.execute(
+            "SELECT session_id FROM hold WHERE slot_id = ?", (egy_slot,)
+        ).fetchall()
+        assert len(sorok) == 1, "a lejárt hold és/vagy a vesztes szál sora bent maradt"
+        assert sorok[0][0] != "session-regi", "a lejárt hold sora nem törlődött"
+    finally:
+        ellenorzo.close()
+
+
 # --- 3. Idempotencia-ismétlés, párhuzamosan ---------------------------------
 
 

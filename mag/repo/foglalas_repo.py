@@ -103,8 +103,14 @@ def slot_szabad(conn: sqlite3.Connection, slot_id: str) -> bool:
 
 def hold_letrehoz(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar: str) -> Eredmeny:
     """Puha zárat tesz egy slotra. Slotonként legfeljebb egy hold ülhet
-    (`ix_hold_slot` UNIQUE index) — ha már van, vagy a slot már aktívan
-    foglalt, `MEGELOZTEK`."""
+    (`ix_hold_slot` UNIQUE index) — ha már van MÉG ÉRVÉNYES hold, vagy a
+    slot már aktívan foglalt, `MEGELOZTEK`.
+
+    Egy lejárt, de még nem takarított hold nem blokkolhatja az újat: a
+    beszúrás előtt, ugyanebben a tranzakcióban töröljük a slot lejárt
+    holdjait — így nem kell megvárni a `lejart_holdok_takaritasa()`
+    külön ütemezett futását ahhoz, hogy a slot ténylegesen újra
+    holdolható legyen."""
     conn.execute("BEGIN IMMEDIATE")
     try:
         sor = conn.execute("SELECT szervezet_id FROM slot WHERE id = ?", (slot_id,)).fetchone()
@@ -120,12 +126,15 @@ def hold_letrehoz(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar
             conn.execute("ROLLBACK")
             return Eredmeny.MEGELOZTEK
 
+        most = most_iso()
+        conn.execute("DELETE FROM hold WHERE slot_id = ? AND lejar <= ?", (slot_id, most))
+
         hold_id = uj_uuid()
         cur = conn.execute(
             "INSERT INTO hold (id, szervezet_id, slot_id, session_id, letrejott, lejar) "
             "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT DO NOTHING",
-            (hold_id, szervezet_id, slot_id, session_id, most_iso(), lejar),
+            (hold_id, szervezet_id, slot_id, session_id, most, lejar),
         )
         if cur.rowcount == 0:
             conn.execute("ROLLBACK")
