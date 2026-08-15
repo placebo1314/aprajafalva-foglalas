@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./titkok/**)",
+      "Read(./**/*.pepper)"
+    ],
+    "ask": [
+      "Bash(git push:*)"
+    ]
+  },
+
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/hookok.py", "modul-hatar"],
+            "statusMessage": "Modulhatár ellenőrzése",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/hookok.py", "tiltott-minta"],
+            "statusMessage": "Tiltott minták keresése",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/hookok.py", "sql-hely"],
+            "statusMessage": "SQL elhelyezés ellenőrzése",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/hookok.py", "migracio-lint"],
+            "statusMessage": "Migráció hordozhatósága",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/hookok.py", "formaz"],
+            "statusMessage": "Formázás",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/hookok.py", "teszt"],
+            "async": true,
+            "asyncRewake": true,
+            "statusMessage": "Tesztek a háttérben",
+            "timeout": 300
+          }
+        ]
+      }
+    ],
+
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/hookok.py", "session-kezdet"],
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

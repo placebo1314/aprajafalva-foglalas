@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Adatbazis es titkok - SOHA nem kerulnek verziokezelesbe
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+titkok/
+*.pepper
+
+# Trace-ek: redaktalva is helyi allomanyok maradnak
+trace/
+naplo/
+
+.claude/settings.local.json
+.pytest_cache/
+.ruff_cache/

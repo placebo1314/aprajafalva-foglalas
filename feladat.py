@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+"""Feladatfuttató. Platformfüggetlen, make nélkül.
+
+    python feladat.py teszt
+    python feladat.py teszt-mindketto
+    python feladat.py golden [--modell NEV]
+    python feladat.py migracio "<leiras>"
+    python feladat.py seed
+    python feladat.py lint
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+GYOKER = Path(__file__).parent
+
+
+def fut(parancs: list[str], kornyezet: dict | None = None) -> int:
+    korny = {**os.environ, **(kornyezet or {})}
+    print(f"$ {' '.join(parancs)}")
+    return subprocess.run(parancs, cwd=GYOKER, env=korny).returncode
+
+
+def teszt(_: list[str]) -> int:
+    return fut([sys.executable, "-m", "pytest", "tesztek/", "-q"])
+
+
+def teszt_mindketto(_: list[str]) -> int:
+    for motor in ("sqlite", "postgres"):
+        print(f"\n=== {motor} ===")
+        if (kod := fut([sys.executable, "-m", "pytest", "tesztek/", "-q"], {"ADATTAR": motor})):
+            return kod
+    return 0
+
+
+def golden(argv: list[str]) -> int:
+    return fut([sys.executable, "-m", "tesztek.golden.futtato", *argv])
+
+
+def migracio(argv: list[str]) -> int:
+    if not argv:
+        print('Használat: python feladat.py migracio "<leiras>"')
+        return 1
+    return fut([sys.executable, "-m", "eszkozok.uj_migracio", argv[0]])
+
+
+def seed(_: list[str]) -> int:
+    return fut([sys.executable, "-m", "seed.betolt"])
+
+
+def lint(_: list[str]) -> int:
+    for parancs in (["ruff", "format", "--check", "."], ["ruff", "check", "."]):
+        if (kod := fut(parancs)):
+            return kod
+    return 0
+
+
+FELADATOK = {
+    "teszt": teszt,
+    "teszt-mindketto": teszt_mindketto,
+    "golden": golden,
+    "migracio": migracio,
+    "seed": seed,
+    "lint": lint,
+}
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] not in FELADATOK:
+        print(__doc__)
+        sys.exit(1)
+    sys.exit(FELADATOK[sys.argv[1]](sys.argv[2:]))
