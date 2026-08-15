@@ -110,7 +110,7 @@ ha a „foglalási időszak" már lezárult. Ez tudatos (ADR-008).
 `foglalas`, `hold`, `vasarlo`, `elerhetoseg`, `kivetel_nap`, `esemenyek`,
 `ertekeles`
 
-Kulcsmezők: `foglalas.idempotencia_kulcs`, `foglalas.csoport_id`,
+Kulcsmezők: `foglalas.idempotencia_kulcs`,
 `vasarlo.kulcs_verzio`, `puffer_utana_perc`, `min_racs_perc`.
 **Minden elsődleges kulcs UUID.**
 
@@ -315,7 +315,9 @@ amikor számít.
 ### Megerősítés és lezárás
 
 - A foglalás tényét **mindig konkrétan** vissza kell igazolni.
-- **Egy beszélgetésben egy időpont foglalható.**
+- **Egy beszélgetésben egy helyre egy slot foglalható.** Nincs csoportos
+  vagy többszörös foglalás — minden vásárló saját beszélgetésben, saját
+  slotot foglal.
 - A végén **opcionális értékelés**, 2-3 koppintás, nem szöveges. **A trace-hez
   kötve, nem a foglaláshoz** — így nem lesz belőle vásárlói profil, és a dev
   módban azonnal látszik, mely beszélgetések mentek rosszul.
@@ -528,9 +530,9 @@ Minden egyszerűsítés írásos döntés, **konkrét kiváltó feltétellel**.
 
 ```
 ADR-004: SQLite mint kezdeti adattár
-V�ltás, ha:  >1 író folyamat VAGY p95 írás > 50 ms VAGY
+V�ltás, ha:  >1 író folyamat VAGY p95 írás > 50 ms VAGY
              egyidejű aktív session > 50 VAGY replikáció-igény
-V�ltás mire: PostgreSQL 16
+V�ltás mire: PostgreSQL 16
 Ellenőrzés:  a CI mindkét motoron futtatja a teljes tesztkészletet
 ```
 
@@ -596,7 +598,6 @@ előállítása · dev mód trace-szel és értékeléssel · mentés és helyre
 | Bővítés | Horog |
 |---|---|
 | Várólista | eseménykibocsátás |
-| Csoportos foglalás | `foglalas.csoport_id` |
 | Üzenetküldés élesítése | szolgáltató-interfész |
 | Blokk-áthelyezés | `BlokkStrategia` |
 | Egy pulton több szolgáltatás | `muszak_szolgaltatas` |

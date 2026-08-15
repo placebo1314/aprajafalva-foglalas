@@ -199,6 +199,5 @@ tiltott minták (nyers azonosító, beégetett titok).
 
 ## Nyitott kérdések
 
-1. **Csoportos foglalás** — reális a „hárman megyünk"?
-2. **Munkajogi paraméterek** — a 6 óra / 20 perc a végleges érték?
-3. **Az annotálás gazdája** — ki csinálja a heti fél órát?
+1. **Munkajogi paraméterek** — a 6 óra / 20 perc a végleges érték?
+2. **Az annotálás gazdája** — ki csinálja a heti fél órát?
