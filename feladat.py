@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Feladatfuttató. Platformfüggetlen, make nélkül.
 
-    python feladat.py teszt
-    python feladat.py teszt-mindketto
-    python feladat.py golden [--modell NEV]
-    python feladat.py migracio "<leiras>"
-    python feladat.py seed
-    python feladat.py lint
+python feladat.py teszt
+python feladat.py teszt-mindketto
+python feladat.py golden [--modell NEV]
+python feladat.py migracio "<leiras>"
+python feladat.py seed
+python feladat.py lint
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def teszt(_: list[str]) -> int:
 def teszt_mindketto(_: list[str]) -> int:
     for motor in ("sqlite", "postgres"):
         print(f"\n=== {motor} ===")
-        if (kod := fut([sys.executable, "-m", "pytest", "tesztek/", "-q"], {"ADATTAR": motor})):
+        if kod := fut([sys.executable, "-m", "pytest", "tesztek/", "-q"], {"ADATTAR": motor}):
             return kod
     return 0
 
@@ -54,7 +54,7 @@ def seed(_: list[str]) -> int:
 
 def lint(_: list[str]) -> int:
     for parancs in (["ruff", "format", "--check", "."], ["ruff", "check", "."]):
-        if (kod := fut(parancs)):
+        if kod := fut(parancs):
             return kod
     return 0
 

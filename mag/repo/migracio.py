@@ -60,8 +60,7 @@ def _migraciok_beolvasasa() -> list[Migracio]:
         illeszkedes = _FAJLNEV_MINTA.match(fajl.name)
         if not illeszkedes:
             raise MigracioHiba(
-                f"Érvénytelen migrációs fájlnév: {fajl.name} "
-                "(elvárt minta: 0001_nev.sql)"
+                f"Érvénytelen migrációs fájlnév: {fajl.name} (elvárt minta: 0001_nev.sql)"
             )
         sorszam = illeszkedes.group(1)
         up_sql, down_sql = _szakaszokra_bontas(fajl)

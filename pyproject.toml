@@ -17,6 +17,11 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# A .claude/ eszköz-/skillkonfiguráció, a docs/ pedig prózai dokumentáció —
+# a bennük lévő példakód-részletek illusztrációk, nem alkalmazáskód, ezért
+# nem esnek a formázási/lint kényszer alá (ruff a markdown fájlokban lévő
+# python kódrészleteket is formázza alapból, ami ezekre nem értelmezhető).
+extend-exclude = [".claude", "docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
