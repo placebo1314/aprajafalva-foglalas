@@ -215,10 +215,28 @@ def formaz() -> None:
 
 
 def teszt() -> None:
-    """A turn végén háttérben futó tesztek. Bukásnál felébreszti Claude-ot."""
+    """A turn végén háttérben futó tesztek. Bukásnál felébreszti Claude-ot.
+
+    Négy védelem a végtelen hurok ellen — a hook 2-es kódja felébreszti
+    Claude-ot, aki új fordulót zár, ami újra kiváltaná ezt a hookot:
+
+    1. stop_hook_active: már egy hook-ébresztés miatt futunk, nem szólunk újra
+    2. nincs tesztfájl: nincs mit bizonyítani
+    3. pytest nincs telepítve: környezeti hiány, nem kódhiba
+    4. pytest 5-ös kód (nem gyűjtött tesztet): nem bukás
+    """
+    adat = bemenet()
+    if adat.get("stop_hook_active"):
+        return
+
     gyoker = projekt_gyoker()
     if not (gyoker / "feladat.py").is_file():
         return
+
+    tesztek = list((gyoker / "tesztek").rglob("test_*.py"))
+    if not tesztek:
+        return
+
     try:
         eredmeny = subprocess.run(
             [sys.executable, "feladat.py", "teszt"],
@@ -229,10 +247,16 @@ def teszt() -> None:
         )
     except (subprocess.TimeoutExpired, OSError):
         return
-    if eredmeny.returncode != 0:
-        kimenet = (eredmeny.stdout + eredmeny.stderr).splitlines()[-40:]
-        print("A TESZTEK BUKTAK:\n" + "\n".join(kimenet), file=sys.stderr)
-        sys.exit(2)
+
+    kimenet = eredmeny.stdout + eredmeny.stderr
+
+    if "No module named pytest" in kimenet:
+        return  # környezeti hiány: a fejlesztő dolga, nem blokkoló
+    if eredmeny.returncode in (0, 5):
+        return  # 5 = nem gyűjtött tesztet
+
+    print("A TESZTEK BUKTAK:\n" + "\n".join(kimenet.splitlines()[-40:]), file=sys.stderr)
+    sys.exit(2)
 
 
 def session_kezdet() -> None:
