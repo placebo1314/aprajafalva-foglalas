@@ -80,16 +80,20 @@ def test_migracio_up_letrehozza_a_het_torzsadat_tablat(kapcsolat):
 
 def test_visszagorgetes_teljesen_visszaallit(db_utvonal):
     conn = migracio.kapcsolat_nyitas(db_utvonal)
-    migracio.migral(conn)
+    lefuttatott = migracio.migral(conn)
     visszagorgetve = migracio.visszagorget(conn)
-    assert visszagorgetve == ["0001"]
+
+    # A visszagörgetés fordított sorrendben pontosan a lefuttatott
+    # migrációkat görgeti vissza — nem kötjük konkrét migrációszámhoz,
+    # mert az újakkal bővülni fog.
+    assert visszagorgetve == list(reversed(lefuttatott))
 
     tablak = {sor[0] for sor in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     conn.close()
 
     # A sema_verzio a migrációs rendszer saját nyilvántartása, nem
     # migrációból jön (lásd mag/repo/migracio.py), ezért down után is
-    # megmarad — de üresen, hiszen a 0001 sora törlődött.
+    # megmarad — de üresen, hiszen minden migráció sora törlődött.
     assert tablak == {"sema_verzio"}
 
 
