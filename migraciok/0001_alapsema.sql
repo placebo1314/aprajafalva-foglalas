@@ -4,15 +4,27 @@
 -- varians, kivetel_nap. Lásd docs/domain.md és docs/blueprint.md 3. szakasz.
 --
 -- Minden elsődleges kulcs UUID, TEXT oszlopban (uuid.uuid4().hex, 32 karakter).
+-- Minden UUID idegen kulcs oszlop is length = 32 CHECK-et kap, ugyanúgy,
+-- mint a saját id — ez nem a hivatkozás érvényességét bizonyítja (arra a
+-- FOREIGN KEY való), hanem kizárja a csonka/hibás formátumú értéket, mielőtt
+-- az egyáltalán FK-ellenőrzésre kerülne.
 -- Minden időbélyeg UTC, ISO-8601 szövegként ('____-__-__T__:__:__Z' minta).
 -- A `szervezet_id` minden táblán szerepel — platform-varrat: ma egy oszlop,
 -- egy sor, később a repo-szintű szűrés alapja (blueprint 13. szakasz). A
 -- konzisztenciáját (hogy a bolt_id/szolgaltatas_id tényleg ugyanahhoz a
--- szervezethez tartozik-e) a mag/repo/ réteg tartja fenn íráskor.
+-- szervezethez tartozik-e) a mag/repo/ réteg tartja fenn íráskor — ezt a
+-- keresztkapcsolatot DB-szinten, motorfüggetlenül nem lehet olcsón
+-- kikényszeríteni, ezért tesztek/egyseg/test_alapsema.py xfail tesztként
+-- dokumentálja, amíg a repo-réteg meg nem íródik.
 
 CREATE TABLE szervezet (
     id          TEXT PRIMARY KEY,
     nev         TEXT NOT NULL,
+    -- Nincs formátumellenőrzés: az IANA zónanevek (pl. 'Europe/Budapest')
+    -- mellett 'UTC' is érvényes, de nem tartalmaz '/'-t — egy '%/%' LIKE
+    -- minta ezt elutasítaná, miközben egy értelmetlen 'Foo/Bar'-t átengedne.
+    -- A formátum tehát nem szűkíthető olcsón egy CHECK-kel; a hosszellenőrzés
+    -- (nem üres) az egyetlen, amit érdemes itt kikényszeríteni.
     idozona     TEXT NOT NULL,
     letrehozva  TEXT NOT NULL,
     CHECK (length(id) = 32),
@@ -27,6 +39,7 @@ CREATE TABLE bolt (
     nev           TEXT NOT NULL,
     letrehozva    TEXT NOT NULL,
     CHECK (length(id) = 32),
+    CHECK (length(szervezet_id) = 32),
     CHECK (length(nev) > 0),
     CHECK (letrehozva LIKE '____-__-__T__:__:__Z')
 );
@@ -40,6 +53,8 @@ CREATE TABLE pult (
     nev           TEXT NOT NULL,
     letrehozva    TEXT NOT NULL,
     CHECK (length(id) = 32),
+    CHECK (length(szervezet_id) = 32),
+    CHECK (length(bolt_id) = 32),
     CHECK (length(nev) > 0),
     CHECK (letrehozva LIKE '____-__-__T__:__:__Z')
 );
@@ -54,6 +69,8 @@ CREATE TABLE alkalmazott (
     nev           TEXT NOT NULL,
     letrehozva    TEXT NOT NULL,
     CHECK (length(id) = 32),
+    CHECK (length(szervezet_id) = 32),
+    CHECK (length(bolt_id) = 32),
     CHECK (length(nev) > 0),
     CHECK (letrehozva LIKE '____-__-__T__:__:__Z')
 );
@@ -71,6 +88,8 @@ CREATE TABLE szolgaltatas (
     alap_idotartam_perc   INTEGER NOT NULL,
     letrehozva            TEXT NOT NULL,
     CHECK (length(id) = 32),
+    CHECK (length(szervezet_id) = 32),
+    CHECK (length(bolt_id) = 32),
     CHECK (length(nev) > 0),
     CHECK (alap_idotartam_perc > 0),
     CHECK (letrehozva LIKE '____-__-__T__:__:__Z')
@@ -92,6 +111,8 @@ CREATE TABLE varians (
     idotartam_feluliras   INTEGER,
     letrehozva            TEXT NOT NULL,
     CHECK (length(id) = 32),
+    CHECK (length(szervezet_id) = 32),
+    CHECK (length(szolgaltatas_id) = 32),
     CHECK (length(nev) > 0),
     CHECK (idotartam_feluliras IS NULL),
     CHECK (letrehozva LIKE '____-__-__T__:__:__Z')
@@ -111,6 +132,8 @@ CREATE TABLE kivetel_nap (
     indok         TEXT NOT NULL,
     letrehozva    TEXT NOT NULL,
     CHECK (length(id) = 32),
+    CHECK (length(szervezet_id) = 32),
+    CHECK (bolt_id IS NULL OR length(bolt_id) = 32),
     CHECK (datum LIKE '____-__-__'),
     CHECK (length(indok) > 0),
     CHECK (letrehozva LIKE '____-__-__T__:__:__Z')

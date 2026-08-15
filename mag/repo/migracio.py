@@ -112,6 +112,14 @@ def _allitasokra_bontas(sql: str) -> list[str]:
 
 
 def _sema_verzio_biztositasa(conn: sqlite3.Connection) -> None:
+    """A `sema_verzio` a migrációs rendszer saját nyilvántartása, nem
+    domain-tábla — ezért nem migrációs fájlból jön, hanem itt, közvetlenül.
+    Ez tudatos kivétel a "kézi sémamódosítás soha" elv alól (CLAUDE.md):
+    a verziókövető táblának léteznie kell, mielőtt bármelyik migrációs
+    fájlt le tudnánk olvasni ahhoz, hogy eldöntsük, melyik futott már —
+    ő maga nem verziózható. Idempotens (`IF NOT EXISTS`) és determinisztikus,
+    nem igényel ADR-t.
+    """
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS sema_verzio (
