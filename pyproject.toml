@@ -1,0 +1,28 @@
+[project]
+name = "aprajafalva-foglalas"
+version = "0.1.0"
+description = "Magyar nyelvű, lokálisan futó időpontfoglaló Aprajafalva három boltjához."
+requires-python = ">=3.11"
+dependencies = []
+
+# A hun-date-parser és a huspacy tudatosan nincs itt — csak az M4
+# (Asszisztens) mérföldkőnél kellenek, addig a mag/ LLM és dátumparser
+# nélkül, önmagában fut. Lásd docs/roadmap.md, M4.
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tesztek"]
