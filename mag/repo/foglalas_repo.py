@@ -24,9 +24,9 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
-import uuid
 from enum import Enum
 
+from mag.azonosito import uj_uuid
 from mag.ido import most_iso
 
 # A vasarlo_kulcs HMAC-jéhez tartozó pepper-verzió. Amíg nincs önálló
@@ -52,10 +52,6 @@ class Eredmeny(Enum):
     MAR_LEMONDVA = "mar_lemondva"
 
 
-def _uj_uuid() -> str:
-    return uuid.uuid4().hex
-
-
 def _uj_foglalasi_kod() -> str:
     return "".join(secrets.choice(_KOD_ABC) for _ in range(_KOD_HOSSZ))
 
@@ -73,7 +69,7 @@ def _esemeny_ir(
         "(id, szervezet_id, tipus, entitas_tipus, entitas_id, idobelyeg, hasznos_teher) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
-            _uj_uuid(),
+            uj_uuid(),
             szervezet_id,
             tipus,
             entitas_tipus,
@@ -120,7 +116,7 @@ def hold_letrehoz(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar
             conn.execute("ROLLBACK")
             return Eredmeny.MEGELOZTEK
 
-        hold_id = _uj_uuid()
+        hold_id = uj_uuid()
         cur = conn.execute(
             "INSERT INTO hold (id, szervezet_id, slot_id, session_id, letrejott, lejar) "
             "VALUES (?, ?, ?, ?, ?, ?) "
@@ -219,7 +215,7 @@ def foglalas_letrehoz(
             return Eredmeny.NINCS_ILYEN
         (szervezet_id,) = sor
 
-        foglalas_id = _uj_uuid()
+        foglalas_id = uj_uuid()
         foglalasi_kod = _uj_foglalasi_kod()
         cur = conn.execute(
             "INSERT INTO foglalas "
