@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from mag.repo import foglalas_repo, migracio
+from mag.repo import foglalas_repo, migracio, torzsadat_repo
 from mag.repo.foglalas_repo import Eredmeny
 
 _MOST = "2026-08-15T10:00:00Z"
@@ -429,3 +429,189 @@ def test_szabad_slotok_keresese_kizarja_az_aktiv_foglalast(kapcsolat, slot):
     foglalas_repo.foglalas_letrehoz(kapcsolat, slot, "a" * 64, _uuid(), "session-1")
     talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=szervezet_id)
     assert slot not in [t[0] for t in talalatok]
+
+
+# --- hold_lekerdezese ------------------------------------------------------
+
+
+def test_hold_lekerdezese_nincs_ilyen(kapcsolat, slot):
+    assert foglalas_repo.hold_lekerdezese(kapcsolat, slot_id=slot, session_id="session-x") is None
+
+
+def test_hold_lekerdezese_megtalalja_a_sajat_holdjat(kapcsolat, slot):
+    foglalas_repo.hold_letrehoz(kapcsolat, slot, "session-1", _jovoben())
+    hold_id = kapcsolat.execute("SELECT id FROM hold WHERE slot_id = ?", (slot,)).fetchone()[0]
+    assert (
+        foglalas_repo.hold_lekerdezese(kapcsolat, slot_id=slot, session_id="session-1") == hold_id
+    )
+
+
+def test_hold_lekerdezese_nem_talalja_masik_session_holdjat(kapcsolat, slot):
+    foglalas_repo.hold_letrehoz(kapcsolat, slot, "session-1", _jovoben())
+    assert foglalas_repo.hold_lekerdezese(kapcsolat, slot_id=slot, session_id="session-2") is None
+
+
+# --- slot_allapotok_lekerdezese --------------------------------------------
+
+
+def test_slot_allapotok_lekerdezese_ures_muszakra(kapcsolat):
+    torzs = _torzsadat_beszur(kapcsolat)
+    muszak_id = _muszak_beszur(kapcsolat, torzs)
+    assert foglalas_repo.slot_allapotok_lekerdezese(kapcsolat, muszak_id=muszak_id) == []
+
+
+def test_slot_allapotok_lekerdezese_szabad(kapcsolat, slot):
+    (muszak_id,) = kapcsolat.execute("SELECT muszak_id FROM slot WHERE id = ?", (slot,)).fetchone()
+    eredmeny = foglalas_repo.slot_allapotok_lekerdezese(kapcsolat, muszak_id=muszak_id)
+    assert eredmeny == [
+        {
+            "slot_id": slot,
+            "kezdet": "2026-08-18T08:00:00Z",
+            "veg": "2026-08-18T08:30:00Z",
+            "allapot": "szabad",
+            "foglalasi_kod": None,
+        }
+    ]
+
+
+def test_slot_allapotok_lekerdezese_holdolt(kapcsolat, slot):
+    (muszak_id,) = kapcsolat.execute("SELECT muszak_id FROM slot WHERE id = ?", (slot,)).fetchone()
+    foglalas_repo.hold_letrehoz(kapcsolat, slot, "session-1", _jovoben())
+    eredmeny = foglalas_repo.slot_allapotok_lekerdezese(kapcsolat, muszak_id=muszak_id)
+    assert eredmeny[0]["allapot"] == "holdolt"
+    assert eredmeny[0]["foglalasi_kod"] is None
+
+
+def test_slot_allapotok_lekerdezese_foglalt(kapcsolat, slot):
+    (muszak_id,) = kapcsolat.execute("SELECT muszak_id FROM slot WHERE id = ?", (slot,)).fetchone()
+    foglalas_repo.foglalas_letrehoz(kapcsolat, slot, "a" * 64, _uuid(), "session-1")
+    kod = kapcsolat.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (slot,)
+    ).fetchone()[0]
+
+    eredmeny = foglalas_repo.slot_allapotok_lekerdezese(kapcsolat, muszak_id=muszak_id)
+    assert eredmeny[0]["allapot"] == "foglalt"
+    assert eredmeny[0]["foglalasi_kod"] == kod
+
+
+def test_slot_allapotok_lekerdezese_lejart_hold_szabadnak_szamit(kapcsolat, slot):
+    """Ugyanaz az invariáns, mint `slot_szabad`-nál: egy lejárt, de még
+    nem takarított hold NEM zárja ki a slotot 'szabad'-ként."""
+    (muszak_id,) = kapcsolat.execute("SELECT muszak_id FROM slot WHERE id = ?", (slot,)).fetchone()
+    _lejart_hold_beszur(kapcsolat, slot)
+    eredmeny = foglalas_repo.slot_allapotok_lekerdezese(kapcsolat, muszak_id=muszak_id)
+    assert eredmeny[0]["allapot"] == "szabad"
+
+
+def test_slot_allapotok_lekerdezese_lemondott_foglalas_utan_szabad(kapcsolat, slot):
+    (muszak_id,) = kapcsolat.execute("SELECT muszak_id FROM slot WHERE id = ?", (slot,)).fetchone()
+    foglalas_repo.foglalas_letrehoz(kapcsolat, slot, "a" * 64, _uuid(), "session-1")
+    kod = kapcsolat.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (slot,)
+    ).fetchone()[0]
+    foglalas_repo.foglalas_lemond(kapcsolat, kod)
+
+    eredmeny = foglalas_repo.slot_allapotok_lekerdezese(kapcsolat, muszak_id=muszak_id)
+    assert eredmeny[0]["allapot"] == "szabad"
+    assert eredmeny[0]["foglalasi_kod"] is None
+
+
+def test_slot_allapotok_lekerdezese_tobb_slot_kezdet_szerint_rendezve(kapcsolat):
+    torzs = _torzsadat_beszur(kapcsolat)
+    muszak_id = _muszak_beszur(kapcsolat, torzs)
+    kesobbi = _slot_beszur(
+        kapcsolat, torzs, muszak_id, "2026-08-18T08:30:00Z", "2026-08-18T09:00:00Z"
+    )
+    korabbi = _slot_beszur(
+        kapcsolat, torzs, muszak_id, "2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z"
+    )
+    eredmeny = foglalas_repo.slot_allapotok_lekerdezese(kapcsolat, muszak_id=muszak_id)
+    assert [e["slot_id"] for e in eredmeny] == [korabbi, kesobbi]
+
+
+# --- foglalasok_lekerdezese -------------------------------------------
+
+
+def test_foglalasok_lekerdezese_ures(kapcsolat, slot):
+    (szervezet_id,) = kapcsolat.execute(
+        "SELECT szervezet_id FROM slot WHERE id = ?", (slot,)
+    ).fetchone()
+    assert foglalas_repo.foglalasok_lekerdezese(kapcsolat, szervezet_id=szervezet_id) == []
+
+
+def test_foglalasok_lekerdezese_egy_elem(kapcsolat, slot):
+    (szervezet_id,) = kapcsolat.execute(
+        "SELECT szervezet_id FROM slot WHERE id = ?", (slot,)
+    ).fetchone()
+    foglalas_repo.foglalas_letrehoz(kapcsolat, slot, "a" * 64, _uuid(), "session-1")
+    kod = kapcsolat.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (slot,)
+    ).fetchone()[0]
+
+    eredmeny = foglalas_repo.foglalasok_lekerdezese(kapcsolat, szervezet_id=szervezet_id)
+    assert len(eredmeny) == 1
+    assert eredmeny[0]["foglalasi_kod"] == kod
+    assert eredmeny[0]["allapot"] == "aktiv"
+    assert eredmeny[0]["slot_kezdet"] == "2026-08-18T08:00:00Z"
+    assert "vasarlo_kulcs" not in eredmeny[0]
+
+
+def test_foglalasok_lekerdezese_tartalmazza_a_lemondottakat_is(kapcsolat, slot):
+    (szervezet_id,) = kapcsolat.execute(
+        "SELECT szervezet_id FROM slot WHERE id = ?", (slot,)
+    ).fetchone()
+    foglalas_repo.foglalas_letrehoz(kapcsolat, slot, "a" * 64, _uuid(), "session-1")
+    kod = kapcsolat.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (slot,)
+    ).fetchone()[0]
+    foglalas_repo.foglalas_lemond(kapcsolat, kod)
+
+    eredmeny = foglalas_repo.foglalasok_lekerdezese(kapcsolat, szervezet_id=szervezet_id)
+    assert len(eredmeny) == 1
+    assert eredmeny[0]["allapot"] == "lemondva"
+
+
+def test_foglalasok_lekerdezese_szur_bolt_szerint(kapcsolat):
+    """Két bolt UGYANABBAN a szervezetben — a bolt_id szűrés valódi
+    hatását teszteli, nem a szervezet_id-ét (ami önmagában is
+    elválasztaná őket)."""
+    torzs = _torzsadat_beszur(kapcsolat)
+    muszak_id = _muszak_beszur(kapcsolat, torzs)
+    sajat_slot = _slot_beszur(kapcsolat, torzs, muszak_id)
+    foglalas_repo.foglalas_letrehoz(kapcsolat, sajat_slot, "a" * 64, _uuid(), "session-1")
+
+    masik_bolt_id = torzsadat_repo.bolt_letrehoz(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], nev="Másik bolt"
+    )
+    masik_pult_id = torzsadat_repo.pult_letrehoz(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=masik_bolt_id, nev="Másik pult"
+    )
+    masik_alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=masik_bolt_id, nev="Másik"
+    )
+    masik_szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=masik_bolt_id,
+        nev="másik szolgáltatás",
+        alap_idotartam_perc=15,
+    )
+    masik_muszak_torzs = {
+        **torzs,
+        "bolt_id": masik_bolt_id,
+        "pult_id": masik_pult_id,
+        "alkalmazott_id": masik_alkalmazott_id,
+        "szolgaltatas_id": masik_szolgaltatas_id,
+    }
+    masik_muszak = _muszak_beszur(kapcsolat, masik_muszak_torzs)
+    masik_slot = _slot_beszur(kapcsolat, masik_muszak_torzs, masik_muszak)
+    foglalas_repo.foglalas_letrehoz(kapcsolat, masik_slot, "b" * 64, _uuid(), "session-2")
+
+    eredmeny = foglalas_repo.foglalasok_lekerdezese(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=torzs["bolt_id"]
+    )
+    assert len(eredmeny) == 1
+    assert eredmeny[0]["bolt_id"] == torzs["bolt_id"]
+
+    osszes = foglalas_repo.foglalasok_lekerdezese(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    assert len(osszes) == 2
