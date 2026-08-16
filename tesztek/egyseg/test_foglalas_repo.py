@@ -431,6 +431,43 @@ def test_szabad_slotok_keresese_kizarja_az_aktiv_foglalast(kapcsolat, slot):
     assert slot not in [t[0] for t in talalatok]
 
 
+def test_szabad_slotok_keresese_ures_ha_egyetlen_szabad_slot_sincs(kapcsolat):
+    torzs = _torzsadat_beszur(kapcsolat)
+    muszak_id = _muszak_beszur(kapcsolat, torzs)
+    slot_1 = _slot_beszur(
+        kapcsolat, torzs, muszak_id, "2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z"
+    )
+    slot_2 = _slot_beszur(
+        kapcsolat, torzs, muszak_id, "2026-08-18T08:30:00Z", "2026-08-18T09:00:00Z"
+    )
+    foglalas_repo.foglalas_letrehoz(kapcsolat, slot_1, "a" * 64, _uuid(), "session-1")
+    foglalas_repo.hold_letrehoz(kapcsolat, slot_2, "session-2", _jovoben())
+
+    talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    assert talalatok == []
+
+
+def test_szabad_slotok_keresese_ures_ha_nincs_egyetlen_slot_sem_a_szervezetben(kapcsolat):
+    szervezet_id = torzsadat_repo.szervezet_letrehoz(kapcsolat, nev="Üres", idozona="UTC")
+    talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=szervezet_id)
+    assert talalatok == []
+
+
+def test_szabad_slotok_keresese_pontosan_egy_marad(kapcsolat):
+    torzs = _torzsadat_beszur(kapcsolat)
+    muszak_id = _muszak_beszur(kapcsolat, torzs)
+    slot_1 = _slot_beszur(
+        kapcsolat, torzs, muszak_id, "2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z"
+    )
+    utolso_szabad = _slot_beszur(
+        kapcsolat, torzs, muszak_id, "2026-08-18T08:30:00Z", "2026-08-18T09:00:00Z"
+    )
+    foglalas_repo.foglalas_letrehoz(kapcsolat, slot_1, "a" * 64, _uuid(), "session-1")
+
+    talalatok = foglalas_repo.szabad_slotok_keresese(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    assert [t[0] for t in talalatok] == [utolso_szabad]
+
+
 # --- hold_lekerdezese ------------------------------------------------------
 
 

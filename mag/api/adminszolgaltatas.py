@@ -140,7 +140,27 @@ def muszak_felvitel(
     `seed/betolt.py::_het_beosztas_betoltese`: létrehozza a műszakot,
     visszatölti (a snapshot-mezők a `Muszak` dataclass-hoz kellenek),
     lefuttatja a generátort a szervezet kivételnapjaival, és — ha nem lett
-    kihagyva — elmenti a blokkokat/slotokat egyetlen tranzakcióban."""
+    kihagyva — elmenti a blokkokat/slotokat egyetlen tranzakcióban.
+
+    Az időablakot ELŐZETESEN ellenőrzi: a `muszak` tábla `CHECK (veg >
+    kezdet)` kényszere (migraciok/0002) amúgy is elutasítaná a fordított
+    vagy nulla hosszú ablakot, de nyers `sqlite3.IntegrityError`-ral —
+    ez itt, a szolgáltatásrétegben, ÉRTELMES elutasítássá alakul (`hiba`
+    kulcs a visszaadott dict-ben, nincs kivétel, és a hívó (a felület)
+    egységesen tudja megjeleníteni). A `mag/repo/` rétegen és a
+    kényszeren magán ez nem változtat."""
+    if veg <= kezdet:
+        return {
+            "muszak_id": None,
+            "kihagyva": False,
+            "kihagyas_oka": None,
+            "slot_szam": 0,
+            "blokk_szam": 0,
+            "hiba": (
+                f"A műszak vége ({veg}) nem lehet korábbi vagy egyenlő, mint a kezdete ({kezdet})."
+            ),
+        }
+
     muszak_id = muszak_repo.muszak_letrehoz(
         conn,
         szervezet_id=szervezet_id,
@@ -173,6 +193,7 @@ def muszak_felvitel(
         "kihagyas_oka": eredmeny.kihagyas_oka,
         "slot_szam": len(eredmeny.slotok),
         "blokk_szam": len(eredmeny.blokkok),
+        "hiba": None,
     }
 
 

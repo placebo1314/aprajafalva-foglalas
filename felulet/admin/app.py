@@ -377,7 +377,9 @@ class AdminApp(tk.Tk):
             foglalhato_arany=foglalhato_arany,
             blokk_szabaly=blokk_szabaly,
         )
-        if eredmeny["kihagyva"]:
+        if eredmeny.get("hiba"):
+            self.urlap_uzenet.config(text=eredmeny["hiba"], foreground="#a00")
+        elif eredmeny["kihagyva"]:
             self.urlap_uzenet.config(
                 text=f"Létrehozva, de kihagyva (kivétel nap: {eredmeny['kihagyas_oka']})",
                 foreground="#a60",
