@@ -1,175 +1,163 @@
 # M-1 Spike — Eredmények
 
-Mérve: 2026-08-16, ág: `spike/m-1`. Helyi Ollama, `qwen3.5:4b` és `qwen3.5:9b`
-(mindkettő Apache-2.0). A Racka-4B (ADR-013 ellenőrző jelöltje) nem érhető el
-lokálisan, nem mérhető.
+Ág: `spike/m-1`. Ez a változat kizárólag a `spike/*.json` fájlokból épül —
+nincs benne újrafuttatás, és nincs benne olyan szám, aminek nincs
+JSON-artifactja. Forrásfájlok:
 
-Ez a fájl **nem ADR** — nem dönt, csak felsorolja, mit mértünk, melyik ADR
-kiváltó feltétele teljesült, és mit javaslok. A tényleges döntés (SQLite
-váltás, modellválasztás, roham-üzemmód) nyitott.
+- `eredmeny_qwen35_4b_nogondolkodas.json` (qwen3.5:4b, gondolkodás **ki**)
+- `eredmeny_qwen35_9b.json` (qwen3.5:9b, gondolkodás **be**)
+- `eredmeny_qwen35_9b_nogondolkodas.json` (qwen3.5:9b, gondolkodás **ki**)
+- `latencia_qwen35_4b.json`, `latencia_qwen35_9b.json` (1 és 3 párhuzamos
+  kérés; a szkript alapértelmezése `gondolkodas=True`, a JSON ezt nem
+  tárolja explicit mezőként, de a mért idők nagyságrendje ezzel
+  konzisztens)
+- `sqlite_eredmeny.json` (3 és 10 egyidejű session)
 
-## 1. Teszt-készlet
+**qwen3.5:4b, gondolkodással** (`be`) golden-set futáshoz nincs JSON fájl
+a `spike/` alatt — nincs mit beolvasni, ezért ez a konfiguráció alább
+mindenhol **nem mértük**-ként szerepel. A Racka-4B (ADR-013 ellenőrző
+jelöltje) nem érhető el lokálisan, szintén nem mérhető.
 
-`python feladat.py teszt` → **87 passed, 1 xfailed**. Tiszta.
+## 1. Golden set — modellenként és gondolkodás-módonként, rétegekre bontva
 
-## 2. Golden set — nyelvi pontosság (22 eset: 20 rétegzett + 2 kapuőr)
+| Modell | Gondolkodás | Összesített | Legrosszabb réteg | Átlagos válaszidő (szekvenciális) | Átlagos tokenszám/eset | Hívási hiba |
+|---|---|---|---|---|---|---|
+| qwen3.5:4b | be | — | — | — | — | **nem mértük** (nincs JSON) |
+| qwen3.5:4b | ki | **18,2%** | egyszerűsített (0,0%) | 4,42 s | 59,9 | 0/22 |
+| qwen3.5:9b | be | **54,5%** | szleng (16,7%) | 22,64 s | 45,9 | 0/22 |
+| qwen3.5:9b | ki | **13,6%** | egyszerűsített (0,0%) | 5,19 s | 64,5 | 0/22 |
 
-| Modell | Gondolkodás | Összesített | Leggyengébb réteg | Válaszidő (átlag, szekvenciális) | Hívási hibák |
-|---|---|---|---|---|---|
-| qwen3.5:4b | be | **40,9%** | szleng 16,7% | 66,89 s | 4/22 |
-| qwen3.5:4b | ki | **18,2%** | egyszerűsített 0,0% | 4,42 s | 0/22 |
-| qwen3.5:9b | be | **54,5%** | szleng 16,7% | 22,64 s | 0/22 |
-| qwen3.5:9b | ki | **13,6%** | egyszerűsített 0,0% | 5,19 s | 0/22 |
+Réteg-bontás (a három elérhető JSON-ból, `retegek.kuszob` mező szerinti
+küszöbökkel):
 
-Egyik cella sem tartja a blueprint §12 küszöbét (leggyengébb réteg > 90%).
+| Réteg | Küszöb | qwen3.5:4b (ki) | qwen3.5:9b (be) | qwen3.5:9b (ki) |
+|---|---|---|---|---|
+| köznyelvi | 98% | 20,0% NEM TARTJA | 40,0% NEM TARTJA | 0,0% NEM TARTJA |
+| tájszólás | 90% | 25,0% NEM TARTJA | 75,0% NEM TARTJA | 25,0% NEM TARTJA |
+| töredékes | 90% | 0,0% NEM TARTJA | 62,5% NEM TARTJA | 0,0% NEM TARTJA |
+| szleng | 92% | 0,0% NEM TARTJA | 16,7% NEM TARTJA | 0,0% NEM TARTJA |
+| egyszerűsített | 90% | 0,0% NEM TARTJA | 50,0% NEM TARTJA | 0,0% NEM TARTJA |
+| kapuőr | (nincs küszöb) | 100,0% | 100,0% | 100,0% |
 
-**Megjegyzés a 4B/gondolkodással sorhoz:** ez a szám valós mérésből
-származik (a futás konzol-kimenete rögzítve), de a hozzá tartozó JSON-fájl
-felülíródott, mielőtt a `--nincs-gondolkodas` kapcsolót bevezettem — ezért
-`spike/eredmeny_qwen35_4b.json` ma nem létezik, csak
-`spike/eredmeny_qwen35_4b_nogondolkodas.json`,
-`spike/eredmeny_qwen35_9b.json` és `spike/eredmeny_qwen35_9b_nogondolkodas.json`.
-A hiányzó artifact miatt a 4B/be soron **nincs** tiszta dátum-hatás bontás
-(lásd 7. szakasz).
+A mért három konfiguráció közül **egyik sem tartja** egyetlen küszöbölt
+réteget sem. A kapuőr réteg (nem valós foglalási kérés felismerése) mindhárom
+konfiguráción 100% — ez az egyetlen réteg, ami rendben van.
 
-Réteg-bontás (gondolkodással, a két elérhető teljes JSON-ból):
+## 2. Válaszidő párhuzamosságban (1 és 3 szál, token/mondat)
 
-| Réteg | qwen3.5:4b (ki) | qwen3.5:9b (be) | qwen3.5:9b (ki) |
-|---|---|---|---|
-| köznyelvi | 20,0% | 40,0% | 0,0% |
-| tájszólás | 25,0% | 75,0% | 25,0% |
-| töredékes | 0,0% | 62,5% | 0,0% |
-| szleng | 0,0% | 16,7% | 0,0% |
-| egyszerűsített | 0,0% | 50,0% | 0,0% |
-| kapuőr (nincs küszöb) | 100,0% | 100,0% | 100,0% |
+Csak 1 és 3 szálon mértünk — az 5 szálas mérés **nem mértük** (nincs JSON,
+a `latencia.py` docstringje szerint 8 GB VRAM mellett explicit kihagyva).
 
-(A 4B/be réteg-bontás a konzol-kimenetből: egyszerűsített 50,0%, köznyelvi
-40,0%, szleng 16,7%, tájszólás 25,0%, töredékes 37,5%, kapuőr 100,0%.)
+| Modell | Szál | p50 | p95 | Átlag | Hívási hiba | Token/mondat (átlag) | VRAM előtte→alatta |
+|---|---|---|---|---|---|---|---|
+| qwen3.5:4b | 1 | 71,73 s | 118,10 s | 71,39 s | 4/22 | 1441,4 | 6509→4055 MiB |
+| qwen3.5:4b | 3 | 177,94 s | 182,04 s | 158,78 s | 10/22 | 635,9 | 4055→4055 MiB |
+| qwen3.5:9b | 1 | 16,03 s | 95,70 s | 28,21 s | 0/22 | 56,9 | 4055→6507 MiB |
+| qwen3.5:9b | 3 | 50,29 s | 88,12 s | 53,57 s | 0/22 | 54,1 | 6507→6509 MiB |
 
-## 3. Tokenizer-hatékonyság — token/mondat
+Blueprint §12 cél: szöveges asszisztens-válasz p95 < 2,5 s. Minden mért
+pont ennek sokszorosa (6–73×), már 1 szálon is. A 4B hibaaránya 3 szálon a
+duplájára nőtt (4/22 → 10/22), ami VRAM-kontenció jele, nem csak lassulás.
 
-| Modell | Gondolkodással | Átlag token/mondat |
-|---|---|---|
-| qwen3.5:4b | be | **1441,4** |
-| qwen3.5:9b | be | **56,9** |
+## 3. SQLite írási latencia session-számonként
 
-**Ez ellentétes az intuícióval, és fontosabb, mint első ránézésre tűnik.**
-A kisebb (4B) modell ~25×-ösen több tokent termel mondatonként, mint a
-nagyobb (9B) — négy eset a 22-ből ~7680 tokenes, kontrollálatlan
-gondolkodásba futott, és nem is adott érvényes JSON-t (ez a fenti "4/22
-hívási hiba"). Ez nem a szokásos "kisebb modell = kevesebb token"
-tokenizer-hatékonyság kérdése, hanem azt jelzi, hogy a 4B modell nálunk
-instabil gondolkodási hosszal reagál a nehezebb magyar mondatokra, a 9B
-nem. **Következmény a modellválasztásra:** a 4B nyers mérete alapján
-olcsóbbnak/gyorsabbnak tűnne, de a mért viselkedés szerint jelenleg sem
-nem gyorsabb, sem nem olcsóbb a 9B-nél — rosszabb pontosság mellett
-drágább. Ha a 4B marad jelölt, ezt csak explicit `num_predict` korláttal
-vagy a gondolkodás kikapcsolásával (ami viszont a pontosságot omlasztja
-össze, lásd 2. szakasz) lehetne kordában tartani.
+`mag/repo/foglalas_repo.py`-val mérve, minden szál a saját slotjára ír.
 
-## 4. Válaszidő párhuzamosságban (1 és 3 szál, gondolkodással)
+| Session | n | p50 | p95 | Max | Hiba | ADR-004 kiváltó feltétel (p95 > 50 ms) |
+|---|---|---|---|---|---|---|
+| 3 | 3 | 18,66 ms | 35,45 ms | 35,45 ms | 0 | nem teljesül |
+| 10 | 10 | 71,89 ms | 207,23 ms | 207,23 ms | 0 | **IGEN — teljesül** |
 
-Csak 1 és 3 szálon mértünk — az 5 szálas mérést kihagytuk, mert 8 GB VRAM
-mellett irreális.
+50 egyidejű session-re **nem mértük** ezúttal (nincs hozzá JSON a
+`spike/` alatt; a `sqlite_iras.py` docstringje szerint ez amúgy sem v1 cél).
 
-| Modell | Szál | p50 | p95 | Hibák | VRAM előtte→alatta |
-|---|---|---|---|---|---|
-| qwen3.5:4b | 1 | 71,73 s | 118,10 s | 4/22 | 6509→4055 MiB |
-| qwen3.5:4b | 3 | 177,94 s | 182,04 s | 10/22 | 4055→4055 MiB |
-| qwen3.5:9b | 1 | 16,03 s | 95,70 s | 0/22 | 4055→6507 MiB |
-| qwen3.5:9b | 3 | 50,29 s | 88,12 s | 0/22 | 6507→6509 MiB |
+## 4. hun-date-parser pontossága
 
-Blueprint §12 cél: asszisztens válasz (szöveg) p95 < 2,5 s. **Minden mért
-pont ennek sokszorosa**, már 1 szálon is (6–38×). 4B-nél a hibaarány
-3 szálon a duplájára nőtt (4/22 → 10/22) — ez VRAM-kontenció jele, nem
-csak lassulás.
+**Nem mértük** — legalábbis nincs hozzá JSON-artifact, amiből ez a
+szakasz felépülhetne. A `spike/hun_date_meres.py` a `text2datetime`
+kimenetét csak konzolra írja ki (`print`), nem perzisztálja `--json`
+kapcsolóval, és a `spike/` alatt nincs ehhez tartozó eredményfájl. Mivel a
+feladat kifejezetten tiltja az újrafuttatást, ezt a mérést itt nem tudom
+JSON-ból rekonstruálni, és nem is becsülöm — a bukott esetek felsorolása
+ezért is elmarad. (Ne keverd össze a 6. szakasszal: az ott szereplő
+"dátum-hiba" osztályozás nem a hun-date-parser könyvtár mérése, hanem a
+golden-futtatások mentett `indoklas` szövegeinek utólagos elemzése.)
 
-## 5. SQLite írási latencia (3 és 10 egyidejű session)
+## 5. A token/mondat különbség jelentése a modellválasztásra
 
-Valódi `mag/repo/foglalas_repo.py`-val mérve, minden szál a saját slotjára ír.
+A 2. szakasz `latencia_*.json`-jai szerint a **kisebb (4B) modell
+~25×-ösen több tokent termel mondatonként, mint a nagyobb (9B)**: 1441,4
+vs. 56,9 token/mondat 1 szálon, 635,9 vs. 54,1 token/mondat 3 szálon. Ez
+ellentétes az intuícióval, és ez a mérés a `gondolkodas=True`
+(alapértelmezett) beállítással futott.
 
-| Session | p50 | p95 | ADR-004 kiváltó feltétel (p95 > 50 ms) |
-|---|---|---|---|
-| 3 | 18,66 ms | 35,45 ms | nem |
-| 10 | 71,89 ms | 207,23 ms | **IGEN** |
+Ez a különbség nem a szokásos "kisebb modell = kevesebb token"
+tokenizer-hatékonyságról szól. A golden-set futásból (1. szakasz) tudjuk,
+hogy a 4B modell gondolkodás **nélkül** is rosszabbul teljesít, mint a 9B
+(18,2% vs. 54,5%); a latencia-mérésben pedig gondolkodással a 4B hibaaránya
+is magasabb (4/22 → 10/22 3 szálon, a 9B-nél 0/22 mindkét szálszámon).
+Együtt olvasva a két mérést: a 4B modellnél a gondolkodás bekapcsolása nem
+csak lassabb válaszidőt, hanem magasabb hibaarányt is hoz, miközben a
+gondolkodás nélküli pontossága is a 9B alatt marad.
 
-(Korábban, ezen a munkameneten belül, 50 session mellett is mértünk —
-p95 = 4264,55 ms — de ez nem v1 cél, a fenti táblázat a mérvadó.)
+**Következmény a modellválasztásra:** a 4B nyers paraméterszáma alapján
+olcsóbbnak/gyorsabbnak tűnne, de a mért adatok szerint jelenleg egyik
+konfigurációban sem éri meg — gondolkodással sokkal több tokent termel és
+gyakrabban hibázik hívásban, gondolkodás nélkül pedig pontosságban marad
+el a 9B mögött. A 9B jelenleg minden mért dimenzióban (pontosság,
+token/mondat, hívási hibaarány) jobban áll, annak ellenére, hogy nagyobb
+modell.
 
-## 6. hun-date-parser pontossága
+## 6. A dátumértelmezés kiemelésének becsült hatása
 
-11/22 golden-set eset tartalmaz dátumkifejezést. Ezekből **5/11 = 45,5%**
-helyes (a blueprint §12 célja > 99%).
+Módszer: a három elérhető golden-JSON-ban (qwen3.5:4b/ki, qwen3.5:9b/be,
+qwen3.5:9b/ki) minden `pontszam < 1,0` esetet megnéztünk. Ahol az
+`indoklas` az `"eszköz stimmel, paraméterek eltérnek: {A} != {B}"` mintát
+követi, összevetettük az `A` (kapott) és `B` (elvárt) paraméter-szótárakat:
 
-Bukott esetek: `koznyelvi-02` (nyitott intervallum, nincs explicit
-dátumszó), `tajszolas-01` és `szleng-01` ("hónap" = holnap csapda),
-`toredekes-04` és `egyszerusitett-04` (nincs explicit dátumszó, csak
-"a héten" / kontextusból következő "ma"), `szleng-03` ("jövő csüt" rövidített
-alak, jövő heti értelmezés).
+- **tisztán dátum-hiba**: kizárólag a `datum` / `datum_tol` / `datum_ig`
+  mezők térnek el (érték vagy formátum), minden más mező egyezik vagy
+  hiányzik a "más" oldalról is,
+- **dátum + más hiba is**: a dátummezők mellett más paraméter is hiányzik
+  vagy téves (pl. `szolgaltatas_id`, `napszak`, elgépelt `bolt_id`),
+- **nem dátum jellegű**: rossz eszköz (`várt X, kapott Y`), elveszett
+  visszakérdezés-állapot, kitalált dátum (`TILTOTT MINTA: kitalalt_datum`)
+  vagy más, dátumtól független hiba.
 
-## 7. A dátumértelmezés kiemelésének becsült hatása a pontosságra
+Feltételezés: egy determinisztikus dátumparser a "tisztán dátum-hiba"
+eseteket helyesen oldaná meg, minden mást változatlanul hagyva — a "dátum
++ más hiba is" eseteket **nem** javítaná, mert azokban a nem-dátum mező is
+hibás marad.
 
-Módszer: minden 1,0-nál gyengébben pontozott, "eszköz stimmel, paraméterek
-eltérnek" esetnél szétválasztottuk, hogy a modell által adott és az elvárt
-paraméterek között *kizárólag* a dátum-mezők (`datum`, `datum_tol`,
-`datum_ig`) térnek-e el. Ha igen, feltételeztük, hogy egy tökéletes
-determinisztikus dátumparser ezt a mezőt helyesen adta volna, minden mást
-változatlanul hagyva a modell kimenetéből — és megnéztük, ez elég lett
-volna-e az 1,0 ponthoz.
+| Konfiguráció | Bukott esetek | Tisztán dátum-hiba | Dátum + más hiba is | Nem dátum jellegű | Alap pontosság | Becsült pontosság dátumparserrel |
+|---|---|---|---|---|---|---|
+| qwen3.5:4b, gondolkodás nélkül | 18/22 | 2 | 3 | 13 | 18,2% | **27,3%** (+9,1 pp) |
+| qwen3.5:9b, gondolkodással | 13/22 | 2 | 3 | 8 | 54,5% | **63,6%** (+9,1 pp) |
+| qwen3.5:9b, gondolkodás nélkül | 19/22 | 2 | 5 | 12 | 13,6% | **22,7%** (+9,1 pp) |
 
-Ez csak arra a két konfigurációra készült el, ahol a teljes (nem csonkolt)
-`indoklas` szöveg elérhető volt a mentett JSON-ból:
+qwen3.5:4b/gondolkodással **nem mértük** ebben a bontásban (nincs hozzá
+JSON, lásd a bevezetőt).
 
-| Konfiguráció | Bukott esetek | Tisztán dátum-hiba | Dátum + más hiba is | Nem dátum jellegű | Becsült pontosság dátumparserrel |
-|---|---|---|---|---|---|
-| qwen3.5:9b, gondolkodással | 13/22 | 2 | 3 | 8 | 54,5% → **63,6%** (+9,1 pp) |
-| qwen3.5:4b, gondolkodás nélkül | 18/22 | 2 | 3 | 13 | 18,2% → **27,3%** (+9,1 pp) |
+**Értelmezés:** mindhárom mért konfiguráción **pontosan +9,1 százalékpont**
+a becsült hatás (2 eset a 22-ből) — feltűnően egyenletes minta, ami arra
+utal, hogy a golden set jelenlegi 22 esetes mérete mellett ez nagyjából
+"2 eset ára", nem feltétlenül stabil arány. A dátumértelmezés kiemelése egy
+determinisztikus parserbe (ahogy az M4 terve amúgy is előírja) valós, de
+messze nem elég a 90%+ réteg-küszöbhöz. A bukott esetek nagyobbik része
+**nem** dátumhiba, hanem rossz eszközválasztás vagy elveszett/hiányzó
+visszakérdezés-állapot (8/13 a 9b/be-nél, 13/18 a 4b/ki-nél, 12/19 a
+9b/ki-nél) — ezt a dátumparser önmagában nem oldja meg.
 
-A qwen3.5:4b/gondolkodással és a qwen3.5:9b/gondolkodás nélkül
-konfigurációkra **nem mértük** ezt a bontást (a szükséges teljes indoklás-
-szöveg nincs meg tisztán, lásd 2. szakasz megjegyzése) — nem pótoltuk
-becsléssel.
+## Amit nem mértünk (JSON alapján)
 
-**Értelmezés:** a dátumértelmezés kiemelése egy determinisztikus parserbe
-(ahogy az M4 terve amúgy is előírja: "hun-date-parser + saját kiegészítés")
-mindkét mért konfiguráción kb. **+9 százalékpontot** hozna — valós, de
-messze nem elég a 90%+ réteg-küszöbhöz. A bukott esetek nagyobbik fele
-(8/13, illetve 13/18) **nem** dátumhiba, hanem rossz eszközválasztás vagy
-elveszett/hiányzó visszakérdezés — ezt a dátumparser önmagában nem oldja
-meg.
+- qwen3.5:4b, gondolkodással — golden set futás (nincs JSON a `spike/`
+  alatt).
+- 5 szálas válaszidő (nincs JSON).
+- 50 egyidejű SQLite session (nincs JSON).
+- hun-date-parser könyvtár közvetlen pontossága (a mérőszkript nem
+  perzisztál JSON-t).
+- Racka-4B (nincs lokálisan telepítve, nem futtatható).
 
-## 8. ADR kiváltó feltételek — állapot
-
-**ADR-004 (SQLite mint kezdeti adattár).** Kiváltó feltétel: p95 írási
-latencia > 50 ms. **Teljesül** 10 egyidejű session mellett (207,23 ms), nem
-teljesül 3-nál (35,45 ms). 10 egyidejű session egy falusi bolt forgalmánál
-nem irreális szám egy foglalási nyitás pillanatában.
-
-**ADR-010 (nincs roham-üzemmód).** Kiváltó feltétel: 5 egyidejű
-beszélgetésnél a válaszidő SLO (p95 < 2,5 s szöveg) nem tartható semmilyen
-belső paraméter-csökkentéssel. **5 szálon nem mértünk** (explicit kihagyva,
-8 GB VRAM mellett irreális teszt lett volna) — a szigorú feltétel tehát
-nincs közvetlenül bizonyítva. Viszont már **1 és 3 szálon** is minden mért
-p95 érték a cél 6–73×-osa (16–182 s a 2,5 s ellenében), és 4B-nél a hibaarány
-3 szálon megduplázódott. Ez erős közvetett jel, hogy a feltétel 5 szálon is
-teljesülne — de ezt jelzem, nem állítom bizonyítottnak.
-
-Egyik ADR-t sem módosítottam. A döntés (Postgres-váltás, modellváltás,
-roham-üzemmód újragondolása) nyitott.
-
-## 9. pyproject.toml
-
-`pip install -e ".[dev]"` a flat-layout auto-discovery hibája miatt
-korábban nem futott le ("Multiple top-level packages discovered"). Fix:
-`[tool.setuptools.packages.find]` explicit `include` listával
-(`mag*, seed*, asszisztens*, adatvedelem*, felulet*`). Ellenőrizve: telepítés
-sikeres, `python feladat.py teszt` és `lint` változatlanul zöld utána is.
-
-## 10. Amit nem mértünk
-
-- 5 szálas válaszidő (explicit kihagyva, 8 GB VRAM).
-- Racka-4B (nincs lokálisan telepítve).
-- Dátum-hatás bontás a 4B/gondolkodással és 9B/gondolkodás nélkül
-  konfigurációkon (a teljes indoklás-szöveg nem elérhető ezekhez tisztán).
-- `spike/eredmeny_qwen35_4b.json` (gondolkodással) mint artifact-fájl —
-  a szám megvan (2. szakasz), a fájl nem.
+Ez a fájl nem ADR — nem dönt, csak felsorolja, mit mutatnak a mentett
+mérési artifactok. A tényleges döntés (SQLite/Postgres, modellválasztás,
+roham-üzemmód) nyitott; ADR-t nem módosítottam.
