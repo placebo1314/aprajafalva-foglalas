@@ -322,6 +322,29 @@ amikor számít.
   kötve, nem a foglaláshoz** — így nem lesz belőle vásárlói profil, és a dev
   módban azonnal látszik, mely beszélgetések mentek rosszul.
 
+### Kétlépcsős válasz (hangcsatorna)
+
+Az M-1 spike méréseiből (`spike/EREDMENY.md`) tudjuk, hogy a tartalmi
+válaszhoz szükséges modellhívás ideje messze meghaladja azt, amit egy
+hangalapú beszélgetésben csöndként el lehet viselni. Erre a válasz nem a
+modell felgyorsítása, hanem a válasz kettéosztása:
+
+1. **Azonnali, sablonos nyugtázás.** Mielőtt a tartalmi válasz elkészülne,
+   a rendszer egy előre megírt töltelékmondatot ad ("Egy pillanat, nézem…").
+   Ez **sablon, nem modellgenerálás** — a generálás önmagában annyi időt
+   venne igénybe, hogy a nyugtázás elkésne, és pont a célját (a csönd
+   megtörését) veszítené el.
+2. **Tartalmi válasz.** Ez már a ténylegesen lekérdezett/kinyert adatot
+   tartalmazza, a szokásos módon (visszaolvasásos megerősítéssel stb.).
+
+A nyugtázó mondat **sosem tartalmaz tényt** — sem időpontot, sem szabad
+helyet, sem kapacitást. Kizárólag azt jelzi, hogy a rendszer dolgozik a
+kérésen. Ez nem stíluskérdés: a nyugtázás sablon, nincs mögötte ellenőrzött
+adat, tehát nem is állíthat semmit, aminek igaznak kell lennie.
+
+Szöveges csatornán **nincs** töltelékmondat — ott a natív gépelés-jelzés
+("...ír") tölti be ugyanezt a szerepet, plusz üzenet nélkül.
+
 ---
 
 ## 8. Adatvédelem
@@ -506,19 +529,39 @@ A kombinatorikus tesztelhetetlenség ellen: **profilok** („laza", „szoros",
 
 ## 12. Szolgáltatási szintek
 
-| Mit | Cél |
-|---|---|
-| Foglalás megerősítése (mag) | p95 < 100 ms |
-| Szabad időpont keresés | p95 < 200 ms |
-| Asszisztens válasz (szöveg) | p95 < 2,5 s |
-| Asszisztens válasz (hang) | p95 < 800 ms |
-| Szolgáltatás-azonosítás | > 98% **a leggyengébb nyelvi rétegen is > 90%** |
-| Dátumértelmezés | > 99% |
+**A válaszidő-SLO-k (az alábbi tábla mind a négy p95 sora) ideiglenesen
+FELFÜGGESZTVE.** A fejlesztés jelen szakaszában (M0/M1) mérjük és
+naplózzuk őket, de nem blokkolók — egyetlen teszt vagy build sem bukhat
+emiatt. A feloldás feltétele **M4 lezárása**. Ez a jelenlegi fejlesztési
+sorrendből következik (`docs/roadmap.md`: "a beosztásszerkesztő előbb, mint
+az asszisztens" — amíg nincs LLM-réteg, a válaszidő-SLO-nak nincs mit
+mérnie). **Ez nem vonatkozik a lenti invariánsokra** (dupla/elveszett
+foglalás) — azok soha nem függnek fel, teszttel bizonyítottak maradnak.
+
+| Mit | Cél | Státusz |
+|---|---|---|
+| Foglalás megerősítése (mag) | p95 < 100 ms | felfüggesztve |
+| Szabad időpont keresés | p95 < 200 ms | felfüggesztve |
+| Első reakció (sablon, hang) | p95 < 500 ms | felfüggesztve |
+| Tartalmi válasz (modell) | p95 < 8 s | felfüggesztve |
+| Szolgáltatás-azonosítás | > 98% **a leggyengébb nyelvi rétegen is > 90%** | aktív |
+| Dátumértelmezés | > 99% | aktív |
+
+A fenti "Első reakció" / "Tartalmi válasz" sor a korábbi "Asszisztens
+válasz (szöveg)" / "Asszisztens válasz (hang)" bontást váltja fel — ez az
+M-1 spike méréseiből (`spike/EREDMENY.md`) származó **javasolt módosítás**,
+nem véglegesített döntés. A mért válaszidők (1 párhuzamos kéréssel is
+percek nagyságrendűek) mellett a korábbi 2,5 s / 800 ms cél irreális
+volt; a kétlépcsős válasz (7. szakasz) miatt a hangcsatornán a felhasználó
+szempontjából releváns szám az azonnali sablon-reakció, nem a teljes
+modellválasz. **A véglegesítéshez ADR kell** — ez a felfüggesztéstől
+független, önálló döntés.
 
 **Ezek a számok ma feltételezések.** A spike méri be őket; utána válnak
-követelménnyé.
+követelménnyé, ha a felfüggesztés feloldódik.
 
-**Invariánsok** — teszttel bizonyítva:
+**Invariánsok** — teszttel bizonyítva, a fenti felfüggesztéstől
+FÜGGETLENÜL mindig kötelezők:
 - dupla foglalás: **0**
 - elveszett foglalás: **0** (konkurenciából *és* lemezhibából)
 
@@ -647,3 +690,4 @@ előállítása · dev mód trace-szel és értékeléssel · mentés és helyre
 | 7 | Szűkösségjelzés sötét mintázattá válik | küszöb konfigból, auditálható napló |
 | 8 | Az annotálás gazdátlan marad | heti fél óra, nevesített felelős |
 | 9 | Snapshot-elv félreértése | felületen kiírva |
+| 10 | Közbevágás, párhuzamos beszéd (barge-in) | a barge-in érzékelése/megszakítása a hangkeretrendszer felelőssége; a mi felelősségünk a szándékindex megőrzése félbeszakításkor |
