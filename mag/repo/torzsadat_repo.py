@@ -89,6 +89,13 @@ def szolgaltatas_letrehoz(
     return szolgaltatas_id
 
 
+def szervezetek_lekerdezese(conn: sqlite3.Connection) -> list[dict]:
+    """Az összes szervezet, névre rendezve — az admin felület
+    (`felulet/admin/`) induláskori szervezet-választójának."""
+    sorok = conn.execute("SELECT id, nev FROM szervezet ORDER BY nev").fetchall()
+    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+
+
 def boltok_lekerdezese(conn: sqlite3.Connection, *, szervezet_id: str) -> list[dict]:
     """Egy szervezet boltjai, névre rendezve — az admin felület (`felulet/admin/`)
     bolt-választójának való listázás."""

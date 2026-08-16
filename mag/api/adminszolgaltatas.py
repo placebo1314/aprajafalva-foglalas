@@ -66,6 +66,10 @@ SABLONOK: dict[str, dict] = {
 }
 
 
+def szervezetek(conn: sqlite3.Connection) -> list[dict]:
+    return torzsadat_repo.szervezetek_lekerdezese(conn)
+
+
 def boltok(conn: sqlite3.Connection, *, szervezet_id: str) -> list[dict]:
     return torzsadat_repo.boltok_lekerdezese(conn, szervezet_id=szervezet_id)
 
