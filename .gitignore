@@ -19,3 +19,4 @@ naplo/
 .claude/settings.local.json
 .pytest_cache/
 .ruff_cache/
+*.egg-info/

@@ -1,0 +1,29 @@
+{
+  "modell": "qwen3.5:4b",
+  "korok": [
+    {
+      "szalszam": 1,
+      "n": 22,
+      "p50_s": 71.73256750000019,
+      "p95_s": 118.0969943,
+      "atlag_s": 71.39348690454545,
+      "teljes_ido_s": 1570.6573480000002,
+      "atlagos_token_per_mondat": 1441.3636363636363,
+      "vram_mb_elotte": 6509,
+      "vram_mb_alatt": 4055,
+      "hibaszam": 4
+    },
+    {
+      "szalszam": 3,
+      "n": 22,
+      "p50_s": 177.9354495000007,
+      "p95_s": 182.0439841999996,
+      "atlag_s": 158.7762955727274,
+      "teljes_ido_s": 1203.3955203999994,
+      "atlagos_token_per_mondat": 635.9230769230769,
+      "vram_mb_elotte": 4055,
+      "vram_mb_alatt": 4055,
+      "hibaszam": 10
+    }
+  ]
+}

@@ -19,6 +19,16 @@ dev = [
     "ruff>=0.6",
 ]
 
+[tool.setuptools.packages.find]
+# Explicit lista kell (a setuptools flat-layout auto-discovery kettőnél több
+# gyökérkönyvtárnál hibát dob) — a CLAUDE.md "Modulhatárok" szakaszának
+# csomagjai, plusz a seed/ (importként hívva: `python -m seed.betolt`).
+# A tesztek/, spike/, eszkozok/, migraciok/, docs/ szándékosan kimarad:
+# ezek nem csomagolt könyvtári kód. Az asszisztens/, adatvedelem/, felulet/
+# ma még __init__.py nélküli váz — a minta itt van előkészítve, hogy amint
+# valódi csomaggá válnak (M4/M5), automatikusan bekerüljenek.
+include = ["mag*", "seed*", "asszisztens*", "adatvedelem*", "felulet*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

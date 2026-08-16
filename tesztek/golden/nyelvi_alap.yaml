@@ -1,0 +1,366 @@
+# A golden set nyelvi magja — 20 kézzel írt eset, öt rétegben.
+#
+# Ez NEM a modell kimenetéből készült: előbb dőlt el, mi a helyes válasz,
+# és csak utána mérünk (golden-set skill: "Ne a modell kimenetéből írj
+# tesztesetet").
+#
+# A rétegek külön küszöböt kapnak. A leggyengébb réteg a mérőszám, nem az
+# átlag — egy 98%-os összesítés mögött állhat 70% az idős törpökön, és pont
+# ők nem tudnak mást választani (blueprint 7. szakasz).
+#
+# FONTOS: a `varhato.eszkoz: visszakerdez` NEM kudarc. Ha a mondatból
+# hiányzik egy kritikus mező (dátum, bolt, szolgáltatás), a HELYES viselkedés
+# a visszakérdezés — és két sikertelen értelmezés után zárt kérdésre váltás.
+# Ha egy modell ilyenkor "kitalál" egy dátumot, az rosszabb, mintha kérdezne.
+#
+# A `most` mező minden relatív dátumot tartalmazó esetnél kötelező:
+# 2026-08-17 = hétfő. Enélkül a teszt egy hét múlva megbukna.
+#
+# A szolgáltatás- és boltazonosítóknak egyezniük kell a seed/betolt.py
+# értékeivel.
+
+meta:
+  verzio: 1
+  most_alapertelmezett: "2026-08-17T09:00:00Z"   # hétfő
+  kuszobok:
+    koznyelvi: 0.98
+    tajszolas: 0.90
+    toredekes: 0.90
+    szleng: 0.92
+    egyszerusitett: 0.90
+
+esetek:
+
+  # ---------------------------------------------------------------------
+  # 1. réteg — köznyelvi (5 eset)
+  # ---------------------------------------------------------------------
+
+  - id: koznyelvi-01
+    bemenet: "Szeretnék időpontot foglalni jövő hét keddre nagy petárdához."
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: nagy_petarda
+        datum_tol: "2026-08-25T00:00:00Z"
+        datum_ig: "2026-08-25T23:59:59Z"
+        napszak: barmikor
+    cimkek: [koznyelvi, relativ_datum, szolgaltatas_azonositas]
+
+  - id: koznyelvi-02
+    bemenet: "Mikor tudok legkorábban menni Törpillához?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-24T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A "legkorábban" nyitott intervallum a mától. A boltnak egy szolgáltatása
+      van, ezért a szolgáltatás egyértelmű — ez a bolt-profil szétválasztás
+      haszna (blueprint 3. szakasz).
+    cimkek: [koznyelvi, nyitott_intervallum]
+
+  - id: koznyelvi-03
+    bemenet: "Meddig van nyitva a Szundi bolt szombaton?"
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: szundi
+        mit: nyitvatartas
+        datum: "2026-08-22"
+    megjegyzes: >
+      Engedélyezett tényválasz, azonosítás nélkül. Nem szabad foglalási ágra
+      terelni (törpök 4. igénye: ne faggassák feleslegesen).
+    cimkek: [koznyelvi, tenyvalasz, azonositas_nelkul]
+
+  - id: koznyelvi-04
+    bemenet: "Le szeretném mondani a foglalásomat, a kód X7K2M9QP."
+    varhato:
+      eszkoz: foglalas_lemondas
+      parameterek:
+        foglalasi_kod: "X7K2M9QP"
+    cimkek: [koznyelvi, lemondas, foglalasi_kod]
+
+  - id: koznyelvi-05
+    bemenet: "Át tudnám tenni szerdára a péntek délelőtti időpontomat?"
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: foglalasi_kod
+      varhato_kerdes_tipusa: nyitott
+    megjegyzes: >
+      Az áthelyezés atomi művelet, de foglalási kód nélkül nem azonosítható,
+      melyik foglalásról van szó. A "szerda" feloldása (2026-08-19) helyes,
+      de önmagában nem elég a művelethez.
+    cimkek: [koznyelvi, athelyezes, hianyzo_adat]
+
+  # ---------------------------------------------------------------------
+  # 2. réteg — tájszólás, régies (4 eset)
+  # ---------------------------------------------------------------------
+
+  - id: tajszolas-01
+    bemenet: "Möggyek-ë hónap délelőtt a petárdáshó?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T11:59:59Z"
+        napszak: delelott
+    megjegyzes: >
+      Három nehézség egyszerre: ö-ző alak ("möggyek"), a "hónap" itt HOLNAP
+      jelentésű (nem hónap!), és a bolt körülírása ("petárdás"). A "hónap"
+      a normalizáló szótár egyik legfontosabb bejegyzése lesz — köznyelvi
+      olvasata teljesen mást jelentene.
+    cimkek: [tajszolas, csapda_szo, bolt_korulras]
+
+  - id: tajszolas-02
+    bemenet: "Kéretnék egy időpontot szombat reggelre, ha lehetséges vóna."
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+    megjegyzes: >
+      A dátum egyértelmű (2026-08-22), a bolt nem. Régies alakok: "kéretnék",
+      "vóna". Zárt kérdés a helyes forma — három bolt, felsorolható.
+    cimkek: [tajszolas, regies, zart_kerdes]
+
+  - id: tajszolas-03
+    bemenet: "Hun van az az üzlet, ahun a boldogságot árullyák?"
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: torpilla
+        mit: cim
+    megjegyzes: >
+      Nem foglalási szándék, hanem tényválasz. A kapuőrnek fel kell ismernie,
+      hogy ez engedélyezett kérdés, nem "nem értem" ág.
+    cimkek: [tajszolas, tenyvalasz, hol_kerdes]
+
+  - id: tajszolas-04
+    bemenet: "Píntökön délután érnék rá, akkor van-e hely?"
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+    megjegyzes: >
+      "Píntök" = péntek (2026-08-21), a napszak egyértelmű. A bolt hiányzik.
+      Fontos, hogy a rendszer a MEGLÉVŐ adatot megtartsa, és csak a hiányzót
+      kérdezze — a törpök 6. igénye (javítás, ne újrakezdés).
+    cimkek: [tajszolas, reszleges_adat]
+
+  # ---------------------------------------------------------------------
+  # 3. réteg — elharapott, töredékes (4 eset)
+  # ---------------------------------------------------------------------
+
+  - id: toredekes-01
+    bemenet: "kedden… petárda… lehet?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Táviratstílus, de minden kritikus mező kikövetkeztethető. A "kedd"
+      a legközelebbi kedd (holnap). Ha a modell itt visszakérdez, az NEM
+      hiba, csak gyengébb élmény — a golden set részleges pontot ad rá.
+    reszleges_elfogadas:
+      eszkoz: visszakerdez
+      pontszam: 0.5
+    cimkek: [toredekes, tavirat_stilus]
+
+  - id: toredekes-02
+    bemenet: "hát én csak azt szeretném hogy hogy mikor lehet menni"
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+    megjegyzes: >
+      Szándék felismerhető (foglalás), de SEMMI konkrétum nincs benne.
+      A helyes válasz zárt kérdés — nyitott kérdésre ("Mikor szeretne
+      menni?") a beszélő valószínűleg ugyanilyen bizonytalanul válaszolna.
+    cimkek: [toredekes, ismetles, nulla_konkretum]
+
+  - id: toredekes-03
+    bemenet: "időpont. holnap. délelőtt."
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+      megorzott_parameterek:
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T11:59:59Z"
+        napszak: delelott
+    megjegyzes: >
+      A `megorzott_parameterek` a lényeg: a visszakérdezés után a dátumot
+      NEM szabad újra megkérdezni. Ez a leggyakoribb hibaforrás — a
+      részleges szándék elvesztése.
+    cimkek: [toredekes, szandek_megorzes]
+
+  - id: toredekes-04
+    bemenet: "Szeretnék… izé… hogy is mondjam… bemenni a boltba valamikor a héten."
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+      megorzott_parameterek:
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+    megjegyzes: >
+      A töltelékszavak ("izé", "hogy is mondjam") nem hordoznak jelentést,
+      de nem is szabad elakadni rajtuk. "A héten" = mától vasárnapig.
+    cimkek: [toredekes, toltelekszo]
+
+  # ---------------------------------------------------------------------
+  # 4. réteg — szleng (3 eset)
+  # ---------------------------------------------------------------------
+
+  - id: szleng-01
+    bemenet: "Van hely hónap délelőtt a petárdásnál? Kb 10 körül lenne jó"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T11:59:59Z"
+        napszak: delelott
+        preferalt_ora: 10
+    megjegyzes: >
+      Ugyanaz a "hónap = holnap" csapda, mint tajszolas-01-ben, de teljesen
+      más regiszterben. A "kb 10 körül" preferencia, nem kemény szűrő.
+    cimkek: [szleng, csapda_szo, preferencia]
+
+  - id: szleng-02
+    bemenet: "yo, be lehet nézni ma Törpillához vagy tele van?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-17T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A "vagy tele van?" nem külön kérdés, hanem ugyanannak a szándéknak
+      a része. Ha nincs hely, a válasznak őszintének kell lennie és
+      alternatívát kell adnia (törpök 5. igénye).
+    cimkek: [szleng, ma, negativ_kimenet_lehetseges]
+
+  - id: szleng-03
+    bemenet: "asszem jövő csüt jó lenne, addig ráérek"
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+      megorzott_parameterek:
+        datum_tol: "2026-08-27T00:00:00Z"
+        datum_ig: "2026-08-27T23:59:59Z"
+    megjegyzes: >
+      "csüt" = csütörtök, "jövő csüt" = a KÖVETKEZŐ heti csütörtök
+      (2026-08-27), nem a most csütörtök (08-20). Ez a megkülönböztetés
+      a dátumparser egyik legkockázatosabb pontja — érdemes külön mérni.
+    cimkek: [szleng, roviditett_nap, jovo_het_ertelmezes]
+
+  # ---------------------------------------------------------------------
+  # 5. réteg — kognitívan egyszerűsített, idős beszéd (4 eset)
+  # ---------------------------------------------------------------------
+
+  - id: egyszerusitett-01
+    bemenet: "Jó napot kívánok. Én a Marika vagyok. Szeretnék elmenni a boltba. Mikor lehet?"
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+    megjegyzes: >
+      A név NEM azonosító és nem is kell hozzá — böngészéshez semmi nem
+      kell (blueprint 8. szakasz). A névnek a redaktálás után <NEV>-ként
+      kell megjelennie a trace-ben; ha nyersen megmarad, az adatvédelmi
+      hiba, és a teszt bukik.
+    ellenorzes:
+      trace_redaktalt: true
+    cimkek: [egyszerusitett, udvariassagi_bevezetes, redakcio]
+
+  - id: egyszerusitett-02
+    bemenet: "Nem tudom hogy kell ezt. Időpont kell? Akkor kérek egyet. Holnapra."
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+      megorzott_parameterek:
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+    megjegyzes: >
+      A bizonytalanság kifejezése ("nem tudom hogy kell ezt") nem kérdés,
+      amire válaszolni kell — türelmes, egyszerű nyelvű vezetés a helyes
+      reakció, egy kérdéssel egy fordulóban.
+    cimkek: [egyszerusitett, bizonytalansag, onmagaval_beszeles]
+
+  - id: egyszerusitett-03
+    bemenet: "Múltkor is voltam. Ugyanakkor szeretnék megint. Az délelőtt volt."
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, ugyifogyi, torpilla]
+      megorzott_parameterek:
+        napszak: delelott
+    megjegyzes: >
+      A "múltkor" korábbi foglalásra utal, amit a rendszer azonosítás nélkül
+      NEM kereshet vissza. A helyes viselkedés: a délelőttöt megtartja, a
+      többit megkérdezi. Semmiképp NE találjon ki dátumot a "múltkor"-ból.
+    tilos:
+      - kitalalt_datum
+    cimkek: [egyszerusitett, korabbi_foglalasra_utalas, azonositas_hianya]
+
+  - id: egyszerusitett-04
+    bemenet: "A fiam mondta hogy ide kell írni. Petárdát kéne venni. Mikor mehetek?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-24T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A bolt egyértelmű ("petárdát"), a dátum nyitott — ez elég a kereséshez.
+      A "fiam mondta" kontextus, nem paraméter. A méret (kis/nagy petárda)
+      hiányzik, de a keresés a bolt szintjén elindulhat; a szolgáltatás
+      pontosítása jöhet az ajánlat után.
+    cimkek: [egyszerusitett, harmadik_szemely_kontextus, reszleges_szolgaltatas]
+
+# -----------------------------------------------------------------------
+# Kapuőr-esetek: NEM foglalási szándék. A rendszernek udvariasan el kell
+# hárítania, nem szabad foglalási ágra terelnie.
+# -----------------------------------------------------------------------
+
+  - id: kapuor-01
+    bemenet: "Milyen idő lesz holnap?"
+    varhato:
+      eszkoz: nincs
+      kapuor_dontes: nem_foglalas
+    cimkek: [kapuor, hatokoron_kivul]
+
+  - id: kapuor-02
+    bemenet: "Mennyibe kerül a nagy petárda?"
+    varhato:
+      eszkoz: nincs
+      kapuor_dontes: nem_foglalas
+    megjegyzes: >
+      Az ár NEM engedélyezett tényválasz (csak nyitvatartás, cím, időtartam).
+      A helyes reakció: jelezni, hogy erre nem tud válaszolni, és felajánlani
+      a kiutat — nem kitalálni egy árat.
+    tilos:
+      - kitalalt_ar
+    cimkek: [kapuor, hatokoron_kivul, hallucinacio_csapda]
