@@ -511,6 +511,26 @@ foglaláshoz fűzött megjegyzés. Írás csak saját műszakra.
 út, lásd ütemterv), törzsadat, szabálykapcsolók és profilok, foglaláskezelés,
 ütközéslista, műszak-visszavonás, statisztika.
 
+**Sablon-műszakok (M1, elkezdve).** Egy sablon egy elmentett, dátumtól
+független műszak-recept: pult, alkalmazott, szolgáltatás, napi
+óra-időablak, snapshot-mezők és blokkszabály
+(`migraciok/0003_muszak_sablon.sql`). Meglévő műszakból menthető, majd
+egy napra vagy egy teljes hétre alkalmazható. Ettől külön áll a **hét
+másolása**: nem egy sablont ismétel, hanem egy már létező hét TÉNYLEGES,
+akár pultonként eltérő beosztását helyezi át egy másik hétre — mindkét
+út tiszteletben tartja a kivételnapokat (a generátor a szokásos módon
+hagyja ki azokat).
+
+**Ütközéslista (M1, elkezdve).** Három ok miatt kerülhet rá egy műszak:
+kemény kényszert sért (`mag/szabalyok/kenyszerek.py::ellenoriz()` — a
+logika onnan jön, a lista nem duplikálja), két műszak időben átfedi
+egymást ugyanazon a pulton, vagy nulla slotot generált anélkül, hogy
+kivétel napra esne (kivétel napon a nulla slot szándékos, nem hiba). A
+kényszerek.py két bolt-/profilfüggő paramétere (`min_osszes_szunet_perc`,
+`max_folyamatos_munka_perc`) egyelőre a lista saját, felülírható
+alapértéket kap — a profilrendszer (lásd "Kényszerkapcsolók" lent) még
+nem épült meg.
+
 **Dev / annotátor** — külön szerepkör, trace-böngésző, „mi lett volna a helyes
 válasz". Nem lát azonosítható adatot. Elsőként a rosszra értékelt
 beszélgetéseket nézi.

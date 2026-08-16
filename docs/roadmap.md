@@ -68,13 +68,28 @@ Postgresen is.
 ## M1 — Admin beosztásszerkesztő
 
 **Állapot: ELKEZDVE (2026-08-16).** `felulet/admin/` — Tkinter, a
-legegyszerűbb működő forma: naptárnézet (pultok oszlopokban, egyelőre
-nem húzható, csak kattintható), műszak felvitele sablonnal, slot/blokk
-megjelenítés, foglalások listája lemondással. A `mag/api/` bővült a
-kiszolgáláshoz szükséges lekérdezésekkel. Még nyitva: húzható műszakok,
-törzsadat-szerkesztés (bolt/pult/alkalmazott/szolgáltatás felvitele az
-UI-ból — ma csak a `seed`-ből jönnek), kényszerkapcsolók, profilok,
-ütközéslista, magyarázó motor.
+legegyszerűbb működő forma. Eddig elkészült:
+
+- naptárnézet (pultok oszlopokban, egyelőre nem húzható, csak
+  kattintható), slot/blokk megjelenítés kattintásra
+- műszak felvitele (kézzel vagy sablonnal), foglalások listája
+  lemondással
+- **sablon-műszakok**: mentés egy meglévő műszakból
+  (`migraciok/0003_muszak_sablon.sql`), alkalmazás napra/hétre, és hét
+  másolása másik hétre (a forrás hét TÉNYLEGES beosztását, nem csak egy
+  sablont) — kivételnapok mindkét úton kihagyásra kerülnek
+- törzsadat-szerkesztés az UI-ból: bolt/pult/alkalmazott/szolgáltatás
+  felvitele és átnevezése, kivételnap felvétele (eddig csak a `seed`-ből
+  jöttek)
+- **ütközéslista**: kemény kényszert sértő, átfedő és nulla slotot
+  generáló (nem kivétel napi) műszakok listázása, a
+  `mag/szabalyok/kenyszerek.py`-ra építve
+
+A `mag/api/adminszolgaltatas.py` lett az egyetlen belépési pont a
+felület felől — saját SQL-t nem tartalmaz, mindent a `mag/repo/`-n
+keresztül végez. Szolgáltatásréteg-tesztekkel lefedve (Tkinter-teszt
+nincs). Még nyitva: húzható műszakok, kényszerkapcsolók, profilok,
+magyarázó motor.
 
 **Ez a kritikus út.** Ha a foglalás havonta egy-két órára nyílik meg a következő
 egész hónapra, akkor addigra ott kell lennie egy hónapnyi beosztásnak.
