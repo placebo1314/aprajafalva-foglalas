@@ -580,6 +580,34 @@ hurok tehát nem kényelmi funkció, hanem az egyetlen út a falu nyelvéhez.
 `docs/LICENCEK.md`: komponensenként licenc, letöltés dátuma, link.
 A Whisper magyar finomhangolatai a leggyakoribb licenccsapda.
 
+### M-1 spike (2026-08-16) — mért tények
+
+A `spike/` alatti eldobható kóddal (`docs/roadmap.md`, M-1) mért adatok.
+Ez nem döntés, csak tény — a részletes bontás `spike/EREDMENY.md`-ban van,
+és egyik ADR-t sem módosította.
+
+- Helyi Ollama, `qwen3.5:4b` és `qwen3.5:9b` (mindkettő Apache-2.0). A
+  Racka-4B ellenőrző jelölt nem volt elérhető lokálisan, nem mérhető.
+- A golden seten mért három konfiguráció közül (4B gondolkodás nélkül,
+  9B gondolkodással, 9B gondolkodás nélkül) **egyik sem éri el** egyetlen
+  rétegküszöböt sem (12. szakasz / golden-set skill). A 4B modell
+  gondolkodással golden-futtatása nem lett artifactként elmentve.
+- A 4B modell gondolkodással ~25×-ösen több tokent termel mondatonként,
+  mint a 9B (1441 vs. 57 token/mondat, 1 párhuzamos kéréssel mérve) — a
+  mért adatok szerint jelenleg egyik konfigurációban sem éri meg a 9B-nél
+  kisebb modell mellett dönteni.
+- A szöveges asszisztens-válasz SLO-jához (12. szakasz, p95 < 2,5 s)
+  képest minden mért válaszidő 1 és 3 párhuzamos kéréssel is 6–73×-os
+  túllépés.
+- SQLite írási p95 10 egyidejű session mellett 207 ms, ami meghaladja a
+  13. szakasz ADR-004 kiváltó feltételét (p95 > 50 ms); 3 session mellett
+  (35 ms) nem.
+- A hun-date-parser könyvtár közvetlen pontosságát a spike nem
+  perzisztálta artifactként — ez a mérés megismétlendő.
+
+A modellválasztás, az adattár-váltás és a roham-üzemmód kérdése ezek után
+is nyitott.
+
 ---
 
 ## 15. v1 hatókör

@@ -1,5 +1,15 @@
 # M-1 Spike — Eredmények
 
+**Frissítés:** a `spike/golden_futtato.py` időközben javítva lett (séma
+enum-kényszer `eszkoz`/`bolt_id`/`szolgaltatas_id`/`napszak`-ra, a
+dátumformátum-ellentmondás feloldva a rendszerpromptban, nyers kimenet
+mentése minden esethez, `reszleges_elfogadas` a `koznyelvi-02` és
+`egyszerusitett-04` esetekre). Az alábbi számok **a javítás előtti**
+futásokból származnak — a bolt_id-elgépelés és a koznyelvi-03
+dátumformátum-hiba innentől a mérőeszköz szintjén kizárt, de ezt itt nem
+mértük újra (nincs modell-futtatás). Új mérés esetén ezek a számok
+várhatóan változnak.
+
 Ág: `spike/m-1`. Ez a változat kizárólag a `spike/*.json` fájlokból épül —
 nincs benne újrafuttatás, és nincs benne olyan szám, aminek nincs
 JSON-artifactja. Forrásfájlok:

@@ -60,7 +60,12 @@ esetek:
     megjegyzes: >
       A "legkorábban" nyitott intervallum a mától. A boltnak egy szolgáltatása
       van, ezért a szolgáltatás egyértelmű — ez a bolt-profil szétválasztás
-      haszna (blueprint 3. szakasz).
+      haszna (blueprint 3. szakasz). Vitatható, hogy a nyitott intervallum
+      helyett egy visszakérdezés (pl. "mikorra gondolt?") is elfogadható
+      válasz-e — ezért részleges pontot ad rá, a toredekes-01 mintájára.
+    reszleges_elfogadas:
+      eszkoz: visszakerdez
+      pontszam: 0.5
     cimkek: [koznyelvi, nyitott_intervallum]
 
   - id: koznyelvi-03
@@ -337,7 +342,12 @@ esetek:
       A bolt egyértelmű ("petárdát"), a dátum nyitott — ez elég a kereséshez.
       A "fiam mondta" kontextus, nem paraméter. A méret (kis/nagy petárda)
       hiányzik, de a keresés a bolt szintjén elindulhat; a szolgáltatás
-      pontosítása jöhet az ajánlat után.
+      pontosítása jöhet az ajánlat után. Vitatható, hogy a "Mikor mehetek?"
+      teljesen konkrétum nélküli zárófordulatra visszakérdezés is elfogadható
+      válasz-e — ezért részleges pontot ad rá, a toredekes-01 mintájára.
+    reszleges_elfogadas:
+      eszkoz: visszakerdez
+      pontszam: 0.5
     cimkek: [egyszerusitett, harmadik_szemely_kontextus, reszleges_szolgaltatas]
 
 # -----------------------------------------------------------------------

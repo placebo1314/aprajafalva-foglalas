@@ -14,6 +14,10 @@ esetén, `tilos` minták tiltása. A kimenet címkénként (minden `cimkek`
 elem) ÉS rétegenként (a `meta.kuszobok` szerinti réteg-küszöbökkel
 összevetve) bontva jelent.
 
+A `--json`-nal mentett fájl minden esethez elmenti a nyers modellkimenetet
+is (`nyers_kimenet`), nem csak az `indoklas` szöveget — enélkül egy bukott
+eset utólag nem elemezhető (lásd korábbi eredmény-fájlok korlátját).
+
 Használat:
     python spike/golden_futtato.py --modell qwen3.5:9b
     python spike/golden_futtato.py --modell qwen3.5:4b --json eredmeny.json
@@ -37,11 +41,41 @@ GYOKER = Path(__file__).resolve().parents[1]
 GOLDEN_UTVONAL = GYOKER / "tesztek" / "golden" / "nyelvi_alap.yaml"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
+# Zárt halmazok — lásd .claude/skills/eszkoz-szerzodes/SKILL.md ("Zárt
+# halmazok mindenhol, ahol lehet"). A mért futásokban (spike/EREDMENY.md)
+# visszatérő hiba volt a bolt_id elgépelése (pl. "ugyfogyi" az "ugyifogyi"
+# helyett) és kitalált eszköznév (pl. "boltoz", "bolts_info") — ezek a séma
+# szintjén, kötött dekódolással strukturálisan kizárhatók, nem a modell
+# helyesírásán múlnak.
+ESZKOZOK = [
+    "szabad_idopontok",
+    "bolt_info",
+    "foglalas_lemondas",
+    "foglalas_athelyezes",
+    "visszakerdez",
+    "nincs",
+]
+BOLT_AZONOSITOK = ["szundi", "ugyifogyi", "torpilla"]
+# A golden setben (tesztek/golden/nyelvi_alap.yaml) és az eszkoz-szerzodes
+# skillben eddig megjelent szolgáltatás-azonosítók. Ez NEM állítottan a
+# teljes katalógus — a valódi lista a mag/ torzsadat_repo-jában van, amit a
+# spike (CLAUDE.md 3. invariáns szellemében is) nem importál. Ha új
+# szolgáltatás kerül a golden setbe, ezt a listát bővíteni kell.
+SZOLGALTATAS_AZONOSITOK = ["kis_petarda", "nagy_petarda", "nagy_orom"]
+NAPSZAKOK = ["reggel", "delelott", "delutan", "este", "barmikor"]
+
 FORMAT_SEMA = {
     "type": "object",
     "properties": {
-        "eszkoz": {"type": "string"},
-        "parameterek": {"type": "object"},
+        "eszkoz": {"type": "string", "enum": ESZKOZOK},
+        "parameterek": {
+            "type": "object",
+            "properties": {
+                "bolt_id": {"type": "string", "enum": BOLT_AZONOSITOK},
+                "szolgaltatas_id": {"type": "string", "enum": SZOLGALTATAS_AZONOSITOK},
+                "napszak": {"type": "string", "enum": NAPSZAKOK},
+            },
+        },
     },
     "required": ["eszkoz", "parameterek"],
 }
@@ -67,7 +101,12 @@ Boltok: szundi (altató), ugyifogyi (petárda), torpilla (öröm/boldogság).
 A "most" időpont, amihez a relatív dátumokat (holnap, jövő hét stb.)
 viszonyítsd: {most}
 
-Dátumformátum a parameterek-ben mindig ISO-8601 UTC: "2026-08-18T00:00:00Z".
+Dátumformátum — KÉT KÜLÖNBÖZŐ alak, ne keverd őket:
+- szabad_idopontok(datum_tol, datum_ig): mindig teljes ISO-8601 UTC
+  időbélyeg, pl. "2026-08-18T00:00:00Z".
+- bolt_info(datum): csak a naptári nap, idő nélkül, pl. "2026-08-22" —
+  NE tégy hozzá óra/perc/másodperc részt vagy "Z" jelölést.
+
 Csak a JSON objektumot add vissza, semmi mást, gondolkodást ne írj ki."""
 
 
@@ -217,6 +256,7 @@ class EsetEredmeny:
     telt_masodperc: float
     tokenszam: int
     hiba: str | None
+    nyers_kimenet: dict | None = None
 
 
 def fut(
@@ -231,7 +271,7 @@ def fut(
         pontszam, indoklas = kiertekel(eset, kimenet)
         if hiba:
             indoklas = f"{indoklas} [hívási hiba: {hiba}]"
-        eredmenyek.append(EsetEredmeny(eset, pontszam, indoklas, telt, tokenszam, hiba))
+        eredmenyek.append(EsetEredmeny(eset, pontszam, indoklas, telt, tokenszam, hiba, kimenet))
         print(f"  {eset.id:20s} {pontszam:.1f}  {indoklas[:70]}")
     return eredmenyek
 
@@ -342,6 +382,7 @@ def main() -> int:
                             "telt_masodperc": er.telt_masodperc,
                             "tokenszam": er.tokenszam,
                             "hiba": er.hiba,
+                            "nyers_kimenet": er.nyers_kimenet,
                         }
                         for er in eredmenyek
                     ],
