@@ -18,6 +18,14 @@ Minden mérföldkő önmagában szállítható. A sorrend nem véletlen:
 
 ## M-1 — Spike (egy hét, a többi előtt)
 
+**Állapot: LEZÁRVA (2026-08-16).** A négy szám megvan, részletek:
+`spike/EREDMENY.md`. Az SLO-táblázat frissült (blueprint 12. szakasz), de
+a válaszidő-SLO-k ideiglenesen FELFÜGGESZTVE maradnak M4 lezárásáig — az
+"drámaian rossz" kilépési feltétel valójában bekövetkezett (a mért
+válaszidők és a golden-set pontosság is messze a cél alatt), ezért a terv
+itt módosult: a fejlesztési sorrend (mag → beosztásszerkesztő →
+asszisztens) előbbre veszi a válaszidő-SLO betartását igénylő munkát.
+
 **Nem termék, hanem méréssorozat.** A tervben szereplő SLO-számok ma
 feltételezések; ez a hét dönti el, hogy tarthatók-e.
 
@@ -58,6 +66,15 @@ Postgresen is.
 ---
 
 ## M1 — Admin beosztásszerkesztő
+
+**Állapot: ELKEZDVE (2026-08-16).** `felulet/admin/` — Tkinter, a
+legegyszerűbb működő forma: naptárnézet (pultok oszlopokban, egyelőre
+nem húzható, csak kattintható), műszak felvitele sablonnal, slot/blokk
+megjelenítés, foglalások listája lemondással. A `mag/api/` bővült a
+kiszolgáláshoz szükséges lekérdezésekkel. Még nyitva: húzható műszakok,
+törzsadat-szerkesztés (bolt/pult/alkalmazott/szolgáltatás felvitele az
+UI-ból — ma csak a `seed`-ből jönnek), kényszerkapcsolók, profilok,
+ütközéslista, magyarázó motor.
 
 **Ez a kritikus út.** Ha a foglalás havonta egy-két órára nyílik meg a következő
 egész hónapra, akkor addigra ott kell lennie egy hónapnyi beosztásnak.
