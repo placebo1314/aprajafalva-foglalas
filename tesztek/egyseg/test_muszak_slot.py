@@ -1,8 +1,9 @@
 """Egységtesztek a 0002_muszak_slot migrációra.
 
 Minden teszt saját, ideiglenes SQLite fájlon fut (`tmp_path` pytest
-fixture), tiszta állapotból indul, és mindkét migrációt (0001, 0002)
-lefuttatja.
+fixture), tiszta állapotból indul, és az ÖSSZES migrációt lefuttatja
+(`migracio.migral` mindig a teljes, még le nem futott sort végrehajtja —
+ma 0001, 0002, 0003).
 """
 
 from __future__ import annotations
@@ -159,7 +160,7 @@ def test_visszagorgetes_teljesen_visszaallit(db_utvonal):
     conn = migracio.kapcsolat_nyitas(db_utvonal)
     migracio.migral(conn)
     visszagorgetve = migracio.visszagorget(conn)
-    assert visszagorgetve == ["0002", "0001"]
+    assert visszagorgetve == ["0003", "0002", "0001"]
 
     tablak = {sor[0] for sor in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     conn.close()

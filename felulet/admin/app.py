@@ -84,11 +84,14 @@ class AdminApp(tk.Tk):
 
         self.naptar_ful = ttk.Frame(fulek, padding=6)
         self.foglalasok_ful = ttk.Frame(fulek, padding=6)
+        self.sablon_ful = ttk.Frame(fulek, padding=6)
         fulek.add(self.naptar_ful, text="Naptár és műszakok")
         fulek.add(self.foglalasok_ful, text="Foglalások")
+        fulek.add(self.sablon_ful, text="Sablonok és hét-másolás")
 
         self._naptar_fulet_felepit()
         self._foglalasok_fulet_felepit()
+        self._sablon_fulet_felepit()
 
     def _naptar_fulet_felepit(self) -> None:
         fejlec = ttk.Frame(self.naptar_ful)
@@ -180,6 +183,61 @@ class AdminApp(tk.Tk):
             anchor="w"
         )
 
+    def _sablon_fulet_felepit(self) -> None:
+        bal = ttk.Frame(self.sablon_ful)
+        bal.pack(side="left", fill="both", expand=True)
+        jobb = ttk.Frame(self.sablon_ful, width=320)
+        jobb.pack(side="left", fill="y", padx=(12, 0))
+        jobb.pack_propagate(False)
+
+        ttk.Label(bal, text="Mentett sablonok", font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
+        self.sablon_lista = tk.Listbox(bal, height=12)
+        self.sablon_lista.pack(fill="both", expand=True, pady=(2, 8))
+        self._sablon_id_lista: list[str] = []
+
+        mentes_keret = ttk.Frame(bal)
+        mentes_keret.pack(fill="x", pady=4)
+        ttk.Label(mentes_keret, text="Új sablon neve:").pack(side="left")
+        self.sablon_nev_mezo = ttk.Entry(mentes_keret)
+        self.sablon_nev_mezo.pack(side="left", fill="x", expand=True, padx=4)
+        ttk.Button(
+            mentes_keret,
+            text="Mentés a kiválasztott műszakból",
+            command=self._sablon_mentese_kivalasztottbol,
+        ).pack(side="left")
+
+        alkalmaz_keret = ttk.Frame(bal)
+        alkalmaz_keret.pack(fill="x", pady=4)
+        ttk.Label(alkalmaz_keret, text="Alkalmazás dátuma:").pack(side="left")
+        self.sablon_alkalmaz_datum_mezo = ttk.Entry(alkalmaz_keret, width=12)
+        self.sablon_alkalmaz_datum_mezo.insert(0, self.het_kezdete.isoformat())
+        self.sablon_alkalmaz_datum_mezo.pack(side="left", padx=4)
+        ttk.Button(
+            alkalmaz_keret, text="Erre a napra", command=self._sablon_alkalmazasa_napra
+        ).pack(side="left", padx=2)
+        ttk.Button(
+            alkalmaz_keret,
+            text="Erre a hétre (7 nap)",
+            command=self._sablon_alkalmazasa_hetre,
+        ).pack(side="left", padx=2)
+
+        ttk.Separator(bal).pack(fill="x", pady=8)
+        ttk.Label(bal, text="Hét másolása", font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
+        masolas_keret = ttk.Frame(bal)
+        masolas_keret.pack(fill="x", pady=4)
+        ttk.Label(masolas_keret, text="Forrás hét kezdete:").pack(side="left")
+        self.masolas_forras_mezo = ttk.Entry(masolas_keret, width=12)
+        self.masolas_forras_mezo.insert(0, self.het_kezdete.isoformat())
+        self.masolas_forras_mezo.pack(side="left", padx=4)
+        ttk.Label(masolas_keret, text="Cél hét kezdete:").pack(side="left")
+        self.masolas_cel_mezo = ttk.Entry(masolas_keret, width=12)
+        self.masolas_cel_mezo.pack(side="left", padx=4)
+        ttk.Button(masolas_keret, text="Másolás", command=self._het_masolasa).pack(side="left")
+
+        ttk.Label(jobb, text="Eredmény", font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
+        self.sablon_uzenet = tk.Text(jobb, height=20, width=42, state="disabled")
+        self.sablon_uzenet.pack(fill="both", expand=True, pady=(2, 0))
+
     # ------------------------------------------------------------------
     # Adatbetöltés / -frissítés
     # ------------------------------------------------------------------
@@ -227,6 +285,7 @@ class AdminApp(tk.Tk):
         self.pultok = pultok
         self._naptar_frissitese()
         self._foglalasok_frissitese()
+        self._sablon_lista_frissitese()
 
     def _demo_betoltese(self) -> None:
         from seed.betolt import betolt
@@ -417,6 +476,112 @@ class AdminApp(tk.Tk):
         eredmeny = api.foglalas_lemond(self.conn, foglalasi_kod=foglalasi_kod)
         messagebox.showinfo("Lemondás", f"Eredmény: {eredmeny.value}")
         self._foglalasok_frissitese()
+        self._naptar_frissitese()
+
+    # ------------------------------------------------------------------
+    # Sablonok és hét-másolás
+    # ------------------------------------------------------------------
+
+    def _sablon_uzenet_ir(self, szoveg: str) -> None:
+        self.sablon_uzenet.config(state="normal")
+        self.sablon_uzenet.delete("1.0", "end")
+        self.sablon_uzenet.insert("1.0", szoveg)
+        self.sablon_uzenet.config(state="disabled")
+
+    def _sablon_lista_frissitese(self) -> None:
+        self.sablon_lista.delete(0, "end")
+        self._sablon_id_lista = []
+        if not self.bolt_id:
+            return
+        for sablon in api.muszak_sablonok(
+            self.conn, szervezet_id=self.szervezet_id, bolt_id=self.bolt_id
+        ):
+            self.sablon_lista.insert(
+                "end", f"{sablon['nev']} ({sablon['kezdet_ora']:02d}–{sablon['veg_ora']:02d} óra)"
+            )
+            self._sablon_id_lista.append(sablon["id"])
+
+    def _kivalasztott_sablon_id(self) -> str | None:
+        kijeloles = self.sablon_lista.curselection()
+        if not kijeloles:
+            return None
+        return self._sablon_id_lista[kijeloles[0]]
+
+    def _sablon_mentese_kivalasztottbol(self) -> None:
+        if not self.kivalasztott_muszak_id:
+            self._sablon_uzenet_ir("Előbb válassz ki egy műszakot a Naptár fülön.")
+            return
+        nev = self.sablon_nev_mezo.get().strip() or "Névtelen sablon"
+        eredmeny = api.muszak_sablon_mentese(
+            self.conn, muszak_id=self.kivalasztott_muszak_id, nev=nev
+        )
+        if eredmeny["hiba"]:
+            self._sablon_uzenet_ir(f"Hiba: {eredmeny['hiba']}")
+        else:
+            self._sablon_uzenet_ir(f"Sablon elmentve: {nev} (id: {eredmeny['sablon_id']})")
+        self._sablon_lista_frissitese()
+
+    def _sablon_alkalmazasa_napra(self) -> None:
+        sablon_id = self._kivalasztott_sablon_id()
+        if sablon_id is None:
+            self._sablon_uzenet_ir("Előbb válassz ki egy sablont a listából.")
+            return
+        datum = self.sablon_alkalmaz_datum_mezo.get().strip()
+        eredmeny = api.muszak_sablon_alkalmazasa_napra(self.conn, sablon_id=sablon_id, datum=datum)
+        if eredmeny["hiba"]:
+            self._sablon_uzenet_ir(f"Hiba: {eredmeny['hiba']}")
+        elif eredmeny["kihagyva"]:
+            self._sablon_uzenet_ir(f"{datum}: kihagyva (kivétel nap: {eredmeny['kihagyas_oka']})")
+        else:
+            self._sablon_uzenet_ir(f"{datum}: létrehozva, {eredmeny['slot_szam']} slot.")
+        self._naptar_frissitese()
+
+    def _sablon_alkalmazasa_hetre(self) -> None:
+        sablon_id = self._kivalasztott_sablon_id()
+        if sablon_id is None:
+            self._sablon_uzenet_ir("Előbb válassz ki egy sablont a listából.")
+            return
+        het_kezdete = self.sablon_alkalmaz_datum_mezo.get().strip()
+        eredmenyek = api.muszak_sablon_alkalmazasa_hetre(
+            self.conn, sablon_id=sablon_id, het_kezdete_datum=het_kezdete
+        )
+        sorok = [f"Hét: {het_kezdete}-tól, 7 nap"]
+        for i, eredmeny in enumerate(eredmenyek):
+            nap = f"+{i} nap"
+            if eredmeny["hiba"]:
+                sorok.append(f"  {nap}: HIBA — {eredmeny['hiba']}")
+            elif eredmeny["kihagyva"]:
+                sorok.append(f"  {nap}: kihagyva ({eredmeny['kihagyas_oka']})")
+            else:
+                sorok.append(f"  {nap}: {eredmeny['slot_szam']} slot")
+        self._sablon_uzenet_ir("\n".join(sorok))
+        self._naptar_frissitese()
+
+    def _het_masolasa(self) -> None:
+        forras = self.masolas_forras_mezo.get().strip()
+        cel = self.masolas_cel_mezo.get().strip()
+        if not cel:
+            self._sablon_uzenet_ir("Add meg a cél hét kezdetét (ÉÉÉÉ-HH-NN).")
+            return
+        eredmenyek = api.het_masolasa(
+            self.conn,
+            szervezet_id=self.szervezet_id,
+            forras_het_kezdete=forras,
+            cel_het_kezdete=cel,
+            bolt_id=self.bolt_id,
+        )
+        if not eredmenyek:
+            self._sablon_uzenet_ir(f"A {forras} hetén nincs másolható műszak ehhez a bolthoz.")
+        else:
+            sorok = [f"{forras} → {cel}: {len(eredmenyek)} műszak másolva"]
+            for eredmeny in eredmenyek:
+                if eredmeny["hiba"]:
+                    sorok.append(f"  HIBA — {eredmeny['hiba']}")
+                elif eredmeny["kihagyva"]:
+                    sorok.append(f"  kihagyva ({eredmeny['kihagyas_oka']})")
+                else:
+                    sorok.append(f"  {eredmeny['slot_szam']} slot")
+            self._sablon_uzenet_ir("\n".join(sorok))
         self._naptar_frissitese()
 
     # ------------------------------------------------------------------

@@ -91,6 +91,51 @@ def muszak_betoltese(conn: sqlite3.Connection, muszak_id: str) -> Muszak | None:
     )
 
 
+def muszak_alapadatai(conn: sqlite3.Connection, *, muszak_id: str) -> dict | None:
+    """A `muszak_betoltese`-nél bővebb, nyers sor — a törzsadat-kapcsoló
+    oszlopokkal (`bolt_id`, `pult_id`, `alkalmazott_id`, `szolgaltatas_id`)
+    is, amiket a `Muszak` dataclass szándékosan nem tartalmaz (a
+    slotgenerátor tiszta számítás, nem kell neki a törzsadat-kapocs).
+    Ez a lekérdezés a sablon-mentéshez kell (`mag/api/adminszolgaltatas.py`),
+    ahol pont ezekre a kapcsoló oszlopokra van szükség."""
+    sor = conn.execute(
+        "SELECT szervezet_id, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, kezdet, veg, "
+        "idotartam_perc, puffer_utana_perc, min_racs_perc, foglalhato_arany, blokk_szabaly "
+        "FROM muszak WHERE id = ?",
+        (muszak_id,),
+    ).fetchone()
+    if sor is None:
+        return None
+    (
+        szervezet_id,
+        bolt_id,
+        pult_id,
+        alkalmazott_id,
+        szolgaltatas_id,
+        kezdet,
+        veg,
+        idotartam_perc,
+        puffer_utana_perc,
+        min_racs_perc,
+        foglalhato_arany,
+        blokk_szabaly_json,
+    ) = sor
+    return {
+        "szervezet_id": szervezet_id,
+        "bolt_id": bolt_id,
+        "pult_id": pult_id,
+        "alkalmazott_id": alkalmazott_id,
+        "szolgaltatas_id": szolgaltatas_id,
+        "kezdet": kezdet,
+        "veg": veg,
+        "idotartam_perc": idotartam_perc,
+        "puffer_utana_perc": puffer_utana_perc,
+        "min_racs_perc": min_racs_perc,
+        "foglalhato_arany": foglalhato_arany,
+        "blokk_szabaly": json.loads(blokk_szabaly_json),
+    }
+
+
 def blokkok_slotok_mentese(
     conn: sqlite3.Connection,
     *,

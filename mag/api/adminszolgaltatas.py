@@ -15,10 +15,20 @@ folyamat) egyetlen kapcsolatot tarthat nyitva több híváson át.
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, timedelta
 
-from mag.repo import foglalas_repo, muszak_repo, torzsadat_repo
+from mag.repo import foglalas_repo, muszak_repo, sablon_repo, torzsadat_repo
 from mag.slot import generator
 from mag.slot.blokk import FixBlokk
+
+# Két KÜLÖNBÖZŐ "sablon" fogalom van ebben a modulban, szándékosan más
+# névvel: a lenti `SABLONOK` a "műszak felvitele" űrlap MEZŐ-előtöltése
+# (statikus, kódban rögzített, pult/alkalmazott/szolgáltatás/időablak
+# NÉLKÜL) — a `muszak_sablon_*` függvények viszont a `muszak_sablon`
+# táblát (migraciok/0003) kezelik: EGY MEGLÉVŐ MŰSZAKBÓL elmentett,
+# perzisztens, pult+alkalmazott+szolgáltatás+időablak+blokkszabály
+# tartalmú recept, ami napra/hétre alkalmazható (roadmap M1 kilépési
+# feltétele: "egy hónapnyi beosztás felvitele percekben mérhető").
 
 # Sablonok a "műszak felvitele" űrlaphoz (felulet/admin/) — a snapshot-mezők
 # (idotartam_perc, puffer_utana_perc, min_racs_perc, foglalhato_arany,
@@ -205,3 +215,178 @@ def foglalasok(
 
 def foglalas_lemond(conn: sqlite3.Connection, *, foglalasi_kod: str) -> foglalas_repo.Eredmeny:
     return foglalas_repo.foglalas_lemond(conn, foglalasi_kod)
+
+
+# ---------------------------------------------------------------------
+# Műszak-sablonok (muszak_sablon tábla, migraciok/0003) — lásd a modul
+# tetején lévő megjegyzést a két "sablon" fogalom közti különbségről.
+# ---------------------------------------------------------------------
+
+
+def muszak_sablon_mentese(conn: sqlite3.Connection, *, muszak_id: str, nev: str) -> dict:
+    """Sablon mentése egy MEGLÉVŐ műszakból: pult, alkalmazott,
+    szolgáltatás, napi óra-időablak (a `kezdet`/`veg` óra-részéből) és a
+    snapshot-mezők (idotartam_perc, stb.) + blokkszabály.
+
+    Csak AZONOS NAPI, óra-határra eső időablakot tud sablonná menteni
+    (lásd migraciok/0003 megjegyzése) — ha a műszak éjfélen átnyúlik vagy
+    a kezdete/vége nem kerek óra, ÉRTELMES elutasítást ad (`hiba` kulcs),
+    nem kivételt."""
+    alapadat = muszak_repo.muszak_alapadatai(conn, muszak_id=muszak_id)
+    if alapadat is None:
+        return {"sablon_id": None, "hiba": f"Nincs ilyen műszak: {muszak_id}"}
+
+    kezdet_datum, kezdet_ora_resz = alapadat["kezdet"][:10], alapadat["kezdet"][11:19]
+    veg_datum, veg_ora_resz = alapadat["veg"][:10], alapadat["veg"][11:19]
+    if kezdet_datum != veg_datum:
+        return {
+            "sablon_id": None,
+            "hiba": "Éjfélen átnyúló műszakból ma nem menthető sablon (lásd migraciok/0003).",
+        }
+    if kezdet_ora_resz[3:] != "00:00" or veg_ora_resz[3:] != "00:00":
+        return {
+            "sablon_id": None,
+            "hiba": "A sablon csak kerek órára eső időablakot tud menteni.",
+        }
+
+    kezdet_ora = int(kezdet_ora_resz[:2])
+    veg_ora = int(veg_ora_resz[:2])
+    if veg_ora == 0:  # éjfél, mint záró óra — 24-ként kezeljük (lásd CHECK)
+        veg_ora = 24
+
+    sablon_id = sablon_repo.sablon_letrehoz(
+        conn,
+        szervezet_id=alapadat["szervezet_id"],
+        nev=nev,
+        bolt_id=alapadat["bolt_id"],
+        pult_id=alapadat["pult_id"],
+        alkalmazott_id=alapadat["alkalmazott_id"],
+        szolgaltatas_id=alapadat["szolgaltatas_id"],
+        kezdet_ora=kezdet_ora,
+        veg_ora=veg_ora,
+        idotartam_perc=alapadat["idotartam_perc"],
+        puffer_utana_perc=alapadat["puffer_utana_perc"],
+        min_racs_perc=alapadat["min_racs_perc"],
+        foglalhato_arany=alapadat["foglalhato_arany"],
+        blokk_szabaly=alapadat["blokk_szabaly"],
+    )
+    return {"sablon_id": sablon_id, "hiba": None}
+
+
+def muszak_sablonok(
+    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+) -> list[dict]:
+    return sablon_repo.sablonok_lekerdezese(conn, szervezet_id=szervezet_id, bolt_id=bolt_id)
+
+
+def muszak_sablon_alkalmazasa_napra(
+    conn: sqlite3.Connection, *, sablon_id: str, datum: str
+) -> dict:
+    """A sablont egyetlen napra alkalmazza — létrehozza a műszakot és
+    lefuttatja a generátort, ugyanúgy, mint `muszak_felvitel`."""
+    sablon = sablon_repo.sablon_betoltese(conn, sablon_id=sablon_id)
+    if sablon is None:
+        return {"hiba": f"Nincs ilyen sablon: {sablon_id}", "muszak_id": None}
+
+    kezdet = f"{datum}T{sablon['kezdet_ora']:02d}:00:00Z"
+    veg_ora = sablon["veg_ora"]
+    if veg_ora == 24:
+        veg_nap = date.fromisoformat(datum) + timedelta(days=1)
+        veg = f"{veg_nap.isoformat()}T00:00:00Z"
+    else:
+        veg = f"{datum}T{veg_ora:02d}:00:00Z"
+
+    return muszak_felvitel(
+        conn,
+        szervezet_id=sablon["szervezet_id"],
+        bolt_id=sablon["bolt_id"],
+        pult_id=sablon["pult_id"],
+        alkalmazott_id=sablon["alkalmazott_id"],
+        szolgaltatas_id=sablon["szolgaltatas_id"],
+        kezdet=kezdet,
+        veg=veg,
+        idotartam_perc=sablon["idotartam_perc"],
+        puffer_utana_perc=sablon["puffer_utana_perc"],
+        min_racs_perc=sablon["min_racs_perc"],
+        foglalhato_arany=sablon["foglalhato_arany"],
+        blokk_szabaly=sablon["blokk_szabaly"],
+    )
+
+
+def muszak_sablon_alkalmazasa_hetre(
+    conn: sqlite3.Connection, *, sablon_id: str, het_kezdete_datum: str
+) -> list[dict]:
+    """A sablont a hét mind a 7 napjára alkalmazza (a seed/betolt.py
+    heti mintáját követve — egy sablon egy pultra napi ismétlődés).
+    Kivételnapra eső nap a szokásos módon (`generator.general`)
+    kihagyásra kerül, de a `muszak` sor létrejön — ez NEM hiba, a
+    visszaadott lista elemén `kihagyva: True` jelzi."""
+    het_kezdete = date.fromisoformat(het_kezdete_datum)
+    eredmenyek = []
+    for nap_index in range(7):
+        nap = het_kezdete + timedelta(days=nap_index)
+        eredmenyek.append(
+            muszak_sablon_alkalmazasa_napra(conn, sablon_id=sablon_id, datum=nap.isoformat())
+        )
+    return eredmenyek
+
+
+def het_masolasa(
+    conn: sqlite3.Connection,
+    *,
+    szervezet_id: str,
+    forras_het_kezdete: str,
+    cel_het_kezdete: str,
+    bolt_id: str | None = None,
+) -> list[dict]:
+    """A `forras_het_kezdete` hetén ténylegesen létező műszakokat
+    lemásolja a `cel_het_kezdete` hetére — minden műszakot annyi nappal
+    tol el, amennyi a két hét kezdete közti eltolás. A kivételnapra eső
+    célnapok a szokásos módon (`generator.general`) kihagyásra kerülnek,
+    a `muszak` sor viszont létrejön (`kihagyva: True` az adott elemen).
+
+    Ez KÜLÖNBÖZIK a `muszak_sablon_alkalmazasa_hetre`-től: az egy
+    ELMENTETT sablont ismétel minden napra, ez itt a forrás hét TÉNYLEGES,
+    változatos beosztását (több pult, eltérő napi mintázat) másolja át,
+    sablon nélkül."""
+    eltolas_nap = (
+        date.fromisoformat(cel_het_kezdete) - date.fromisoformat(forras_het_kezdete)
+    ).days
+    forras_muszakok = het_muszakjai(
+        conn,
+        szervezet_id=szervezet_id,
+        het_kezdete_datum=forras_het_kezdete,
+        bolt_id=bolt_id,
+    )
+    eredmenyek = []
+    for muszak in forras_muszakok:
+        alapadat = muszak_repo.muszak_alapadatai(conn, muszak_id=muszak["muszak_id"])
+        uj_kezdet = _datum_eltol(alapadat["kezdet"], eltolas_nap)
+        uj_veg = _datum_eltol(alapadat["veg"], eltolas_nap)
+        eredmenyek.append(
+            muszak_felvitel(
+                conn,
+                szervezet_id=szervezet_id,
+                bolt_id=muszak["bolt_id"],
+                pult_id=muszak["pult_id"],
+                alkalmazott_id=muszak["alkalmazott_id"],
+                szolgaltatas_id=muszak["szolgaltatas_id"],
+                kezdet=uj_kezdet,
+                veg=uj_veg,
+                idotartam_perc=alapadat["idotartam_perc"],
+                puffer_utana_perc=alapadat["puffer_utana_perc"],
+                min_racs_perc=alapadat["min_racs_perc"],
+                foglalhato_arany=alapadat["foglalhato_arany"],
+                blokk_szabaly=alapadat["blokk_szabaly"],
+            )
+        )
+    return eredmenyek
+
+
+def _datum_eltol(idobelyeg: str, nap: int) -> str:
+    """`idobelyeg` (ISO-8601 UTC, pl. '2026-08-18T08:00:00Z') `nap` nappal
+    eltolva — a `mag/slot/_idomatek.hozzaad_perc`-hez hasonló, de napban,
+    nem percben számol (a hét-másolás mindig egész napokkal tol)."""
+    from mag.slot._idomatek import hozzaad_perc
+
+    return hozzaad_perc(idobelyeg, nap * 24 * 60)
