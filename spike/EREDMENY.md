@@ -1,22 +1,32 @@
 # M-1 Spike — Eredmények
 
-**Frissítés:** a `spike/golden_futtato.py` időközben javítva lett (séma
+**Frissítés (lezárva):** a `spike/golden_futtato.py` javítva lett (séma
 enum-kényszer `eszkoz`/`bolt_id`/`szolgaltatas_id`/`napszak`-ra, a
 dátumformátum-ellentmondás feloldva a rendszerpromptban, nyers kimenet
 mentése minden esethez, `reszleges_elfogadas` a `koznyelvi-02` és
-`egyszerusitett-04` esetekre). Az alábbi számok **a javítás előtti**
-futásokból származnak — a bolt_id-elgépelés és a koznyelvi-03
-dátumformátum-hiba innentől a mérőeszköz szintjén kizárt, de ezt itt nem
-mértük újra (nincs modell-futtatás). Új mérés esetén ezek a számok
-várhatóan változnak.
+`egyszerusitett-04` esetekre), és a javított mérőeszközzel **le is
+futott** a qwen3.5:9b/gondolkodással mérés, kétszer. Az új szám **a
+qwen3.5:9b/be sorban 47,7%, ez az aktuális alapszám** — a korábbi 54,5%
+**elavult**, ARCHÍV referenciaként megmaradt a táblázatban, de a
+döntéshez a 47,7%-ot kell nézni. Lásd az "1a. A javítás hatása" szakaszt
+a teljes indoklásért — a csökkenés oka **nem** egyértelmű, és **nem**
+írható le egyszerűen "szigorúbb mérésként"; lásd ott.
 
 Ág: `spike/m-1`. Ez a változat kizárólag a `spike/*.json` fájlokból épül —
-nincs benne újrafuttatás, és nincs benne olyan szám, aminek nincs
-JSON-artifactja. Forrásfájlok:
+nincs benne újrafuttatás ezen a körön (a két qwen3.5:9b/be futás egy
+korábbi körben történt, a fájlok már megvannak), és nincs benne olyan
+szám, aminek nincs JSON-artifactja. Forrásfájlok:
 
 - `eredmeny_qwen35_4b_nogondolkodas.json` (qwen3.5:4b, gondolkodás **ki**)
-- `eredmeny_qwen35_9b.json` (qwen3.5:9b, gondolkodás **be**)
-- `eredmeny_qwen35_9b_nogondolkodas.json` (qwen3.5:9b, gondolkodás **ki**)
+- `eredmeny_qwen35_9b.json` (qwen3.5:9b, gondolkodás **be**, **ELAVULT** —
+  a javítás előtti mérőeszközzel készült)
+- `eredmeny_qwen35_9b_javitott.json` (qwen3.5:9b, gondolkodás **be**, a
+  javított mérőeszközzel — **ez az aktuális alapszám**)
+- `eredmeny_qwen35_9b_javitott_v1_hibas.json` (ugyanaz, DE egy hibás
+  séma-verzióval mérve — lásd "1a" szakasz, ez egy dokumentált incidens,
+  nem használható eredményként)
+- `eredmeny_qwen35_9b_nogondolkodas.json` (qwen3.5:9b, gondolkodás **ki**,
+  a javítás előtti mérőeszközzel — erre nem futott új mérés)
 - `latencia_qwen35_4b.json`, `latencia_qwen35_9b.json` (1 és 3 párhuzamos
   kérés; a szkript alapértelmezése `gondolkodas=True`, a JSON ezt nem
   tárolja explicit mezőként, de a mért idők nagyságrendje ezzel
@@ -25,8 +35,16 @@ JSON-artifactja. Forrásfájlok:
 
 **qwen3.5:4b, gondolkodással** (`be`) golden-set futáshoz nincs JSON fájl
 a `spike/` alatt — nincs mit beolvasni, ezért ez a konfiguráció alább
-mindenhol **nem mértük**-ként szerepel. A Racka-4B (ADR-013 ellenőrző
-jelöltje) nem érhető el lokálisan, szintén nem mérhető.
+mindenhol **nem mértük**-ként szerepel.
+
+**Racka-4B (ADR-013 ellenőrző jelöltje):** nem érhető el lokálisan.
+`ollama pull racka-4b` megpróbálva — `Error: pull model manifest: file
+does not exist`, mert nincs a publikus Ollama-registryben (a modell
+CC-BY-NC-SA-4.0, kapuzott — ez elvárt). A telepítéshez kézi GGUF-letöltés
+kell (Hugging Face-ről, hitelesített hozzáféréssel) és utána helyi
+`ollama create racka-4b -f Modelfile` egy a letöltött GGUF-ra mutató
+Modelfile-lal — ez a spike keretein kívül eső, külön lépés, itt nem
+végeztük el.
 
 ## 1. Golden set — modellenként és gondolkodás-módonként, rétegekre bontva
 
@@ -34,24 +52,79 @@ jelöltje) nem érhető el lokálisan, szintén nem mérhető.
 |---|---|---|---|---|---|---|
 | qwen3.5:4b | be | — | — | — | — | **nem mértük** (nincs JSON) |
 | qwen3.5:4b | ki | **18,2%** | egyszerűsített (0,0%) | 4,42 s | 59,9 | 0/22 |
-| qwen3.5:9b | be | **54,5%** | szleng (16,7%) | 22,64 s | 45,9 | 0/22 |
-| qwen3.5:9b | ki | **13,6%** | egyszerűsített (0,0%) | 5,19 s | 64,5 | 0/22 |
+| qwen3.5:9b | be **(ELAVULT — javítás előtti mérőeszköz)** | ~~54,5%~~ | szleng (16,7%) | 22,64 s | 45,9 | 0/22 |
+| **qwen3.5:9b** | **be (AKTUÁLIS — javított mérőeszköz)** | **47,7%** | szleng (16,7%) | 34,18 s | 54,7 | 0/22 |
+| qwen3.5:9b | ki (javítás előtti mérőeszköz, nem mértük újra) | **13,6%** | egyszerűsített (0,0%) | 5,19 s | 64,5 | 0/22 |
 
-Réteg-bontás (a három elérhető JSON-ból, `retegek.kuszob` mező szerinti
-küszöbökkel):
+A qwen3.5:9b/ki sorra **nem futott új mérés** ezen a körön (a feladat csak
+a qwen3.5:9b/be-re és a Rackára kért mérést) — a 13,6% változatlanul a
+javítás előtti mérőeszközzel készült, jelöletlenül elavult lehet, de ezt
+nem ellenőriztük.
 
-| Réteg | Küszöb | qwen3.5:4b (ki) | qwen3.5:9b (be) | qwen3.5:9b (ki) |
+Réteg-bontás (`retegek.kuszob` mező szerinti küszöbökkel; a qwen3.5:9b/be
+oszlop az AKTUÁLIS, javított mérésből):
+
+| Réteg | Küszöb | qwen3.5:4b (ki) | qwen3.5:9b (be, aktuális) | qwen3.5:9b (ki, elavult mérőeszköz) |
 |---|---|---|---|---|
-| köznyelvi | 98% | 20,0% NEM TARTJA | 40,0% NEM TARTJA | 0,0% NEM TARTJA |
+| köznyelvi | 98% | 20,0% NEM TARTJA | 20,0% NEM TARTJA | 0,0% NEM TARTJA |
 | tájszólás | 90% | 25,0% NEM TARTJA | 75,0% NEM TARTJA | 25,0% NEM TARTJA |
-| töredékes | 90% | 0,0% NEM TARTJA | 62,5% NEM TARTJA | 0,0% NEM TARTJA |
+| töredékes | 90% | 0,0% NEM TARTJA | 50,0% NEM TARTJA | 0,0% NEM TARTJA |
 | szleng | 92% | 0,0% NEM TARTJA | 16,7% NEM TARTJA | 0,0% NEM TARTJA |
 | egyszerűsített | 90% | 0,0% NEM TARTJA | 50,0% NEM TARTJA | 0,0% NEM TARTJA |
 | kapuőr | (nincs küszöb) | 100,0% | 100,0% | 100,0% |
 
-A mért három konfiguráció közül **egyik sem tartja** egyetlen küszöbölt
-réteget sem. A kapuőr réteg (nem valós foglalási kérés felismerése) mindhárom
-konfiguráción 100% — ez az egyetlen réteg, ami rendben van.
+A mért konfigurációk közül **egyik sem tartja** egyetlen küszöbölt
+réteget sem. A kapuőr réteg (nem valós foglalási kérés felismerése)
+mindegyik konfiguráción 100% — ez az egyetlen réteg, ami rendben van.
+
+### 1a. A séma-javítás hatása a pontosságra — egy incidens és egy nyílt kérdés
+
+**Incidens: az első javított séma hibás volt.** Az enum-kényszer első
+verziójában a `parameterek` JSON-séma `properties`-ében CSAK a négy zárt
+halmazú mező szerepelt (`bolt_id`, `szolgaltatas_id`, `napszak`, és a
+felső szintű `eszkoz`), a többi mező (`datum_tol`, `datum_ig`, `datum`,
+`foglalasi_kod`, `hianyzo_mezo`, stb.) nem. Ez a gyakorlatban úgy
+viselkedett, mintha `additionalProperties: false` lenne: a modell **egy
+futásban sem** adott vissza dátummezőt vagy más nem-felsorolt mezőt,
+holott korábban rendszeresen megadta őket. Ezzel a hibás sémával mérve az
+összesített pontosság **40,9%**-ra esett (`eredmeny_qwen35_9b_javitott_v1_hibas.json`)
+— ezt NEM tekintjük érvényes mérésnek, csak dokumentált incidensnek. A
+hibát a `parameterek` séma összes ismert mezőjének explicit felsorolásával
+és `additionalProperties: true`-val javítottuk, majd újramértünk —
+ez adta a fenti 47,7%-ot.
+
+**Nyílt kérdés: miért lett a JAVÍTOTT séma is alacsonyabb (47,7%), mint az
+eredeti, séma-kényszer nélküli mérés (54,5%)?** A feladat leírása szerint
+ezt "a mérés szigorodásának" kellene tulajdonítani — **ez esetszintű
+összevetésben nem ez a magyarázat**, és becsületesebb ezt kimondani, mint
+egy kényelmes, de a saját adatunknak ellentmondó narratívát leírni.
+Esetenkénti összevetés (`eredmeny_qwen35_9b.json` vs.
+`eredmeny_qwen35_9b_javitott.json`) szerint a 22 esetből **pontosan 2**
+pontszáma változott, mindkettő **romlott**, és egyik sem tipikus "a séma
+most már kizárja a hibát" mintázat:
+
+- `koznyelvi-05` (1,0 → 0,0): a régi mérésben a modell helyesen
+  `visszakerdez`-t választott. Az újban `foglalas_athelyezes`-t, **üres**
+  `foglalasi_kod`-dal (`{"foglalasi_kod": "", "uj_datum": "2026-08-19"}`).
+  Ez rosszabb, mint egy egyszerű paraméter-eltérés — a modell magabiztosan
+  hívott egy rossz eszközt, értelmetlen paraméterrel.
+- `toredekes-01` (0,5 → 0,0): a régi mérésben a modell visszakérdezett
+  (részleges elfogadás — ez ELFOGADOTT viselkedés a golden set szerint).
+  Az újban közvetlenül `szabad_idopontok`-ot hívott, de a `napszak` mezőt
+  kihagyta.
+
+Mindkét eset arra utal, hogy a bővebb, explicit séma (különösen a
+`foglalas_athelyezes` és a `szabad_idopontok` paramétereinek explicit
+felsorolása) a modellt **magabiztosabb, közvetlenebb tooleszköz-választásra**
+ösztönözte — ami itt, ezen a két bemeneten, rosszabb kimenetet
+eredményezett, mint a korábbi visszakérdezés. A kiértékelő logika
+(`kiertekel()`) NEM változott ebben a két esetben — sőt, összességében
+**engedékenyebb** lett (2 új `reszleges_elfogadas` szabály került be), így
+"szigorúbb mérés" mint magyarázat **nem áll meg**: azonos szabályokkal,
+más modellkimenetre mértünk. Az ok a séma/prompt-változás által kiváltott
+**valódi modellviselkedés-változás** ezen a két konkrét bemeneten, nem a
+mérőeszköz szigorodása és nem is egy általános "a modell rosszabb lett"
+állítás — mindössze 2 eset 22-ből.
 
 ## 2. Válaszidő párhuzamosságban (1 és 3 szál, token/mondat)
 
@@ -120,6 +193,15 @@ modell.
 
 ## 6. A dátumértelmezés kiemelésének becsült hatása
 
+**Megjegyzés (utólagos, a séma-javítás után):** az 5. és 6. szakasz az
+ELAVULT qwen3.5:9b/be futásra (54,5%) épül, ezt itt nem számoltuk újra az
+aktuális (47,7%) futásra. Az 1a. szakaszban kimutatott 2 eltérő eset
+(`koznyelvi-05`, `toredekes-01`) egyike sem "tisztán dátum-hiba" — mindkettő
+a "nem dátum jellegű" kategóriába esne az aktuális futáson is —, ezért a
+lenti minőségi következtetés (a dátumparser önmagában nem old meg
+mindent) feltehetően változatlan marad, de a pontos számok (13/22, 54,5%
+→ 63,6%) az elavult mérésből származnak, nem lettek újraszámolva.
+
 Módszer: a három elérhető golden-JSON-ban (qwen3.5:4b/ki, qwen3.5:9b/be,
 qwen3.5:9b/ki) minden `pontszam < 1,0` esetet megnéztünk. Ahol az
 `indoklas` az `"eszköz stimmel, paraméterek eltérnek: {A} != {B}"` mintát
@@ -162,11 +244,15 @@ visszakérdezés-állapot (8/13 a 9b/be-nél, 13/18 a 4b/ki-nél, 12/19 a
 
 - qwen3.5:4b, gondolkodással — golden set futás (nincs JSON a `spike/`
   alatt).
+- qwen3.5:9b, gondolkodás nélkül — a javított mérőeszközzel nem futott
+  újra ezen a körön, a 13,6% a javítás előtti mérésből maradt.
 - 5 szálas válaszidő (nincs JSON).
 - 50 egyidejű SQLite session (nincs JSON).
 - hun-date-parser könyvtár közvetlen pontossága (a mérőszkript nem
   perzisztál JSON-t).
-- Racka-4B (nincs lokálisan telepítve, nem futtatható).
+- Racka-4B — `ollama pull` nem működik (nincs a publikus registryben,
+  kapuzott licenc); kézi GGUF-letöltés + `ollama create` szükséges, ezt
+  nem végeztük el.
 
 Ez a fájl nem ADR — nem dönt, csak felsorolja, mit mutatnak a mentett
 mérési artifactok. A tényleges döntés (SQLite/Postgres, modellválasztás,

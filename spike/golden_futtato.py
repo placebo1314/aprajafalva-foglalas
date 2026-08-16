@@ -71,10 +71,34 @@ FORMAT_SEMA = {
         "parameterek": {
             "type": "object",
             "properties": {
+                # A négy zárt halmazú mező, ahogy a spike/EREDMENY.md kérte.
                 "bolt_id": {"type": "string", "enum": BOLT_AZONOSITOK},
                 "szolgaltatas_id": {"type": "string", "enum": SZOLGALTATAS_AZONOSITOK},
                 "napszak": {"type": "string", "enum": NAPSZAKOK},
+                # A többi mező NEM zárt halmaz (dátum, kód stb.), de itt is
+                # fel kell sorolni őket explicit. Egy első próbafutás (lásd
+                # spike/EREDMENY.md, "séma-regresszió") megmutatta, hogy ha
+                # a "properties" listában CSAK a zárt halmazú mezők
+                # szerepelnek (additionalProperties nélkül), az Ollama
+                # structured-output grammarja a gyakorlatban úgy
+                # viselkedett, mintha additionalProperties hallgatólagosan
+                # false lenne: a modell egyetlen futásban sem adott vissza
+                # datum_tol/datum_ig/foglalasi_kod/stb. mezőt, holott
+                # korábban (séma-kényszer nélkül) rendszeresen megadta
+                # őket. Nem izoláltuk, hogy önmagában az explicit
+                # "additionalProperties": True elég lett volna-e — a
+                # biztonság kedvéért minden ismert mezőt fel is soroltunk.
+                "datum_tol": {"type": "string"},
+                "datum_ig": {"type": "string"},
+                "datum": {"type": "string"},
+                "mit": {"type": "string"},
+                "preferalt_ora": {"type": "integer"},
+                "foglalasi_kod": {"type": "string"},
+                "uj_datum": {"type": "string"},
+                "hianyzo_mezo": {"type": "string"},
+                "megorzott_parameterek": {"type": "object"},
             },
+            "additionalProperties": True,
         },
     },
     "required": ["eszkoz", "parameterek"],
