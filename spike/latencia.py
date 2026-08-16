@@ -1,12 +1,20 @@
 """Válaszidő és tokenizer-hatékonyság mérése — M-1 spike. ELDOBHATÓ KÓD.
 
-1 és 3 párhuzamos kéréssel méri a p50/p95 válaszidőt, és a kimeneti
-tokenszámot magyar mondatonként (ez a tokenizer-hatékonyság mérőszáma —
-kevesebb token/mondat = gyorsabb, olcsóbb inferencia ugyanahhoz a
-tartalomhoz). A VRAM-ot `nvidia-smi`-vel figyeli a futás alatt.
+Alapból EGYETLEN szálon fut (lásd docs/blueprint.md, "egyszálú
+alapértelmezés" — az asszisztens- és mérőkód alapból egy szálon fusson, a
+párhuzamosság maradjon paraméter, ne tűnjön el). A `--szalak` kapcsolóval
+kérhető több szálszám, egyet vagy többet is felsorolva; korábbi mérésekhez
+(1 és 3 párhuzamos kéréssel, lásd spike/EREDMENY.md) használd a
+`--szalak 1 3` alakot.
+
+Méri a p50/p95 válaszidőt, és a kimeneti tokenszámot magyar mondatonként
+(ez a tokenizer-hatékonyság mérőszáma — kevesebb token/mondat = gyorsabb,
+olcsóbb inferencia ugyanahhoz a tartalomhoz). A VRAM-ot `nvidia-smi`-vel
+figyeli a futás alatt.
 
 Használat:
     python spike/latencia.py --modell qwen3.5:9b
+    python spike/latencia.py --modell qwen3.5:9b --szalak 1 3
 """
 
 from __future__ import annotations
@@ -24,7 +32,10 @@ sys.path.insert(0, str(GYOKER))
 
 from spike.golden_futtato import betolt, modell_hivas  # noqa: E402
 
-_SZALSZAMOK = (1, 3)
+# Alapértelmezés: EGY szál. A párhuzamosság paraméter marad (--szalak),
+# nem tűnik el — de a mérés nem futtat többszálú terhelést anélkül, hogy
+# erre valaki explicit kérné.
+_ALAPERTELMEZETT_SZALSZAMOK = (1,)
 
 
 def _vram_mb() -> int | None:
@@ -102,13 +113,17 @@ def _egy_kor(modell: str, mondatok: list[str], most: str, szalszam: int, gondolk
     }
 
 
-def fut(modell: str, gondolkodas: bool = True) -> list[dict]:
+def fut(
+    modell: str,
+    gondolkodas: bool = True,
+    szalszamok: tuple[int, ...] = _ALAPERTELMEZETT_SZALSZAMOK,
+) -> list[dict]:
     meta, esetek = betolt()
     mondatok = [e.bemenet for e in esetek]
     most = meta["most_alapertelmezett"]
 
     eredmenyek = []
-    for szalszam in _SZALSZAMOK:
+    for szalszam in szalszamok:
         print(f"\n--- {modell}, {szalszam} párhuzamos kérés ---")
         eredmeny = _egy_kor(modell, mondatok, most, szalszam, gondolkodas)
         eredmenyek.append(eredmeny)
@@ -134,8 +149,17 @@ def main() -> int:
         action="store_true",
         help="Ollama think=false — lásd golden_futtato.py azonos kapcsolóját",
     )
+    parser.add_argument(
+        "--szalak",
+        type=int,
+        nargs="+",
+        default=list(_ALAPERTELMEZETT_SZALSZAMOK),
+        help="Párhuzamos kérésszámok, egyet vagy többet (alap: csak 1 — lásd modul-docstring)",
+    )
     args = parser.parse_args()
-    eredmenyek = fut(args.modell, gondolkodas=not args.nincs_gondolkodas)
+    eredmenyek = fut(
+        args.modell, gondolkodas=not args.nincs_gondolkodas, szalszamok=tuple(args.szalak)
+    )
     if args.json:
         import json
 
