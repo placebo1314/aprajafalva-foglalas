@@ -146,3 +146,46 @@ def kivetel_nap_letrehoz(
         (kivetel_id, szervezet_id, bolt_id, datum, indok, most_iso()),
     )
     return kivetel_id
+
+
+def kivetel_napok_reszletesen_lekerdezese(
+    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+) -> list[dict]:
+    """A `kivetel_napok_lekerdezese` (muszak_repo.py) csak a dátumok
+    halmazát adja (a generátornak csak az kell) — ez itt a teljes sort
+    adja vissza (id, indok is), az admin felület listázásához."""
+    sorok = conn.execute(
+        "SELECT id, bolt_id, datum, indok FROM kivetel_nap "
+        "WHERE szervezet_id = ? AND (bolt_id IS NULL OR bolt_id = ?) ORDER BY datum",
+        (szervezet_id, bolt_id),
+    ).fetchall()
+    return [{"id": sor[0], "bolt_id": sor[1], "datum": sor[2], "indok": sor[3]} for sor in sorok]
+
+
+# --- szerkesztés (nev, ill. szolgaltatasnal alap_idotartam_perc is) ------
+#
+# Csak a leíró mezőket engedjük szerkeszteni — az FK-kapcsolatok (bolt_id,
+# szervezet_id) átírása kaszkádoló következményekkel járna (meglévő
+# műszakok/sablonok mutatnának "áthelyezett" sorra), ez explicit döntést
+# és valószínűleg ADR-t igényelne, nem ide tartozik.
+
+
+def bolt_szerkesztese(conn: sqlite3.Connection, *, bolt_id: str, nev: str) -> None:
+    conn.execute("UPDATE bolt SET nev = ? WHERE id = ?", (nev, bolt_id))
+
+
+def pult_szerkesztese(conn: sqlite3.Connection, *, pult_id: str, nev: str) -> None:
+    conn.execute("UPDATE pult SET nev = ? WHERE id = ?", (nev, pult_id))
+
+
+def alkalmazott_szerkesztese(conn: sqlite3.Connection, *, alkalmazott_id: str, nev: str) -> None:
+    conn.execute("UPDATE alkalmazott SET nev = ? WHERE id = ?", (nev, alkalmazott_id))
+
+
+def szolgaltatas_szerkesztese(
+    conn: sqlite3.Connection, *, szolgaltatas_id: str, nev: str, alap_idotartam_perc: int
+) -> None:
+    conn.execute(
+        "UPDATE szolgaltatas SET nev = ?, alap_idotartam_perc = ? WHERE id = ?",
+        (nev, alap_idotartam_perc, szolgaltatas_id),
+    )

@@ -85,13 +85,16 @@ class AdminApp(tk.Tk):
         self.naptar_ful = ttk.Frame(fulek, padding=6)
         self.foglalasok_ful = ttk.Frame(fulek, padding=6)
         self.sablon_ful = ttk.Frame(fulek, padding=6)
+        self.torzsadat_ful = ttk.Frame(fulek, padding=6)
         fulek.add(self.naptar_ful, text="Naptár és műszakok")
         fulek.add(self.foglalasok_ful, text="Foglalások")
         fulek.add(self.sablon_ful, text="Sablonok és hét-másolás")
+        fulek.add(self.torzsadat_ful, text="Törzsadat")
 
         self._naptar_fulet_felepit()
         self._foglalasok_fulet_felepit()
         self._sablon_fulet_felepit()
+        self._torzsadat_fulet_felepit()
 
     def _naptar_fulet_felepit(self) -> None:
         fejlec = ttk.Frame(self.naptar_ful)
@@ -238,6 +241,107 @@ class AdminApp(tk.Tk):
         self.sablon_uzenet = tk.Text(jobb, height=20, width=42, state="disabled")
         self.sablon_uzenet.pack(fill="both", expand=True, pady=(2, 0))
 
+    def _torzsadat_fulet_felepit(self) -> None:
+        """Bolt/pult/alkalmazott/szolgáltatás felvitele+szerkesztése és
+        kivételnap felvétele — ma csak a `seed`-ből jött adat volt
+        elérhető, ez teszi lehetővé, hogy az admin saját maga bővítse.
+        Nem szép, működik: egy-egy kis lista + két mező + két gomb
+        (Hozzáadás / Kiválasztott szerkesztése) blokkonként."""
+        bal = ttk.Frame(self.torzsadat_ful)
+        bal.pack(side="left", fill="both", expand=True)
+        jobb = ttk.Frame(self.torzsadat_ful, width=340)
+        jobb.pack(side="left", fill="y", padx=(12, 0))
+        jobb.pack_propagate(False)
+
+        self.bolt_lista = self._torzsadat_blokk_felepit(
+            bal,
+            cim="Boltok",
+            hozzaadas_szoveg="Hozzáadás",
+            hozzaadas_fn=self._bolt_hozzaadasa_ui,
+            szerkesztes_fn=self._bolt_szerkesztese_ui,
+        )
+        self.pult_lista = self._torzsadat_blokk_felepit(
+            bal,
+            cim="Pultok (a kiválasztott boltban)",
+            hozzaadas_szoveg="Hozzáadás",
+            hozzaadas_fn=self._pult_hozzaadasa_ui,
+            szerkesztes_fn=self._pult_szerkesztese_ui,
+        )
+        self.alkalmazott_lista = self._torzsadat_blokk_felepit(
+            bal,
+            cim="Alkalmazottak (a kiválasztott boltban)",
+            hozzaadas_szoveg="Hozzáadás",
+            hozzaadas_fn=self._alkalmazott_hozzaadasa_ui,
+            szerkesztes_fn=self._alkalmazott_szerkesztese_ui,
+        )
+
+        ttk.Label(
+            jobb, text="Szolgáltatások (a kiválasztott boltban)", font=("TkDefaultFont", 9, "bold")
+        ).pack(anchor="w")
+        self.szolgaltatas_lista = tk.Listbox(jobb, height=6)
+        self.szolgaltatas_lista.pack(fill="x", pady=(2, 4))
+        szolg_urlap = ttk.Frame(jobb)
+        szolg_urlap.pack(fill="x")
+        ttk.Label(szolg_urlap, text="Név:").grid(row=0, column=0, sticky="w")
+        self.szolgaltatas_nev_mezo = ttk.Entry(szolg_urlap)
+        self.szolgaltatas_nev_mezo.grid(row=0, column=1, sticky="ew")
+        ttk.Label(szolg_urlap, text="Időtartam (perc):").grid(row=1, column=0, sticky="w")
+        self.szolgaltatas_idotartam_mezo = ttk.Entry(szolg_urlap)
+        self.szolgaltatas_idotartam_mezo.grid(row=1, column=1, sticky="ew")
+        szolg_urlap.columnconfigure(1, weight=1)
+        szolg_gombok = ttk.Frame(jobb)
+        szolg_gombok.pack(fill="x", pady=(2, 10))
+        ttk.Button(szolg_gombok, text="Hozzáadás", command=self._szolgaltatas_hozzaadasa_ui).pack(
+            side="left"
+        )
+        ttk.Button(
+            szolg_gombok,
+            text="Kiválasztott szerkesztése",
+            command=self._szolgaltatas_szerkesztese_ui,
+        ).pack(side="left", padx=4)
+
+        ttk.Separator(jobb).pack(fill="x", pady=6)
+        ttk.Label(jobb, text="Kivételnapok", font=("TkDefaultFont", 9, "bold")).pack(anchor="w")
+        self.kivetel_lista = tk.Listbox(jobb, height=6)
+        self.kivetel_lista.pack(fill="x", pady=(2, 4))
+        kiv_urlap = ttk.Frame(jobb)
+        kiv_urlap.pack(fill="x")
+        ttk.Label(kiv_urlap, text="Dátum (ÉÉÉÉ-HH-NN):").grid(row=0, column=0, sticky="w")
+        self.kivetel_datum_mezo = ttk.Entry(kiv_urlap)
+        self.kivetel_datum_mezo.grid(row=0, column=1, sticky="ew")
+        ttk.Label(kiv_urlap, text="Indok:").grid(row=1, column=0, sticky="w")
+        self.kivetel_indok_mezo = ttk.Entry(kiv_urlap)
+        self.kivetel_indok_mezo.grid(row=1, column=1, sticky="ew")
+        self.kivetel_csak_bolt_valtozo = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            kiv_urlap, text="csak a kiválasztott boltra", variable=self.kivetel_csak_bolt_valtozo
+        ).grid(row=2, column=0, columnspan=2, sticky="w")
+        kiv_urlap.columnconfigure(1, weight=1)
+        ttk.Button(jobb, text="Kivételnap felvétele", command=self._kivetel_nap_hozzaadasa_ui).pack(
+            anchor="w", pady=(2, 10)
+        )
+
+        self.torzsadat_uzenet = ttk.Label(jobb, text="", foreground="#a00", wraplength=320)
+        self.torzsadat_uzenet.pack(fill="x")
+
+    def _torzsadat_blokk_felepit(
+        self, szulo, *, cim, hozzaadas_szoveg, hozzaadas_fn, szerkesztes_fn
+    ):
+        ttk.Label(szulo, text=cim, font=("TkDefaultFont", 9, "bold")).pack(anchor="w", pady=(6, 0))
+        lista = tk.Listbox(szulo, height=4)
+        lista.pack(fill="x", pady=(2, 4))
+        urlap = ttk.Frame(szulo)
+        urlap.pack(fill="x")
+        mezo = ttk.Entry(urlap)
+        mezo.pack(side="left", fill="x", expand=True)
+        ttk.Button(urlap, text=hozzaadas_szoveg, command=lambda: hozzaadas_fn(mezo)).pack(
+            side="left", padx=2
+        )
+        ttk.Button(
+            urlap, text="Kiválasztott szerkesztése", command=lambda: szerkesztes_fn(lista, mezo)
+        ).pack(side="left")
+        return lista
+
     # ------------------------------------------------------------------
     # Adatbetöltés / -frissítés
     # ------------------------------------------------------------------
@@ -255,12 +359,27 @@ class AdminApp(tk.Tk):
     def _szervezet_valasztva(self, _esemeny=None) -> None:
         nev = self.szervezet_valaszto.get()
         self.szervezet_id = self._nevterkep_szervezet.get(nev)
+        self._bolt_lista_frissitese(tartsd_meg_a_kivalasztottat=False)
+
+    def _bolt_lista_frissitese(self, *, tartsd_meg_a_kivalasztottat: bool = True) -> None:
+        """A bolt-legördülő értékeinek frissítése — a törzsadat-fülről
+        induló bolt hozzáadás/átnevezés ezt hívja, NEM a
+        `_szervezet_valasztva`-t, mert az mindig az első boltra ugrana,
+        elveszítve a felhasználó aktuális bolt-kiválasztását."""
+        elozo_bolt_id = self.bolt_id if tartsd_meg_a_kivalasztottat else None
         boltok = api.boltok(self.conn, szervezet_id=self.szervezet_id) if self.szervezet_id else []
         self._nevterkep_bolt = {b["nev"]: b["id"] for b in boltok}
         self.bolt_valaszto["values"] = list(self._nevterkep_bolt)
-        if boltok:
+        if not boltok:
+            return
+        megtartando_nev = next(
+            (nev for nev, bid in self._nevterkep_bolt.items() if bid == elozo_bolt_id), None
+        )
+        if megtartando_nev is not None:
+            self.bolt_valaszto.set(megtartando_nev)
+        else:
             self.bolt_valaszto.current(0)
-            self._bolt_valasztva()
+        self._bolt_valasztva()
 
     def _bolt_valasztva(self, _esemeny=None) -> None:
         nev = self.bolt_valaszto.get()
@@ -286,6 +405,7 @@ class AdminApp(tk.Tk):
         self._naptar_frissitese()
         self._foglalasok_frissitese()
         self._sablon_lista_frissitese()
+        self._torzsadat_frissitese()
 
     def _demo_betoltese(self) -> None:
         from seed.betolt import betolt
@@ -582,6 +702,174 @@ class AdminApp(tk.Tk):
                 else:
                     sorok.append(f"  {eredmeny['slot_szam']} slot")
             self._sablon_uzenet_ir("\n".join(sorok))
+        self._naptar_frissitese()
+
+    # ------------------------------------------------------------------
+    # Törzsadat-szerkesztés
+    # ------------------------------------------------------------------
+
+    def _torzsadat_uzenet_ir(self, szoveg: str) -> None:
+        self.torzsadat_uzenet.config(text=szoveg)
+
+    def _torzsadat_frissitese(self) -> None:
+        self._bolt_id_lista = []
+        self.bolt_lista.delete(0, "end")
+        if self.szervezet_id:
+            for bolt in api.boltok(self.conn, szervezet_id=self.szervezet_id):
+                self.bolt_lista.insert("end", bolt["nev"])
+                self._bolt_id_lista.append(bolt["id"])
+
+        self._pult_id_lista = []
+        self.pult_lista.delete(0, "end")
+        self._alkalmazott_id_lista = []
+        self.alkalmazott_lista.delete(0, "end")
+        self._szolgaltatas_id_lista = []
+        self.szolgaltatas_lista.delete(0, "end")
+        self._kivetel_id_lista = []
+        self.kivetel_lista.delete(0, "end")
+        if not self.bolt_id:
+            return
+
+        for pult in api.pultok(self.conn, bolt_id=self.bolt_id):
+            self.pult_lista.insert("end", pult["nev"])
+            self._pult_id_lista.append(pult["id"])
+        for alkalmazott in api.alkalmazottak(self.conn, bolt_id=self.bolt_id):
+            self.alkalmazott_lista.insert("end", alkalmazott["nev"])
+            self._alkalmazott_id_lista.append(alkalmazott["id"])
+        for szolgaltatas in api.szolgaltatasok(self.conn, bolt_id=self.bolt_id):
+            self.szolgaltatas_lista.insert(
+                "end", f"{szolgaltatas['nev']} ({szolgaltatas['alap_idotartam_perc']} perc)"
+            )
+            self._szolgaltatas_id_lista.append(szolgaltatas["id"])
+        kivetel_bolt = self.bolt_id if self.kivetel_csak_bolt_valtozo.get() else None
+        for kivetel in api.kivetel_napok(
+            self.conn, szervezet_id=self.szervezet_id, bolt_id=kivetel_bolt
+        ):
+            szintjelzo = "bolt" if kivetel["bolt_id"] else "szervezet"
+            self.kivetel_lista.insert(
+                "end", f"{kivetel['datum']} — {kivetel['indok']} ({szintjelzo})"
+            )
+            self._kivetel_id_lista.append(kivetel["id"])
+
+    def _kivalasztott_id(self, lista: tk.Listbox, id_lista: list[str]) -> str | None:
+        kijeloles = lista.curselection()
+        if not kijeloles:
+            return None
+        return id_lista[kijeloles[0]]
+
+    def _bolt_hozzaadasa_ui(self, mezo: ttk.Entry) -> None:
+        eredmeny = api.bolt_hozzaadasa(self.conn, szervezet_id=self.szervezet_id, nev=mezo.get())
+        if eredmeny["hiba"]:
+            self._torzsadat_uzenet_ir(f"Hiba: {eredmeny['hiba']}")
+            return
+        self._torzsadat_uzenet_ir("Bolt felvéve.")
+        self._bolt_lista_frissitese()
+        self._torzsadat_frissitese()
+
+    def _bolt_szerkesztese_ui(self, lista: tk.Listbox, mezo: ttk.Entry) -> None:
+        bolt_id = self._kivalasztott_id(lista, self._bolt_id_lista)
+        if bolt_id is None:
+            self._torzsadat_uzenet_ir("Előbb válassz ki egy boltot a listából.")
+            return
+        eredmeny = api.bolt_szerkesztese(self.conn, bolt_id=bolt_id, nev=mezo.get())
+        if eredmeny["hiba"]:
+            self._torzsadat_uzenet_ir(f"Hiba: {eredmeny['hiba']}")
+            return
+        self._torzsadat_uzenet_ir("Bolt átnevezve.")
+        self._bolt_lista_frissitese()
+        self._torzsadat_frissitese()
+
+    def _pult_hozzaadasa_ui(self, mezo: ttk.Entry) -> None:
+        if not self.bolt_id:
+            self._torzsadat_uzenet_ir("Előbb válassz ki egy boltot a felső sávban.")
+            return
+        eredmeny = api.pult_hozzaadasa(
+            self.conn, szervezet_id=self.szervezet_id, bolt_id=self.bolt_id, nev=mezo.get()
+        )
+        self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Pult felvéve.")
+        self._bolt_valasztva()
+
+    def _pult_szerkesztese_ui(self, lista: tk.Listbox, mezo: ttk.Entry) -> None:
+        pult_id = self._kivalasztott_id(lista, self._pult_id_lista)
+        if pult_id is None:
+            self._torzsadat_uzenet_ir("Előbb válassz ki egy pultot a listából.")
+            return
+        eredmeny = api.pult_szerkesztese(self.conn, pult_id=pult_id, nev=mezo.get())
+        self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Pult átnevezve.")
+        self._bolt_valasztva()
+
+    def _alkalmazott_hozzaadasa_ui(self, mezo: ttk.Entry) -> None:
+        if not self.bolt_id:
+            self._torzsadat_uzenet_ir("Előbb válassz ki egy boltot a felső sávban.")
+            return
+        eredmeny = api.alkalmazott_hozzaadasa(
+            self.conn, szervezet_id=self.szervezet_id, bolt_id=self.bolt_id, nev=mezo.get()
+        )
+        self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Alkalmazott felvéve.")
+        self._bolt_valasztva()
+
+    def _alkalmazott_szerkesztese_ui(self, lista: tk.Listbox, mezo: ttk.Entry) -> None:
+        alkalmazott_id = self._kivalasztott_id(lista, self._alkalmazott_id_lista)
+        if alkalmazott_id is None:
+            self._torzsadat_uzenet_ir("Előbb válassz ki egy alkalmazottat a listából.")
+            return
+        eredmeny = api.alkalmazott_szerkesztese(
+            self.conn, alkalmazott_id=alkalmazott_id, nev=mezo.get()
+        )
+        self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Alkalmazott átnevezve.")
+        self._bolt_valasztva()
+
+    def _szolgaltatas_hozzaadasa_ui(self) -> None:
+        if not self.bolt_id:
+            self._torzsadat_uzenet_ir("Előbb válassz ki egy boltot a felső sávban.")
+            return
+        try:
+            idotartam = int(self.szolgaltatas_idotartam_mezo.get())
+        except ValueError:
+            self._torzsadat_uzenet_ir("Az időtartam egész szám kell legyen.")
+            return
+        eredmeny = api.szolgaltatas_hozzaadasa(
+            self.conn,
+            szervezet_id=self.szervezet_id,
+            bolt_id=self.bolt_id,
+            nev=self.szolgaltatas_nev_mezo.get(),
+            alap_idotartam_perc=idotartam,
+        )
+        self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Szolgáltatás felvéve.")
+        self._bolt_valasztva()
+
+    def _szolgaltatas_szerkesztese_ui(self) -> None:
+        szolgaltatas_id = self._kivalasztott_id(
+            self.szolgaltatas_lista, self._szolgaltatas_id_lista
+        )
+        if szolgaltatas_id is None:
+            self._torzsadat_uzenet_ir("Előbb válassz ki egy szolgáltatást a listából.")
+            return
+        try:
+            idotartam = int(self.szolgaltatas_idotartam_mezo.get())
+        except ValueError:
+            self._torzsadat_uzenet_ir("Az időtartam egész szám kell legyen.")
+            return
+        eredmeny = api.szolgaltatas_szerkesztese(
+            self.conn,
+            szolgaltatas_id=szolgaltatas_id,
+            nev=self.szolgaltatas_nev_mezo.get(),
+            alap_idotartam_perc=idotartam,
+        )
+        self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Szolgáltatás módosítva.")
+        self._bolt_valasztva()
+
+    def _kivetel_nap_hozzaadasa_ui(self) -> None:
+        bolt_id = self.bolt_id if self.kivetel_csak_bolt_valtozo.get() else None
+        eredmeny = api.kivetel_nap_hozzaadasa(
+            self.conn,
+            szervezet_id=self.szervezet_id,
+            bolt_id=bolt_id,
+            datum=self.kivetel_datum_mezo.get().strip(),
+            indok=self.kivetel_indok_mezo.get(),
+        )
+        self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Kivételnap felvéve.")
+        self._torzsadat_frissitese()
         self._naptar_frissitese()
 
     # ------------------------------------------------------------------

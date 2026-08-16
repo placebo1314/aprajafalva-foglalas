@@ -155,3 +155,70 @@ def test_szolgaltatasok_lekerdezese_szur_bolt_szerint(kapcsolat, szervezet, bolt
 
     eredmeny = torzsadat_repo.szolgaltatasok_lekerdezese(kapcsolat, bolt_id=bolt)
     assert [s["nev"] for s in eredmeny] == ["petárda"]
+
+
+# --- szerkesztés ----------------------------------------------------------
+
+
+def test_bolt_szerkesztese_atirja_a_nevet(kapcsolat, szervezet, bolt):
+    torzsadat_repo.bolt_szerkesztese(kapcsolat, bolt_id=bolt, nev="Új név")
+    eredmeny = torzsadat_repo.boltok_lekerdezese(kapcsolat, szervezet_id=szervezet)
+    assert eredmeny == [{"id": bolt, "nev": "Új név"}]
+
+
+def test_pult_szerkesztese_atirja_a_nevet(kapcsolat, szervezet, bolt):
+    pult_id = torzsadat_repo.pult_letrehoz(kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="A")
+    torzsadat_repo.pult_szerkesztese(kapcsolat, pult_id=pult_id, nev="B")
+    eredmeny = torzsadat_repo.pultok_lekerdezese(kapcsolat, bolt_id=bolt)
+    assert eredmeny == [{"id": pult_id, "nev": "B"}]
+
+
+def test_alkalmazott_szerkesztese_atirja_a_nevet(kapcsolat, szervezet, bolt):
+    alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
+        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="Régi"
+    )
+    torzsadat_repo.alkalmazott_szerkesztese(kapcsolat, alkalmazott_id=alkalmazott_id, nev="Új")
+    eredmeny = torzsadat_repo.alkalmazottak_lekerdezese(kapcsolat, bolt_id=bolt)
+    assert eredmeny == [{"id": alkalmazott_id, "nev": "Új"}]
+
+
+def test_szolgaltatas_szerkesztese_atirja_a_nevet_es_idotartamot(kapcsolat, szervezet, bolt):
+    szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="Régi", alap_idotartam_perc=5
+    )
+    torzsadat_repo.szolgaltatas_szerkesztese(
+        kapcsolat, szolgaltatas_id=szolgaltatas_id, nev="Új", alap_idotartam_perc=20
+    )
+    eredmeny = torzsadat_repo.szolgaltatasok_lekerdezese(kapcsolat, bolt_id=bolt)
+    assert eredmeny == [{"id": szolgaltatas_id, "nev": "Új", "alap_idotartam_perc": 20}]
+
+
+# --- kivetel_napok_reszletesen_lekerdezese --------------------------------
+
+
+def test_kivetel_napok_reszletesen_lekerdezese_ures(kapcsolat, szervezet):
+    assert (
+        torzsadat_repo.kivetel_napok_reszletesen_lekerdezese(kapcsolat, szervezet_id=szervezet)
+        == []
+    )
+
+
+def test_kivetel_napok_reszletesen_lekerdezese_szervezet_es_bolt_szintu(kapcsolat, szervezet, bolt):
+    szervezet_szintu = torzsadat_repo.kivetel_nap_letrehoz(
+        kapcsolat, szervezet_id=szervezet, bolt_id=None, datum="2026-12-25", indok="karácsony"
+    )
+    bolt_szintu = torzsadat_repo.kivetel_nap_letrehoz(
+        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, datum="2026-08-20", indok="felújítás"
+    )
+    masik_bolt = torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Másik")
+    torzsadat_repo.kivetel_nap_letrehoz(
+        kapcsolat, szervezet_id=szervezet, bolt_id=masik_bolt, datum="2026-09-01", indok="idegen"
+    )
+
+    eredmeny = torzsadat_repo.kivetel_napok_reszletesen_lekerdezese(
+        kapcsolat, szervezet_id=szervezet, bolt_id=bolt
+    )
+    id_k = {e["id"] for e in eredmeny}
+    assert id_k == {szervezet_szintu, bolt_szintu}  # a másik bolt kivétele nem jön be
+    datumok = sorted(e["datum"] for e in eredmeny)
+    assert datumok == ["2026-08-20", "2026-12-25"]

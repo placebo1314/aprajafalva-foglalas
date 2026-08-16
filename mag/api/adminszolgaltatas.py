@@ -96,6 +96,143 @@ def szolgaltatasok(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
     return torzsadat_repo.szolgaltatasok_lekerdezese(conn, bolt_id=bolt_id)
 
 
+# ---------------------------------------------------------------------
+# Törzsadat-szerkesztés (bolt, pult, alkalmazott, szolgáltatás, kivétel
+# nap) — a `felulet/admin/` mai formája a demóadatra (seed/betolt.py)
+# támaszkodott, ez a szakasz teszi lehetővé, hogy az admin maga is
+# felvigyen/szerkesszen törzsadatot. Minden függvény `hiba` kulccsal tér
+# vissza kivétel helyett, ugyanazzal a mintával, mint `muszak_felvitel` —
+# a `nev` mezőkön lévő `CHECK (length(nev) > 0)` (migraciok/0001) nyers
+# `IntegrityError`-t adna üres névre, ezt itt előre elkapjuk.
+# ---------------------------------------------------------------------
+
+
+def bolt_hozzaadasa(conn: sqlite3.Connection, *, szervezet_id: str, nev: str) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"bolt_id": None, "hiba": "A bolt neve nem lehet üres."}
+    bolt_id = torzsadat_repo.bolt_letrehoz(conn, szervezet_id=szervezet_id, nev=nev)
+    return {"bolt_id": bolt_id, "hiba": None}
+
+
+def bolt_szerkesztese(conn: sqlite3.Connection, *, bolt_id: str, nev: str) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"hiba": "A bolt neve nem lehet üres."}
+    torzsadat_repo.bolt_szerkesztese(conn, bolt_id=bolt_id, nev=nev)
+    return {"hiba": None}
+
+
+def pult_hozzaadasa(conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str, nev: str) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"pult_id": None, "hiba": "A pult neve nem lehet üres."}
+    pult_id = torzsadat_repo.pult_letrehoz(
+        conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev=nev
+    )
+    return {"pult_id": pult_id, "hiba": None}
+
+
+def pult_szerkesztese(conn: sqlite3.Connection, *, pult_id: str, nev: str) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"hiba": "A pult neve nem lehet üres."}
+    torzsadat_repo.pult_szerkesztese(conn, pult_id=pult_id, nev=nev)
+    return {"hiba": None}
+
+
+def alkalmazott_hozzaadasa(
+    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str, nev: str
+) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"alkalmazott_id": None, "hiba": "Az alkalmazott neve nem lehet üres."}
+    alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
+        conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev=nev
+    )
+    return {"alkalmazott_id": alkalmazott_id, "hiba": None}
+
+
+def alkalmazott_szerkesztese(conn: sqlite3.Connection, *, alkalmazott_id: str, nev: str) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"hiba": "Az alkalmazott neve nem lehet üres."}
+    torzsadat_repo.alkalmazott_szerkesztese(conn, alkalmazott_id=alkalmazott_id, nev=nev)
+    return {"hiba": None}
+
+
+def szolgaltatas_hozzaadasa(
+    conn: sqlite3.Connection,
+    *,
+    szervezet_id: str,
+    bolt_id: str,
+    nev: str,
+    alap_idotartam_perc: int,
+) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"szolgaltatas_id": None, "hiba": "A szolgáltatás neve nem lehet üres."}
+    if alap_idotartam_perc <= 0:
+        return {
+            "szolgaltatas_id": None,
+            "hiba": "Az alapértelmezett időtartam pozitív kell legyen.",
+        }
+    szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+        conn,
+        szervezet_id=szervezet_id,
+        bolt_id=bolt_id,
+        nev=nev,
+        alap_idotartam_perc=alap_idotartam_perc,
+    )
+    return {"szolgaltatas_id": szolgaltatas_id, "hiba": None}
+
+
+def szolgaltatas_szerkesztese(
+    conn: sqlite3.Connection, *, szolgaltatas_id: str, nev: str, alap_idotartam_perc: int
+) -> dict:
+    nev = nev.strip()
+    if not nev:
+        return {"hiba": "A szolgáltatás neve nem lehet üres."}
+    if alap_idotartam_perc <= 0:
+        return {"hiba": "Az alapértelmezett időtartam pozitív kell legyen."}
+    torzsadat_repo.szolgaltatas_szerkesztese(
+        conn,
+        szolgaltatas_id=szolgaltatas_id,
+        nev=nev,
+        alap_idotartam_perc=alap_idotartam_perc,
+    )
+    return {"hiba": None}
+
+
+def kivetel_nap_hozzaadasa(
+    conn: sqlite3.Connection,
+    *,
+    szervezet_id: str,
+    bolt_id: str | None,
+    datum: str,
+    indok: str,
+) -> dict:
+    indok = indok.strip()
+    if not indok:
+        return {"kivetel_id": None, "hiba": "Az indok nem lehet üres."}
+    try:
+        date.fromisoformat(datum)
+    except ValueError:
+        return {"kivetel_id": None, "hiba": f"Érvénytelen dátum: {datum!r} (ÉÉÉÉ-HH-NN kell)."}
+    kivetel_id = torzsadat_repo.kivetel_nap_letrehoz(
+        conn, szervezet_id=szervezet_id, bolt_id=bolt_id, datum=datum, indok=indok
+    )
+    return {"kivetel_id": kivetel_id, "hiba": None}
+
+
+def kivetel_napok(
+    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+) -> list[dict]:
+    return torzsadat_repo.kivetel_napok_reszletesen_lekerdezese(
+        conn, szervezet_id=szervezet_id, bolt_id=bolt_id
+    )
+
+
 def het_muszakjai(
     conn: sqlite3.Connection,
     *,

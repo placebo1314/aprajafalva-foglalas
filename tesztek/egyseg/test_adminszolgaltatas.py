@@ -315,3 +315,158 @@ def test_het_masolasa_kivetel_napot_kihagyja_a_cel_heten(kapcsolat, torzs):
     assert len(eredmenyek) == 1
     assert eredmenyek[0]["kihagyva"] is True
     assert eredmenyek[0]["slot_szam"] == 0
+
+
+# =====================================================================
+# Törzsadat-szerkesztés (bolt, pult, alkalmazott, szolgáltatás, kivétel nap)
+# =====================================================================
+
+
+def test_bolt_hozzaadasa_sikeres(kapcsolat, torzs):
+    eredmeny = api.bolt_hozzaadasa(kapcsolat, szervezet_id=torzs["szervezet_id"], nev="Törpilla")
+    assert eredmeny["hiba"] is None
+    assert eredmeny["bolt_id"] is not None
+    nevek = [b["nev"] for b in api.boltok(kapcsolat, szervezet_id=torzs["szervezet_id"])]
+    assert "Törpilla" in nevek
+
+
+def test_bolt_hozzaadasa_ures_nevre_ertelmes_elutasitas(kapcsolat, torzs):
+    eredmeny = api.bolt_hozzaadasa(kapcsolat, szervezet_id=torzs["szervezet_id"], nev="   ")
+    assert eredmeny["hiba"] is not None
+    assert eredmeny["bolt_id"] is None
+    assert api.boltok(kapcsolat, szervezet_id=torzs["szervezet_id"]) == [
+        {"id": torzs["bolt_id"], "nev": "Ügyifogyi"}
+    ]
+
+
+def test_bolt_szerkesztese_sikeres(kapcsolat, torzs):
+    eredmeny = api.bolt_szerkesztese(kapcsolat, bolt_id=torzs["bolt_id"], nev="Új név")
+    assert eredmeny["hiba"] is None
+    nevek = [b["nev"] for b in api.boltok(kapcsolat, szervezet_id=torzs["szervezet_id"])]
+    assert nevek == ["Új név"]
+
+
+def test_bolt_szerkesztese_ures_nevre_ertelmes_elutasitas(kapcsolat, torzs):
+    eredmeny = api.bolt_szerkesztese(kapcsolat, bolt_id=torzs["bolt_id"], nev="")
+    assert eredmeny["hiba"] is not None
+    nevek = [b["nev"] for b in api.boltok(kapcsolat, szervezet_id=torzs["szervezet_id"])]
+    assert nevek == ["Ügyifogyi"]  # változatlan
+
+
+def test_pult_hozzaadasa_es_szerkesztese(kapcsolat, torzs):
+    hozzaadas = api.pult_hozzaadasa(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=torzs["bolt_id"], nev="Pult A"
+    )
+    assert hozzaadas["hiba"] is None
+    szerkesztes = api.pult_szerkesztese(kapcsolat, pult_id=hozzaadas["pult_id"], nev="Pult B")
+    assert szerkesztes["hiba"] is None
+    nevek = [p["nev"] for p in api.pultok(kapcsolat, bolt_id=torzs["bolt_id"])]
+    # a torzs fixture már felvett egy "Pult 1"-et — az átnevezett újnak
+    # kell szerepelnie, "Pult A" néven viszont már nem.
+    assert "Pult B" in nevek
+    assert "Pult A" not in nevek
+
+
+def test_pult_hozzaadasa_ures_nevre_ertelmes_elutasitas(kapcsolat, torzs):
+    eredmeny = api.pult_hozzaadasa(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=torzs["bolt_id"], nev=""
+    )
+    assert eredmeny["hiba"] is not None
+    assert eredmeny["pult_id"] is None
+
+
+def test_alkalmazott_hozzaadasa_es_szerkesztese(kapcsolat, torzs):
+    hozzaadas = api.alkalmazott_hozzaadasa(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=torzs["bolt_id"], nev="Régi"
+    )
+    assert hozzaadas["hiba"] is None
+    szerkesztes = api.alkalmazott_szerkesztese(
+        kapcsolat, alkalmazott_id=hozzaadas["alkalmazott_id"], nev="Új"
+    )
+    assert szerkesztes["hiba"] is None
+    nevek = [a["nev"] for a in api.alkalmazottak(kapcsolat, bolt_id=torzs["bolt_id"])]
+    assert "Új" in nevek
+    assert "Régi" not in nevek
+
+
+def test_szolgaltatas_hozzaadasa_es_szerkesztese(kapcsolat, torzs):
+    hozzaadas = api.szolgaltatas_hozzaadasa(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=torzs["bolt_id"],
+        nev="Régi",
+        alap_idotartam_perc=5,
+    )
+    assert hozzaadas["hiba"] is None
+    szerkesztes = api.szolgaltatas_szerkesztese(
+        kapcsolat,
+        szolgaltatas_id=hozzaadas["szolgaltatas_id"],
+        nev="Új",
+        alap_idotartam_perc=30,
+    )
+    assert szerkesztes["hiba"] is None
+    eredmeny = {s["nev"]: s for s in api.szolgaltatasok(kapcsolat, bolt_id=torzs["bolt_id"])}
+    assert "Régi" not in eredmeny
+    assert eredmeny["Új"]["alap_idotartam_perc"] == 30
+
+
+def test_szolgaltatas_hozzaadasa_nem_pozitiv_idotartamra_ertelmes_elutasitas(kapcsolat, torzs):
+    eredmeny = api.szolgaltatas_hozzaadasa(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=torzs["bolt_id"],
+        nev="Valami",
+        alap_idotartam_perc=0,
+    )
+    assert eredmeny["hiba"] is not None
+    assert eredmeny["szolgaltatas_id"] is None
+
+
+def test_kivetel_nap_hozzaadasa_sikeres(kapcsolat, torzs):
+    eredmeny = api.kivetel_nap_hozzaadasa(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=None,
+        datum="2026-12-25",
+        indok="karácsony",
+    )
+    assert eredmeny["hiba"] is None
+    assert eredmeny["kivetel_id"] is not None
+    lista = api.kivetel_napok(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    assert [k["datum"] for k in lista] == ["2026-12-25"]
+
+
+def test_kivetel_nap_hozzaadasa_ervenytelen_datumra_ertelmes_elutasitas(kapcsolat, torzs):
+    eredmeny = api.kivetel_nap_hozzaadasa(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=None,
+        datum="nem-datum",
+        indok="karácsony",
+    )
+    assert eredmeny["hiba"] is not None
+    assert eredmeny["kivetel_id"] is None
+    assert api.kivetel_napok(kapcsolat, szervezet_id=torzs["szervezet_id"]) == []
+
+
+def test_kivetel_nap_hozzaadasa_ures_indokra_ertelmes_elutasitas(kapcsolat, torzs):
+    eredmeny = api.kivetel_nap_hozzaadasa(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=None, datum="2026-12-25", indok=""
+    )
+    assert eredmeny["hiba"] is not None
+    assert eredmeny["kivetel_id"] is None
+
+
+def test_kivetel_nap_hozzaadasa_es_muszak_felvitel_kihagyja(kapcsolat, torzs):
+    """Integrációs pillanatkép: az admin által felvitt kivétel nap
+    ugyanúgy kihagyatja a generátort, mint a seed-elt kivétel nap."""
+    api.kivetel_nap_hozzaadasa(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=None,
+        datum="2026-08-18",
+        indok="admin által felvett ünnep",
+    )
+    eredmeny = _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    assert eredmeny["kihagyva"] is True
+    assert eredmeny["kihagyas_oka"] == "2026-08-18"
