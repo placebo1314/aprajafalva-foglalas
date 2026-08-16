@@ -133,6 +133,79 @@ def blokkok_slotok_mentese(
         conn.execute("COMMIT")
 
 
+def muszakok_lekerdezese(
+    conn: sqlite3.Connection,
+    *,
+    szervezet_id: str,
+    bolt_id: str | None = None,
+    datum_tol: str | None = None,
+    datum_ig: str | None = None,
+) -> list[dict]:
+    """Műszakok listája egy időablakban (naptárnézethez, `felulet/admin/`),
+    bolt/pult/alkalmazott/szolgáltatás névvel kiegészítve — a felület nem
+    kap nyers azonosítót mutatni valót, olvasható nevet kap.
+
+    `datum_tol`/`datum_ig` a `muszak.kezdet` oszlopra szűr (ISO-8601 UTC
+    időbélyeg-előtag egyezés is elég, pl. csak a dátumrész). A slotszámot
+    is visszaadja (aloszekvenciás lekérdezéssel), hogy a naptárnézet
+    üresen generált (kivetel_nap miatt kihagyott) műszakot is meg tudjon
+    különböztetni."""
+    sorok = conn.execute(
+        "SELECT m.id, m.bolt_id, b.nev, m.pult_id, p.nev, m.alkalmazott_id, a.nev, "
+        "m.szolgaltatas_id, sz.nev, m.kezdet, m.veg, m.allapot, "
+        "(SELECT COUNT(*) FROM slot WHERE slot.muszak_id = m.id) AS slot_szam "
+        "FROM muszak m "
+        "JOIN bolt b ON b.id = m.bolt_id "
+        "JOIN pult p ON p.id = m.pult_id "
+        "JOIN alkalmazott a ON a.id = m.alkalmazott_id "
+        "JOIN szolgaltatas sz ON sz.id = m.szolgaltatas_id "
+        "WHERE m.szervezet_id = ? "
+        "AND (? IS NULL OR m.bolt_id = ?) "
+        "AND (? IS NULL OR m.kezdet >= ?) "
+        "AND (? IS NULL OR m.kezdet < ?) "
+        "ORDER BY m.kezdet",
+        (szervezet_id, bolt_id, bolt_id, datum_tol, datum_tol, datum_ig, datum_ig),
+    ).fetchall()
+    return [
+        {
+            "muszak_id": sor[0],
+            "bolt_id": sor[1],
+            "bolt_nev": sor[2],
+            "pult_id": sor[3],
+            "pult_nev": sor[4],
+            "alkalmazott_id": sor[5],
+            "alkalmazott_nev": sor[6],
+            "szolgaltatas_id": sor[7],
+            "szolgaltatas_nev": sor[8],
+            "kezdet": sor[9],
+            "veg": sor[10],
+            "allapot": sor[11],
+            "slot_szam": sor[12],
+        }
+        for sor in sorok
+    ]
+
+
+def blokkok_lekerdezese(conn: sqlite3.Connection, *, muszak_id: str) -> list[dict]:
+    """Egy műszak blokkjai (szünet/ebéd/szabad sáv), kezdet szerint
+    rendezve — a naptárnézet ezekkel rajzolja ki a slotok közti réseket."""
+    sorok = conn.execute(
+        "SELECT tipus, kezdet, veg, rogzitett, beszamit_kvotaba "
+        "FROM muszak_blokk WHERE muszak_id = ? ORDER BY kezdet",
+        (muszak_id,),
+    ).fetchall()
+    return [
+        {
+            "tipus": sor[0],
+            "kezdet": sor[1],
+            "veg": sor[2],
+            "rogzitett": bool(sor[3]),
+            "beszamit_kvotaba": bool(sor[4]),
+        }
+        for sor in sorok
+    ]
+
+
 def kivetel_napok_lekerdezese(
     conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
 ) -> frozenset[str]:

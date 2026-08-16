@@ -89,6 +89,40 @@ def szolgaltatas_letrehoz(
     return szolgaltatas_id
 
 
+def boltok_lekerdezese(conn: sqlite3.Connection, *, szervezet_id: str) -> list[dict]:
+    """Egy szervezet boltjai, névre rendezve — az admin felület (`felulet/admin/`)
+    bolt-választójának való listázás."""
+    sorok = conn.execute(
+        "SELECT id, nev FROM bolt WHERE szervezet_id = ? ORDER BY nev", (szervezet_id,)
+    ).fetchall()
+    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+
+
+def pultok_lekerdezese(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
+    """Egy bolt pultjai, névre rendezve."""
+    sorok = conn.execute(
+        "SELECT id, nev FROM pult WHERE bolt_id = ? ORDER BY nev", (bolt_id,)
+    ).fetchall()
+    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+
+
+def alkalmazottak_lekerdezese(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
+    """Egy bolt alkalmazottai, névre rendezve."""
+    sorok = conn.execute(
+        "SELECT id, nev FROM alkalmazott WHERE bolt_id = ? ORDER BY nev", (bolt_id,)
+    ).fetchall()
+    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+
+
+def szolgaltatasok_lekerdezese(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
+    """Egy bolt szolgáltatásai, névre rendezve."""
+    sorok = conn.execute(
+        "SELECT id, nev, alap_idotartam_perc FROM szolgaltatas WHERE bolt_id = ? ORDER BY nev",
+        (bolt_id,),
+    ).fetchall()
+    return [{"id": sor[0], "nev": sor[1], "alap_idotartam_perc": sor[2]} for sor in sorok]
+
+
 def kivetel_nap_letrehoz(
     conn: sqlite3.Connection,
     *,

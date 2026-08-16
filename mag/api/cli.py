@@ -11,6 +11,7 @@ Ez a mag mérföldköve: innen minden művelet elvégezhető LLM nélkül
         <idempotencia_kulcs> <session_id>
     python -m mag.api.cli lemond <db_utvonal> <foglalasi_kod>
     python -m mag.api.cli holdok-takaritas <db_utvonal> [most_iso]
+    python -m mag.api.cli demo-verseny [--sessziok 2|3] [--mag SZAM]
 
 A `vasarlo_kulcs_hash` MÁR HMAC-hashelt érték (64 hex karakter) — a nyers
 vásárlóazonosítót a mag/ soha nem kapja meg (CLAUDE.md, 2. invariáns). A
@@ -175,6 +176,15 @@ def _holdok_takaritas(argv: list[str]) -> int:
     return 0
 
 
+def _demo_verseny(argv: list[str]) -> int:
+    sessziok = int(_opcio(argv, "--sessziok") or 3)
+    mag = int(_opcio(argv, "--mag") or 42)
+    from mag.api import verseny
+
+    verseny.futtat(sessziok=sessziok, mag=mag)
+    return 0
+
+
 PARANCSOK = {
     "migral": _migral,
     "seed": _seed,
@@ -183,6 +193,7 @@ PARANCSOK = {
     "foglal": _foglal,
     "lemond": _lemond,
     "holdok-takaritas": _holdok_takaritas,
+    "demo-verseny": _demo_verseny,
 }
 
 

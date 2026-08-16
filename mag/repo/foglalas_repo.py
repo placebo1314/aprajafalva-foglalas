@@ -156,6 +156,17 @@ def hold_letrehoz(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar
         return Eredmeny.SIKERES
 
 
+def hold_lekerdezese(conn: sqlite3.Connection, *, slot_id: str, session_id: str) -> str | None:
+    """Az adott slotra, adott session által tartott hold id-je, vagy
+    `None`, ha nincs ilyen — pl. amikor a hívónak (verseny-demó,
+    `mag/api/verseny.py`) a saját maga szerezte holdot kell utólag
+    felszabadítania, és csak a slot/session párost ismeri."""
+    sor = conn.execute(
+        "SELECT id FROM hold WHERE slot_id = ? AND session_id = ?", (slot_id, session_id)
+    ).fetchone()
+    return sor[0] if sor else None
+
+
 def hold_felszabadit(conn: sqlite3.Connection, hold_id: str) -> Eredmeny:
     """Egy hold explicit felszabadítása (pl. a vásárló megszakította a
     beszélgetést, mielőtt a hold lejárt volna)."""
@@ -352,6 +363,75 @@ def szabad_slotok_keresese(
         (szervezet_id, bolt_id, bolt_id, szolgaltatas_id, szolgaltatas_id, most_iso()),
     ).fetchall()
     return [(sor[0], sor[1], sor[2]) for sor in sorok]
+
+
+def slot_allapotok_lekerdezese(conn: sqlite3.Connection, *, muszak_id: str) -> list[dict]:
+    """Egy műszak slotjai, kezdet szerint rendezve, mindegyikhez az
+    aktuális állapottal ('szabad' | 'holdolt' | 'foglalt') — a naptárnézet
+    (`felulet/admin/`) ezzel színez. Egy lejárt, de még nem takarított
+    hold NEM számít blokkolónak, ugyanúgy, mint `slot_szabad()`-ban."""
+    sorok = conn.execute(
+        "SELECT slot.id, slot.kezdet, slot.veg, "
+        "  (SELECT 1 FROM foglalas WHERE foglalas.slot_id = slot.id "
+        "     AND foglalas.allapot <> 'lemondva') AS van_foglalas, "
+        "  (SELECT 1 FROM hold WHERE hold.slot_id = slot.id AND hold.lejar > ?) AS van_hold, "
+        "  (SELECT foglalasi_kod FROM foglalas WHERE foglalas.slot_id = slot.id "
+        "     AND foglalas.allapot <> 'lemondva') AS foglalasi_kod "
+        "FROM slot WHERE slot.muszak_id = ? ORDER BY slot.kezdet",
+        (most_iso(), muszak_id),
+    ).fetchall()
+    eredmeny = []
+    for slot_id, kezdet, veg, van_foglalas, van_hold, foglalasi_kod in sorok:
+        if van_foglalas:
+            allapot = "foglalt"
+        elif van_hold:
+            allapot = "holdolt"
+        else:
+            allapot = "szabad"
+        eredmeny.append(
+            {
+                "slot_id": slot_id,
+                "kezdet": kezdet,
+                "veg": veg,
+                "allapot": allapot,
+                "foglalasi_kod": foglalasi_kod,
+            }
+        )
+    return eredmeny
+
+
+def foglalasok_lekerdezese(
+    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+) -> list[dict]:
+    """Aktív és lemondott foglalások listája (admin felület, `felulet/admin/`),
+    a slot időpontjával és — bolt-szűréshez — a műszak boltjával
+    kiegészítve. A `vasarlo_kulcs` szándékosan NEM kerül a visszaadott
+    dict-be: az admin felületnek a beosztáshoz nincs rá szüksége, és
+    CLAUDE.md 2. invariánsa szerint amúgy is csak HMAC-hash, nyers
+    azonosító sosem — de a felesleges expozíció itt is elkerülendő."""
+    sorok = conn.execute(
+        "SELECT f.id, f.foglalasi_kod, f.allapot, f.letrehozva, "
+        "s.kezdet, s.veg, m.bolt_id "
+        "FROM foglalas f "
+        "JOIN slot s ON s.id = f.slot_id "
+        "JOIN muszak m ON m.id = s.muszak_id "
+        "WHERE f.szervezet_id = ? "
+        "AND (? IS NULL OR m.bolt_id = ?) "
+        "ORDER BY s.kezdet",
+        (szervezet_id, bolt_id, bolt_id),
+    ).fetchall()
+    return [
+        {
+            "foglalas_id": sor[0],
+            "foglalasi_kod": sor[1],
+            "allapot": sor[2],
+            "letrehozva": sor[3],
+            "slot_kezdet": sor[4],
+            "slot_veg": sor[5],
+            "bolt_id": sor[6],
+        }
+        for sor in sorok
+    ]
 
 
 def foglalas_lekerdezes_idempotencia_szerint(
