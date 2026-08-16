@@ -470,3 +470,152 @@ def test_kivetel_nap_hozzaadasa_es_muszak_felvitel_kihagyja(kapcsolat, torzs):
     eredmeny = _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
     assert eredmeny["kihagyva"] is True
     assert eredmeny["kihagyas_oka"] == "2026-08-18"
+
+
+# =====================================================================
+# Ütközéslista (mag/szabalyok/kenyszerek.py-ra épülve)
+# =====================================================================
+
+
+def test_utkozeslista_ures_uj_szervezetben(kapcsolat, torzs):
+    assert api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"]) == []
+
+
+def test_utkozeslista_kenyszer_sertest_jelez_szunet_nelkuli_hosszu_muszakra(kapcsolat, torzs):
+    _felvitel(
+        kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T16:00:00Z"
+    )  # 8 óra, szünet nélkül
+
+    problemak = api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    szabalyok = {p["szabaly"] for p in problemak}
+    assert "munkajogi_minimum" in szabalyok
+    assert "minimum_osszes_szunet" in szabalyok
+    assert all(p["tipus"] == "kenyszer_sertes" for p in problemak)
+
+
+def test_utkozeslista_nem_jelez_semmit_rovid_muszakra_ha_a_szunetkuszob_nulla(kapcsolat, torzs):
+    """1 órás műszak a 6 órás munkajogi küszöb ALATT — a
+    `min_osszes_szunet_perc` a kenyszerek.ellenoriz()-ben FELTÉTEL
+    NÉLKÜLI minimum (nem csak a hosszú műszakokra vonatkozik), ezért
+    ehhez a teszthez explicit 0-ra állítjuk, hogy kizárólag a munkajogi
+    küszöb hatását nézzük."""
+    _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    assert (
+        api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"], min_osszes_szunet_perc=0)
+        == []
+    )
+
+
+def test_utkozeslista_atfedo_muszakok_ugyanazon_pulton(kapcsolat, torzs):
+    _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T10:00:00Z")
+    _felvitel(kapcsolat, torzs, "2026-08-18T09:00:00Z", "2026-08-18T11:00:00Z")  # átfedi az elsőt
+
+    problemak = api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    atfedesek = [p for p in problemak if p["tipus"] == "atfedes"]
+    assert len(atfedesek) == 1
+    assert atfedesek[0]["szabaly"] == "atfedo_muszak"
+
+
+def test_utkozeslista_nem_atfedo_muszakok_kulonbozo_pultokon(kapcsolat, torzs):
+    masik_pult = torzsadat_repo.pult_letrehoz(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=torzs["bolt_id"], nev="Másik pult"
+    )
+    _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T10:00:00Z")
+    api.muszak_felvitel(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=torzs["bolt_id"],
+        pult_id=masik_pult,
+        alkalmazott_id=torzs["alkalmazott_id"],
+        szolgaltatas_id=torzs["szolgaltatas_id"],
+        kezdet="2026-08-18T09:00:00Z",  # időben átfedi az elsőt, DE másik pulton
+        veg="2026-08-18T11:00:00Z",
+        idotartam_perc=10,
+        puffer_utana_perc=0,
+        min_racs_perc=10,
+        foglalhato_arany=1.0,
+        blokk_szabaly={"szunetek": []},
+    )
+
+    problemak = api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    atfedesek = [p for p in problemak if p["tipus"] == "atfedes"]
+    assert atfedesek == []
+
+
+def test_utkozeslista_egymast_erinto_muszakok_nem_atfedes(kapcsolat, torzs):
+    """Az egyik vége pont a másik kezdete — ez nem átfedés, csak
+    egymáshoz illeszkedés."""
+    _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    _felvitel(kapcsolat, torzs, "2026-08-18T09:00:00Z", "2026-08-18T10:00:00Z")
+
+    problemak = api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    assert [p for p in problemak if p["tipus"] == "atfedes"] == []
+
+
+def test_utkozeslista_nulla_slot_nem_kivetel_napon_jelezve(kapcsolat, torzs):
+    """5 perces ablak 10 perces slottal — nulla slot generálódik, DE
+    nincs kivétel nap, tehát ez valódi probléma."""
+    eredmeny = _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T08:05:00Z")
+    assert eredmeny["slot_szam"] == 0
+
+    problemak = api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    nulla_slotok = [p for p in problemak if p["tipus"] == "nulla_slot"]
+    assert len(nulla_slotok) == 1
+
+
+def test_utkozeslista_kivetel_napon_semmit_nem_jelez(kapcsolat, torzs):
+    """A kivétel napi nulla slot ÉS az üres blokklista miatti kényszer-
+    sértés is HAMIS pozitív lenne — egyik se kerülhet az ütközéslistába."""
+    torzsadat_repo.kivetel_nap_letrehoz(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=None,
+        datum="2026-08-18",
+        indok="ünnep",
+    )
+    eredmeny = _felvitel(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T16:00:00Z")
+    assert eredmeny["kihagyva"] is True
+
+    assert api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"]) == []
+
+
+def test_utkozeslista_bolt_szerint_szurheto(kapcsolat, torzs):
+    masik_bolt = torzsadat_repo.bolt_letrehoz(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], nev="Másik bolt"
+    )
+    masik_pult = torzsadat_repo.pult_letrehoz(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=masik_bolt, nev="Másik pult"
+    )
+    masik_alkalmazott = torzsadat_repo.alkalmazott_letrehoz(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=masik_bolt, nev="Másik"
+    )
+    masik_szolg = torzsadat_repo.szolgaltatas_letrehoz(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=masik_bolt,
+        nev="másik",
+        alap_idotartam_perc=10,
+    )
+    api.muszak_felvitel(
+        kapcsolat,
+        szervezet_id=torzs["szervezet_id"],
+        bolt_id=masik_bolt,
+        pult_id=masik_pult,
+        alkalmazott_id=masik_alkalmazott,
+        szolgaltatas_id=masik_szolg,
+        kezdet="2026-08-18T08:00:00Z",
+        veg="2026-08-18T16:00:00Z",
+        idotartam_perc=10,
+        puffer_utana_perc=0,
+        min_racs_perc=10,
+        foglalhato_arany=1.0,
+        blokk_szabaly={"szunetek": []},
+    )
+
+    sajat_bolt_problemai = api.utkozeslista(
+        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=torzs["bolt_id"]
+    )
+    assert sajat_bolt_problemai == []  # a másik bolt problémája nem jön be
+
+    osszes = api.utkozeslista(kapcsolat, szervezet_id=torzs["szervezet_id"])
+    assert len(osszes) > 0

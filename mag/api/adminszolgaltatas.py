@@ -15,11 +15,14 @@ folyamat) egyetlen kapcsolatot tarthat nyitva több híváson át.
 from __future__ import annotations
 
 import sqlite3
+from collections import defaultdict
 from datetime import date, timedelta
 
+from mag.modell.muszak import Blokk
 from mag.repo import foglalas_repo, muszak_repo, sablon_repo, torzsadat_repo
 from mag.slot import generator
 from mag.slot.blokk import FixBlokk
+from mag.szabalyok import kenyszerek
 
 # Két KÜLÖNBÖZŐ "sablon" fogalom van ebben a modulban, szándékosan más
 # névvel: a lenti `SABLONOK` a "műszak felvitele" űrlap MEZŐ-előtöltése
@@ -527,3 +530,118 @@ def _datum_eltol(idobelyeg: str, nap: int) -> str:
     from mag.slot._idomatek import hozzaad_perc
 
     return hozzaad_perc(idobelyeg, nap * 24 * 60)
+
+
+# ---------------------------------------------------------------------
+# Ütközéslista — a mag/szabalyok/kenyszerek.py-ra épül, nem duplikálja a
+# kemény kényszerek logikáját, csak hívja és formázza az eredményt.
+# ---------------------------------------------------------------------
+
+# A kenyszerek.ellenoriz() két paramétere ("nincs bennük egyetlen helyes
+# érték", lásd a modul docstringje) bolt-/profilfüggő — amíg nincs profil-
+# rendszer (blueprint 7. szakasz, "Kényszerkapcsolók" — profilok, még nem
+# épült meg), ez a két érték csak egy ÁTMENETI, felülírható alapértelmezés
+# az ütközéslistához, NEM egy törzsadatban rögzített, végleges szabály.
+_ALAP_MIN_OSSZES_SZUNET_PERC = 20
+_ALAP_MAX_FOLYAMATOS_MUNKA_PERC = 360
+
+
+def utkozeslista(
+    conn: sqlite3.Connection,
+    *,
+    szervezet_id: str,
+    bolt_id: str | None = None,
+    min_osszes_szunet_perc: int = _ALAP_MIN_OSSZES_SZUNET_PERC,
+    max_folyamatos_munka_perc: int = _ALAP_MAX_FOLYAMATOS_MUNKA_PERC,
+) -> list[dict]:
+    """Problémás műszakok listája — az admin felület "Ütközéslista"
+    nézetének. Három ok miatt kerülhet ide egy tétel:
+
+    - `kenyszer_sertes`: a `mag/szabalyok/kenyszerek.py::ellenoriz()`
+      valamelyik kemény kényszert megsértve találta (a logika onnan jön,
+      itt csak hívjuk és a KenyszerSertes-eket dict-té alakítjuk).
+    - `nulla_slot`: a műszak nulla slotot generált, ÉS a napja NEM
+      kivétel nap (kivétel napon a nulla slot szándékos, nem hiba).
+    - `atfedes`: két műszak UGYANAZON a pulton időben átfedi egymást.
+
+    Az egész szervezetet (vagy egy boltot) végignézi, nem egyetlen hetet —
+    ez audit-nézet, nem naptár."""
+    muszakok = muszak_repo.muszakok_lekerdezese(conn, szervezet_id=szervezet_id, bolt_id=bolt_id)
+    kivetel_napok = muszak_repo.kivetel_napok_lekerdezese(
+        conn, szervezet_id=szervezet_id, bolt_id=bolt_id
+    )
+
+    problemak: list[dict] = []
+
+    for m in muszakok:
+        kivetel_napon_van = m["kezdet"][:10] in kivetel_napok
+
+        # Kivétel napon a műszak SOR létezik, de a generátor szándékosan
+        # nem tett bele blokkot/slotot (lásd generator.general() és
+        # seed/betolt.py::_het_beosztas_betoltese docstringje) — üres
+        # blokklistán a kenyszerek.ellenoriz() jogosan jelezne "nincs
+        # szünet" hibát, de ez itt NEM valódi sértés, csak a kihagyás
+        # mellékhatása. Ezért kivétel napon nem futtatjuk a kényszer-
+        # ellenőrzést.
+        if not kivetel_napon_van:
+            muszak_obj = muszak_repo.muszak_betoltese(conn, muszak_id=m["muszak_id"])
+            blokkok = [
+                Blokk(**b) for b in muszak_repo.blokkok_lekerdezese(conn, muszak_id=m["muszak_id"])
+            ]
+            for sertes in kenyszerek.ellenoriz(
+                muszak_obj,
+                blokkok,
+                min_osszes_szunet_perc=min_osszes_szunet_perc,
+                max_folyamatos_munka_perc=max_folyamatos_munka_perc,
+            ):
+                problemak.append(_problema(m, "kenyszer_sertes", sertes.szabaly, sertes.uzenet))
+
+        if m["slot_szam"] == 0 and not kivetel_napon_van:
+            problemak.append(
+                _problema(
+                    m,
+                    "nulla_slot",
+                    "nulla_slot",
+                    f"A műszak ({m['kezdet']}–{m['veg']}) nulla slotot generált, "
+                    "és a napja nincs a kivételnapok között.",
+                )
+            )
+
+    pultonkent: dict[str, list[dict]] = defaultdict(list)
+    for m in muszakok:
+        pultonkent[m["pult_id"]].append(m)
+    for pult_muszakok in pultonkent.values():
+        rendezve = sorted(pult_muszakok, key=lambda m: m["kezdet"])
+        for elozo, kovetkezo in zip(rendezve, rendezve[1:], strict=False):
+            if elozo["veg"] > kovetkezo["kezdet"]:
+                problemak.append(
+                    _problema(
+                        elozo,
+                        "atfedes",
+                        "atfedo_muszak",
+                        f"Átfedő műszakok ugyanazon a pulton ({elozo['pult_nev']}): "
+                        f"{elozo['kezdet']}–{elozo['veg']} és "
+                        f"{kovetkezo['kezdet']}–{kovetkezo['veg']} "
+                        f"({elozo['alkalmazott_nev']} / {kovetkezo['alkalmazott_nev']}).",
+                        masik_muszak_id=kovetkezo["muszak_id"],
+                    )
+                )
+
+    return problemak
+
+
+def _problema(
+    m: dict, tipus: str, szabaly: str, uzenet: str, *, masik_muszak_id: str | None = None
+) -> dict:
+    return {
+        "tipus": tipus,
+        "szabaly": szabaly,
+        "uzenet": uzenet,
+        "muszak_id": m["muszak_id"],
+        "masik_muszak_id": masik_muszak_id,
+        "bolt_nev": m["bolt_nev"],
+        "pult_nev": m["pult_nev"],
+        "alkalmazott_nev": m["alkalmazott_nev"],
+        "kezdet": m["kezdet"],
+        "veg": m["veg"],
+    }

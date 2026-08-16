@@ -86,15 +86,18 @@ class AdminApp(tk.Tk):
         self.foglalasok_ful = ttk.Frame(fulek, padding=6)
         self.sablon_ful = ttk.Frame(fulek, padding=6)
         self.torzsadat_ful = ttk.Frame(fulek, padding=6)
+        self.utkozes_ful = ttk.Frame(fulek, padding=6)
         fulek.add(self.naptar_ful, text="Naptár és műszakok")
         fulek.add(self.foglalasok_ful, text="Foglalások")
         fulek.add(self.sablon_ful, text="Sablonok és hét-másolás")
         fulek.add(self.torzsadat_ful, text="Törzsadat")
+        fulek.add(self.utkozes_ful, text="Ütközéslista")
 
         self._naptar_fulet_felepit()
         self._foglalasok_fulet_felepit()
         self._sablon_fulet_felepit()
         self._torzsadat_fulet_felepit()
+        self._utkozes_fulet_felepit()
 
     def _naptar_fulet_felepit(self) -> None:
         fejlec = ttk.Frame(self.naptar_ful)
@@ -871,6 +874,57 @@ class AdminApp(tk.Tk):
         self._torzsadat_uzenet_ir(eredmeny["hiba"] or "Kivételnap felvéve.")
         self._torzsadat_frissitese()
         self._naptar_frissitese()
+
+    # ------------------------------------------------------------------
+    # Ütközéslista
+    # ------------------------------------------------------------------
+
+    def _utkozes_fulet_felepit(self) -> None:
+        fejlec = ttk.Frame(self.utkozes_ful)
+        fejlec.pack(side="top", fill="x")
+        ttk.Button(
+            fejlec, text="Frissítés (a teljes szervezetre)", command=self._utkozeslista_frissitese
+        ).pack(side="left")
+        ttk.Button(
+            fejlec,
+            text="Frissítés (csak a kiválasztott boltra)",
+            command=lambda: self._utkozeslista_frissitese(csak_bolt=True),
+        ).pack(side="left", padx=4)
+        self.utkozes_szamlalo = ttk.Label(fejlec, text="")
+        self.utkozes_szamlalo.pack(side="left", padx=12)
+
+        oszlopok = ("tipus", "pult", "alkalmazott", "kezdet", "veg", "uzenet")
+        self.utkozes_fa = ttk.Treeview(
+            self.utkozes_ful, columns=oszlopok, show="headings", height=25
+        )
+        cimek = ("Típus", "Pult", "Alkalmazott", "Kezdet", "Vég", "Üzenet")
+        szelessegek = (140, 120, 120, 150, 150, 400)
+        for oszlop, cim, szelesseg in zip(oszlopok, cimek, szelessegek, strict=True):
+            self.utkozes_fa.heading(oszlop, text=cim)
+            self.utkozes_fa.column(oszlop, width=szelesseg)
+        self.utkozes_fa.pack(fill="both", expand=True, pady=6)
+
+    def _utkozeslista_frissitese(self, *, csak_bolt: bool = False) -> None:
+        for sor in self.utkozes_fa.get_children():
+            self.utkozes_fa.delete(sor)
+        if not self.szervezet_id:
+            return
+        bolt_id = self.bolt_id if csak_bolt else None
+        problemak = api.utkozeslista(self.conn, szervezet_id=self.szervezet_id, bolt_id=bolt_id)
+        for p in problemak:
+            self.utkozes_fa.insert(
+                "",
+                "end",
+                values=(
+                    f"{p['tipus']} / {p['szabaly']}",
+                    p["pult_nev"],
+                    p["alkalmazott_nev"],
+                    p["kezdet"],
+                    p["veg"],
+                    p["uzenet"],
+                ),
+            )
+        self.utkozes_szamlalo.config(text=f"{len(problemak)} probléma")
 
     # ------------------------------------------------------------------
 
