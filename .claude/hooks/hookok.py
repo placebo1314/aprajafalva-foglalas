@@ -88,17 +88,17 @@ def modul_hatar() -> None:
     tartalom = szoveg(fajl)
     hibak: list[str] = []
 
-    if rel.startswith("mag/"):
-        m = talalatok(tartalom, r"^\s*(from|import)\s+(asszisztens|felulet)\b")
+    if rel.startswith("core/"):
+        m = talalatok(tartalom, r"^\s*(from|import)\s+(assistant|ui)\b")
         if m:
-            hibak.append("A mag/ nem importálhat az asszisztens/ vagy felulet/ modulból:")
+            hibak.append("A core/ nem importálhat az assistant/ vagy ui/ modulból:")
             hibak.extend(m)
         if talalatok(tartalom, r"(llama_cpp|ollama|openai|transformers|LLMSzolgaltato)"):
-            hibak.append("A mag/ nem hívhat LLM-et. Az értelmezés az asszisztens/ dolga.")
+            hibak.append("A core/ nem hívhat LLM-et. Az értelmezés az assistant/ dolga.")
 
-    if rel.startswith("felulet/"):
+    if rel.startswith("ui/"):
         if talalatok(tartalom, r"(llama_cpp|ollama|openai\.)"):
-            hibak.append("A felulet/ nem hívhat LLM-et közvetlenül, csak az asszisztens/-en át.")
+            hibak.append("A ui/ nem hívhat LLM-et közvetlenül, csak az assistant/-en át.")
 
     if hibak:
         blokkol(
@@ -114,7 +114,7 @@ def tiltott_minta() -> None:
     if not fajl:
         return
     rel = relativ(fajl)
-    if rel.startswith(("tesztek/", "seed/", "docs/", ".claude/")):
+    if rel.startswith(("tests/", "seed/", "docs/", ".claude/")):
         return
 
     tartalom = szoveg(fajl)
@@ -126,11 +126,11 @@ def tiltott_minta() -> None:
             "vagy kulcstárolóból jön."
         )
 
-    if not rel.startswith("adatvedelem/"):
-        if talalatok(tartalom, r"nyers_azonosito|azonosito_nyers"):
+    if not rel.startswith("privacy/"):
+        if talalatok(tartalom, r"nyers_azonosito|azonosito_nyers|raw_customer_key"):
             hibak.append(
-                "Nyers azonosító az adatvedelem/ modulon kívül. "
-                "Használd az adatvedelem.hash_azonosito() függvényt."
+                "Nyers azonosító a privacy/ modulon kívül. "
+                "Használd a privacy.hash_azonosito() függvényt."
             )
 
     if hibak:
@@ -148,19 +148,19 @@ SQL_MINTA = (
 
 
 def sql_hely() -> None:
-    """Minden SQL a mag/repo/-ban van. Ez teszi a Postgres-váltást egynapossá."""
+    """Minden SQL a core/repo/-ban van. Ez teszi a Postgres-váltást egynapossá."""
     fajl = erintett_fajl(bemenet())
     if not fajl or fajl.suffix != ".py":
         return
     rel = relativ(fajl)
-    if rel.startswith(("mag/repo/", "migraciok/", "tesztek/", "seed/")):
+    if rel.startswith(("core/repo/", "migrations/", "tests/", "seed/")):
         return
 
     m = talalatok(szoveg(fajl), SQL_MINTA)
     if m:
         blokkol(
             f"SQL A REPOSITORY RÉTEGEN KÍVÜL ({rel})",
-            m + ["Minden lekérdezés a mag/repo/-ba tartozik."],
+            m + ["Minden lekérdezés a core/repo/-ba tartozik."],
             "Lásd a db-hordozhatosag skillt.",
         )
 
@@ -240,7 +240,7 @@ def teszt() -> None:
     if not (gyoker / "feladat.py").is_file():
         return
 
-    tesztek = list((gyoker / "tesztek").rglob("test_*.py"))
+    tesztek = list((gyoker / "tests").rglob("test_*.py"))
     if not tesztek:
         return
 
@@ -280,7 +280,7 @@ def session_kezdet() -> None:
 
     ag = git("rev-parse", "--abbrev-ref", "HEAD") or "nincs-git"
     valtozott = len([s for s in git("status", "--porcelain").splitlines() if s])
-    migraciok = len(list((gyoker / "migraciok").glob("*.sql")))
+    migraciok = len(list((gyoker / "migrations").glob("*.sql")))
     adrek = len(list((gyoker / "docs" / "adr").glob("*.md")))
 
     print(

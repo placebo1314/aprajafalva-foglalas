@@ -26,61 +26,61 @@ import secrets
 import sqlite3
 from enum import Enum
 
-from mag.azonosito import uj_uuid
-from mag.ido import most_iso
+from core.azonosito import new_uuid
+from core.ido import most_iso
 
 # A vasarlo_kulcs HMAC-jéhez tartozó pepper-verzió. Amíg nincs önálló
 # adatvedelem/ pepper-rotációs modul (lásd CLAUDE.md, "Sérthetetlen
 # invariánsok" 2. pont), ez egy dokumentált helyőrző — a hívó feladata,
 # hogy a vasarlo_kulcs-ot ezzel a verzióval számítsa ki. Ha a rotáció
 # megvalósul, ez a függvényszignatúra explicit kulcs_verzio paramétert kap.
-AKTUALIS_VASARLO_KULCS_VERZIO = 1
+CURRENT_CUSTOMER_KEY_VERSION = 1
 
 # Foglalási kód ábécéje: nincs benne O/0 és I/1 — hangban vagy telefonon
 # félreolvasható párok kizárva.
-_KOD_ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-_KOD_HOSSZ = 8
+_CODE_ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+_CODE_LENGTH = 8
 
 
-class Eredmeny(Enum):
+class Result(Enum):
     """Minden írási művelet ezt adja vissza — sosem kivételt a normál
     versenyhelyzeti ágakra (foglalt slot, ismételt kérés, stb.)."""
 
-    SIKERES = "sikeres"
-    MEGELOZTEK = "megeloztek"
-    NINCS_ILYEN = "nincs_ilyen"
-    MAR_LEMONDVA = "mar_lemondva"
+    SUCCESS = "sikeres"
+    PREEMPTED = "megeloztek"
+    NO_ILYEN = "nincs_ilyen"
+    ALREADY_CANCELLED = "mar_lemondva"
 
 
-def _uj_foglalasi_kod() -> str:
-    return "".join(secrets.choice(_KOD_ABC) for _ in range(_KOD_HOSSZ))
+def _new_booking_code() -> str:
+    return "".join(secrets.choice(_CODE_ABC) for _ in range(_CODE_LENGTH))
 
 
-def _esemeny_ir(
+def _event_write(
     conn: sqlite3.Connection,
-    szervezet_id: str,
+    org_id: str,
     tipus: str,
-    entitas_tipus: str,
-    entitas_id: str,
-    hasznos_teher: dict,
+    entity_type: str,
+    entity_id: str,
+    useful_payload: dict,
 ) -> None:
     conn.execute(
         "INSERT INTO esemenyek "
         "(id, szervezet_id, tipus, entitas_tipus, entitas_id, idobelyeg, hasznos_teher) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
-            uj_uuid(),
-            szervezet_id,
+            new_uuid(),
+            org_id,
             tipus,
-            entitas_tipus,
-            entitas_id,
+            entity_type,
+            entity_id,
             most_iso(),
-            json.dumps(hasznos_teher, ensure_ascii=False),
+            json.dumps(useful_payload, ensure_ascii=False),
         ),
     )
 
 
-def slot_szabad(conn: sqlite3.Connection, slot_id: str) -> bool:
+def slot_free(conn: sqlite3.Connection, slot_id: str) -> bool:
     """Igaz, ha a slot létezik, nincs rajta MÉG ÉRVÉNYES hold (`lejar` a
     jelen időnél későbbi), és nincs aktív foglalás sem.
 
@@ -90,18 +90,18 @@ def slot_szabad(conn: sqlite3.Connection, slot_id: str) -> bool:
     """
     if conn.execute("SELECT 1 FROM slot WHERE id = ?", (slot_id,)).fetchone() is None:
         return False
-    van_ervenyes_hold = conn.execute(
+    has_valid_hold = conn.execute(
         "SELECT 1 FROM hold WHERE slot_id = ? AND lejar > ?", (slot_id, most_iso())
     ).fetchone()
-    if van_ervenyes_hold is not None:
+    if has_valid_hold is not None:
         return False
-    van_aktiv_foglalas = conn.execute(
+    has_active_booking = conn.execute(
         "SELECT 1 FROM foglalas WHERE slot_id = ? AND allapot <> 'lemondva'", (slot_id,)
     ).fetchone()
-    return van_aktiv_foglalas is None
+    return has_active_booking is None
 
 
-def hold_letrehoz(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar: str) -> Eredmeny:
+def hold_create(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar: str) -> Result:
     """Puha zárat tesz egy slotra. Slotonként legfeljebb egy hold ülhet
     (`ix_hold_slot` UNIQUE index) — ha már van MÉG ÉRVÉNYES hold, vagy a
     slot már aktívan foglalt, `MEGELOZTEK`.
@@ -113,36 +113,36 @@ def hold_letrehoz(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar
     holdolható legyen."""
     conn.execute("BEGIN IMMEDIATE")
     try:
-        sor = conn.execute("SELECT szervezet_id FROM slot WHERE id = ?", (slot_id,)).fetchone()
-        if sor is None:
+        row = conn.execute("SELECT szervezet_id FROM slot WHERE id = ?", (slot_id,)).fetchone()
+        if row is None:
             conn.execute("ROLLBACK")
-            return Eredmeny.NINCS_ILYEN
-        (szervezet_id,) = sor
+            return Result.NO_ILYEN
+        (org_id,) = row
 
-        van_aktiv_foglalas = conn.execute(
+        has_active_booking = conn.execute(
             "SELECT 1 FROM foglalas WHERE slot_id = ? AND allapot <> 'lemondva'", (slot_id,)
         ).fetchone()
-        if van_aktiv_foglalas is not None:
+        if has_active_booking is not None:
             conn.execute("ROLLBACK")
-            return Eredmeny.MEGELOZTEK
+            return Result.PREEMPTED
 
         most = most_iso()
         conn.execute("DELETE FROM hold WHERE slot_id = ? AND lejar <= ?", (slot_id, most))
 
-        hold_id = uj_uuid()
+        hold_id = new_uuid()
         cur = conn.execute(
             "INSERT INTO hold (id, szervezet_id, slot_id, session_id, letrejott, lejar) "
             "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT DO NOTHING",
-            (hold_id, szervezet_id, slot_id, session_id, most, lejar),
+            (hold_id, org_id, slot_id, session_id, most, lejar),
         )
         if cur.rowcount == 0:
             conn.execute("ROLLBACK")
-            return Eredmeny.MEGELOZTEK
+            return Result.PREEMPTED
 
-        _esemeny_ir(
+        _event_write(
             conn,
-            szervezet_id,
+            org_id,
             "hold_letrejott",
             "hold",
             hold_id,
@@ -153,44 +153,44 @@ def hold_letrehoz(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar
         raise
     else:
         conn.execute("COMMIT")
-        return Eredmeny.SIKERES
+        return Result.SUCCESS
 
 
-def hold_lekerdezese(conn: sqlite3.Connection, *, slot_id: str, session_id: str) -> str | None:
+def hold_list(conn: sqlite3.Connection, *, slot_id: str, session_id: str) -> str | None:
     """Az adott slotra, adott session által tartott hold id-je, vagy
     `None`, ha nincs ilyen — pl. amikor a hívónak (verseny-demó,
     `mag/api/verseny.py`) a saját maga szerezte holdot kell utólag
     felszabadítania, és csak a slot/session párost ismeri."""
-    sor = conn.execute(
+    row = conn.execute(
         "SELECT id FROM hold WHERE slot_id = ? AND session_id = ?", (slot_id, session_id)
     ).fetchone()
-    return sor[0] if sor else None
+    return row[0] if row else None
 
 
-def hold_felszabadit(conn: sqlite3.Connection, hold_id: str) -> Eredmeny:
+def hold_release(conn: sqlite3.Connection, hold_id: str) -> Result:
     """Egy hold explicit felszabadítása (pl. a vásárló megszakította a
     beszélgetést, mielőtt a hold lejárt volna)."""
     conn.execute("BEGIN IMMEDIATE")
     try:
-        sor = conn.execute(
+        row = conn.execute(
             "SELECT szervezet_id, slot_id FROM hold WHERE id = ?", (hold_id,)
         ).fetchone()
-        if sor is None:
+        if row is None:
             conn.execute("ROLLBACK")
-            return Eredmeny.NINCS_ILYEN
-        szervezet_id, slot_id = sor
+            return Result.NO_ILYEN
+        org_id, slot_id = row
 
         conn.execute("DELETE FROM hold WHERE id = ?", (hold_id,))
-        _esemeny_ir(conn, szervezet_id, "hold_felszabadult", "hold", hold_id, {"slot_id": slot_id})
+        _event_write(conn, org_id, "hold_felszabadult", "hold", hold_id, {"slot_id": slot_id})
     except Exception:
         conn.execute("ROLLBACK")
         raise
     else:
         conn.execute("COMMIT")
-        return Eredmeny.SIKERES
+        return Result.SUCCESS
 
 
-def lejart_holdok_takaritasa(conn: sqlite3.Connection, most: str) -> list[str]:
+def lejart_holds_cleanup(conn: sqlite3.Connection, most: str) -> list[str]:
     """A `most` (ISO-8601 UTC) időpontnál nem később lejáró holdokat törli.
 
     Egyetlen tranzakcióban fut, minden törölt holdhoz `hold_lejart` eseményt
@@ -202,8 +202,8 @@ def lejart_holdok_takaritasa(conn: sqlite3.Connection, most: str) -> list[str]:
         lejartak = conn.execute(
             "SELECT id, szervezet_id, slot_id FROM hold WHERE lejar <= ?", (most,)
         ).fetchall()
-        for hold_id, szervezet_id, slot_id in lejartak:
-            _esemeny_ir(conn, szervezet_id, "hold_lejart", "hold", hold_id, {"slot_id": slot_id})
+        for hold_id, org_id, slot_id in lejartak:
+            _event_write(conn, org_id, "hold_lejart", "hold", hold_id, {"slot_id": slot_id})
         if lejartak:
             conn.execute("DELETE FROM hold WHERE lejar <= ?", (most,))
     except Exception:
@@ -211,16 +211,16 @@ def lejart_holdok_takaritasa(conn: sqlite3.Connection, most: str) -> list[str]:
         raise
     else:
         conn.execute("COMMIT")
-        return [sor[0] for sor in lejartak]
+        return [row[0] for row in lejartak]
 
 
-def foglalas_letrehoz(
+def booking_create(
     conn: sqlite3.Connection,
     slot_id: str,
-    vasarlo_kulcs: str,
-    idempotencia_kulcs: str,
+    customer_key: str,
+    idempotency_key: str,
     session_id: str,
-) -> Eredmeny:
+) -> Result:
     """Foglalást hoz létre. A dupla foglalás elleni EGYETLEN védelem a
     `foglalas` tábla parciális UNIQUE indexe (ADR-003): itt nincs előzetes
     `slot_szabad()`-ellenőrzés, mert az verseny esetén réstelen (TOCTOU)
@@ -233,14 +233,14 @@ def foglalas_letrehoz(
     """
     conn.execute("BEGIN IMMEDIATE")
     try:
-        sor = conn.execute("SELECT szervezet_id FROM slot WHERE id = ?", (slot_id,)).fetchone()
-        if sor is None:
+        row = conn.execute("SELECT szervezet_id FROM slot WHERE id = ?", (slot_id,)).fetchone()
+        if row is None:
             conn.execute("ROLLBACK")
-            return Eredmeny.NINCS_ILYEN
-        (szervezet_id,) = sor
+            return Result.NO_ILYEN
+        (org_id,) = row
 
-        foglalas_id = uj_uuid()
-        foglalasi_kod = _uj_foglalasi_kod()
+        booking_id = new_uuid()
+        booking_code = _new_booking_code()
         cur = conn.execute(
             "INSERT INTO foglalas "
             "(id, szervezet_id, slot_id, vasarlo_kulcs, kulcs_verzio, "
@@ -248,13 +248,13 @@ def foglalas_letrehoz(
             "VALUES (?, ?, ?, ?, ?, ?, ?, 'aktiv', ?) "
             "ON CONFLICT DO NOTHING",
             (
-                foglalas_id,
-                szervezet_id,
+                booking_id,
+                org_id,
                 slot_id,
-                vasarlo_kulcs,
-                AKTUALIS_VASARLO_KULCS_VERZIO,
-                idempotencia_kulcs,
-                foglalasi_kod,
+                customer_key,
+                CURRENT_CUSTOMER_KEY_VERSION,
+                idempotency_key,
+                booking_code,
                 most_iso(),
             ),
         )
@@ -265,76 +265,76 @@ def foglalas_letrehoz(
             # valaki megelőzött. A foglalasi_kod ütközése elméletileg
             # lehetséges, de a _KOD_ABC méretével (33^8) gyakorlatilag
             # elhanyagolható, nem kezeljük külön ágként.
-            ismetelt = conn.execute(
-                "SELECT 1 FROM foglalas WHERE idempotencia_kulcs = ?", (idempotencia_kulcs,)
+            repeated = conn.execute(
+                "SELECT 1 FROM foglalas WHERE idempotencia_kulcs = ?", (idempotency_key,)
             ).fetchone()
             conn.execute("ROLLBACK")
-            return Eredmeny.SIKERES if ismetelt is not None else Eredmeny.MEGELOZTEK
+            return Result.SUCCESS if repeated is not None else Result.PREEMPTED
 
         # A slotra ülő hold (ha volt) feleslegessé vált — nincs kettős
         # könyvelés (docs/domain.md, "Hold").
         conn.execute("DELETE FROM hold WHERE slot_id = ?", (slot_id,))
 
-        _esemeny_ir(
+        _event_write(
             conn,
-            szervezet_id,
+            org_id,
             "foglalas_letrejott",
             "foglalas",
-            foglalas_id,
-            {"slot_id": slot_id, "session_id": session_id, "foglalasi_kod": foglalasi_kod},
+            booking_id,
+            {"slot_id": slot_id, "session_id": session_id, "foglalasi_kod": booking_code},
         )
     except Exception:
         conn.execute("ROLLBACK")
         raise
     else:
         conn.execute("COMMIT")
-        return Eredmeny.SIKERES
+        return Result.SUCCESS
 
 
-def foglalas_lemond(conn: sqlite3.Connection, foglalasi_kod: str) -> Eredmeny:
+def booking_lemond(conn: sqlite3.Connection, booking_code: str) -> Result:
     """Lemond egy foglalást a foglalási kódja alapján (a számsor nem
     hitelesítő, lásd blueprint 8. szakasz). A slot ettől a pillanattól
     újra foglalható — nincs külön "foglalási ablak" (ADR-008)."""
     conn.execute("BEGIN IMMEDIATE")
     try:
-        sor = conn.execute(
+        row = conn.execute(
             "SELECT id, szervezet_id, slot_id, allapot FROM foglalas WHERE foglalasi_kod = ?",
-            (foglalasi_kod,),
+            (booking_code,),
         ).fetchone()
-        if sor is None:
+        if row is None:
             conn.execute("ROLLBACK")
-            return Eredmeny.NINCS_ILYEN
-        foglalas_id, szervezet_id, slot_id, allapot = sor
-        if allapot == "lemondva":
+            return Result.NO_ILYEN
+        booking_id, org_id, slot_id, status = row
+        if status == "lemondva":
             conn.execute("ROLLBACK")
-            return Eredmeny.MAR_LEMONDVA
+            return Result.ALREADY_CANCELLED
 
-        conn.execute("UPDATE foglalas SET allapot = 'lemondva' WHERE id = ?", (foglalas_id,))
-        _esemeny_ir(
-            conn, szervezet_id, "foglalas_lemondva", "foglalas", foglalas_id, {"slot_id": slot_id}
+        conn.execute("UPDATE foglalas SET allapot = 'lemondva' WHERE id = ?", (booking_id,))
+        _event_write(
+            conn, org_id, "foglalas_lemondva", "foglalas", booking_id, {"slot_id": slot_id}
         )
-        _esemeny_ir(
+        _event_write(
             conn,
-            szervezet_id,
+            org_id,
             "slot_felszabadult",
             "slot",
             slot_id,
-            {"foglalas_id": foglalas_id},
+            {"foglalas_id": booking_id},
         )
     except Exception:
         conn.execute("ROLLBACK")
         raise
     else:
         conn.execute("COMMIT")
-        return Eredmeny.SIKERES
+        return Result.SUCCESS
 
 
-def szabad_slotok_keresese(
+def free_slots_search(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str | None = None,
-    szolgaltatas_id: str | None = None,
+    org_id: str,
+    shop_id: str | None = None,
+    service_id: str | None = None,
 ) -> list[tuple[str, str, str]]:
     """Szabad — sem MÉG ÉRVÉNYES hold, sem aktív foglalás nélküli —
     slotokat listáz, kezdet szerint rendezve — `(slot_id, kezdet, veg)`
@@ -348,7 +348,7 @@ def szabad_slotok_keresese(
     komponens, ami még nem íródott meg; ez a függvény addig is használható
     egyenes listázásra (pl. a CLI `keres` parancsához).
     """
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT slot.id, slot.kezdet, slot.veg "
         "FROM slot JOIN muszak ON muszak.id = slot.muszak_id "
         "WHERE muszak.szervezet_id = ? "
@@ -360,17 +360,17 @@ def szabad_slotok_keresese(
         "  WHERE foglalas.slot_id = slot.id AND foglalas.allapot <> 'lemondva'"
         ") "
         "ORDER BY slot.kezdet",
-        (szervezet_id, bolt_id, bolt_id, szolgaltatas_id, szolgaltatas_id, most_iso()),
+        (org_id, shop_id, shop_id, service_id, service_id, most_iso()),
     ).fetchall()
-    return [(sor[0], sor[1], sor[2]) for sor in sorok]
+    return [(row[0], row[1], row[2]) for row in rows]
 
 
-def slot_allapotok_lekerdezese(conn: sqlite3.Connection, *, muszak_id: str) -> list[dict]:
+def slot_statuses_list(conn: sqlite3.Connection, *, shift_id: str) -> list[dict]:
     """Egy műszak slotjai, kezdet szerint rendezve, mindegyikhez az
     aktuális állapottal ('szabad' | 'holdolt' | 'foglalt') — a naptárnézet
     (`felulet/admin/`) ezzel színez. Egy lejárt, de még nem takarított
     hold NEM számít blokkolónak, ugyanúgy, mint `slot_szabad()`-ban."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT slot.id, slot.kezdet, slot.veg, "
         "  (SELECT 1 FROM foglalas WHERE foglalas.slot_id = slot.id "
         "     AND foglalas.allapot <> 'lemondva') AS van_foglalas, "
@@ -378,30 +378,30 @@ def slot_allapotok_lekerdezese(conn: sqlite3.Connection, *, muszak_id: str) -> l
         "  (SELECT foglalasi_kod FROM foglalas WHERE foglalas.slot_id = slot.id "
         "     AND foglalas.allapot <> 'lemondva') AS foglalasi_kod "
         "FROM slot WHERE slot.muszak_id = ? ORDER BY slot.kezdet",
-        (most_iso(), muszak_id),
+        (most_iso(), shift_id),
     ).fetchall()
-    eredmeny = []
-    for slot_id, kezdet, veg, van_foglalas, van_hold, foglalasi_kod in sorok:
-        if van_foglalas:
-            allapot = "foglalt"
-        elif van_hold:
-            allapot = "holdolt"
+    result = []
+    for slot_id, start, end, has_booking, has_hold, booking_code in rows:
+        if has_booking:
+            status = "foglalt"
+        elif has_hold:
+            status = "holdolt"
         else:
-            allapot = "szabad"
-        eredmeny.append(
+            status = "szabad"
+        result.append(
             {
                 "slot_id": slot_id,
-                "kezdet": kezdet,
-                "veg": veg,
-                "allapot": allapot,
-                "foglalasi_kod": foglalasi_kod,
+                "kezdet": start,
+                "veg": end,
+                "allapot": status,
+                "foglalasi_kod": booking_code,
             }
         )
-    return eredmeny
+    return result
 
 
-def foglalasok_lekerdezese(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+def bookings_list(
+    conn: sqlite3.Connection, *, org_id: str, shop_id: str | None = None
 ) -> list[dict]:
     """Aktív és lemondott foglalások listája (admin felület, `felulet/admin/`),
     a slot időpontjával és — bolt-szűréshez — a műszak boltjával
@@ -409,7 +409,7 @@ def foglalasok_lekerdezese(
     dict-be: az admin felületnek a beosztáshoz nincs rá szüksége, és
     CLAUDE.md 2. invariánsa szerint amúgy is csak HMAC-hash, nyers
     azonosító sosem — de a felesleges expozíció itt is elkerülendő."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT f.id, f.foglalasi_kod, f.allapot, f.letrehozva, "
         "s.kezdet, s.veg, m.bolt_id "
         "FROM foglalas f "
@@ -418,32 +418,30 @@ def foglalasok_lekerdezese(
         "WHERE f.szervezet_id = ? "
         "AND (? IS NULL OR m.bolt_id = ?) "
         "ORDER BY s.kezdet",
-        (szervezet_id, bolt_id, bolt_id),
+        (org_id, shop_id, shop_id),
     ).fetchall()
     return [
         {
-            "foglalas_id": sor[0],
-            "foglalasi_kod": sor[1],
-            "allapot": sor[2],
-            "letrehozva": sor[3],
-            "slot_kezdet": sor[4],
-            "slot_veg": sor[5],
-            "bolt_id": sor[6],
+            "foglalas_id": row[0],
+            "foglalasi_kod": row[1],
+            "allapot": row[2],
+            "letrehozva": row[3],
+            "slot_kezdet": row[4],
+            "slot_veg": row[5],
+            "bolt_id": row[6],
         }
-        for sor in sorok
+        for row in rows
     ]
 
 
-def foglalas_lekerdezes_idempotencia_szerint(
-    conn: sqlite3.Connection, idempotencia_kulcs: str
-) -> dict | None:
+def booking_query_idempotency_by(conn: sqlite3.Connection, idempotency_key: str) -> dict | None:
     """Egy korábban létrehozott foglalás alapadatai — pl. a CLI `foglal`
     parancsának, hogy a `foglalasi_kod`-ot vissza tudja adni idempotens
     ismétlés esetén is (amikor `foglalas_letrehoz` nem hoz létre új sort)."""
-    sor = conn.execute(
+    row = conn.execute(
         "SELECT id, slot_id, foglalasi_kod, allapot FROM foglalas WHERE idempotencia_kulcs = ?",
-        (idempotencia_kulcs,),
+        (idempotency_key,),
     ).fetchone()
-    if sor is None:
+    if row is None:
         return None
-    return {"id": sor[0], "slot_id": sor[1], "foglalasi_kod": sor[2], "allapot": sor[3]}
+    return {"id": row[0], "slot_id": row[1], "foglalasi_kod": row[2], "allapot": row[3]}

@@ -3,7 +3,7 @@
 Nem a mag/ vagy az asszisztens/ része, nem lesz belőle alap — csak a
 spike mérésére való (lásd docs/roadmap.md, M-1: "A spike kódja eldobható").
 
-Beolvassa a tesztek/golden/nyelvi_alap.yaml-t, minden esetre meghívja a
+Beolvassa a tests/golden/nyelvi_alap.yaml-t, minden esetre meghívja a
 megadott Ollama modellt structured output-tal (Ollama `format` paraméter
 JSON-sémával), az {eszkoz, parameterek} alakra kényszerítve. A `most`
 mezőt (meta.most_alapertelmezett) a promptban adja át.
@@ -38,7 +38,7 @@ from pathlib import Path
 import yaml
 
 GYOKER = Path(__file__).resolve().parents[1]
-GOLDEN_UTVONAL = GYOKER / "tesztek" / "golden" / "nyelvi_alap.yaml"
+GOLDEN_UTVONAL = GYOKER / "tests" / "golden" / "nyelvi_alap.yaml"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
 # Zárt halmazok — lásd .claude/skills/eszkoz-szerzodes/SKILL.md ("Zárt
@@ -56,7 +56,7 @@ ESZKOZOK = [
     "nincs",
 ]
 BOLT_AZONOSITOK = ["szundi", "ugyifogyi", "torpilla"]
-# A golden setben (tesztek/golden/nyelvi_alap.yaml) és az eszkoz-szerzodes
+# A golden setben (tests/golden/nyelvi_alap.yaml) és az eszkoz-szerzodes
 # skillben eddig megjelent szolgáltatás-azonosítók. Ez NEM állítottan a
 # teljes katalógus — a valódi lista a mag/ torzsadat_repo-jában van, amit a
 # spike (CLAUDE.md 3. invariáns szellemében is) nem importál. Ha új

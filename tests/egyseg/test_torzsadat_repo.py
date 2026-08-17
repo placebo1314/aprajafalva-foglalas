@@ -13,7 +13,7 @@ import uuid
 
 import pytest
 
-from mag.repo import migracio, torzsadat_repo
+from core.repo import migracio, torzsadat_repo
 
 _MOST = "2026-08-15T10:00:00Z"
 
@@ -23,202 +23,187 @@ def _uuid() -> str:
 
 
 @pytest.fixture
-def db_utvonal(tmp_path) -> str:
+def db_path(tmp_path) -> str:
     return str(tmp_path / "teszt.db")
 
 
 @pytest.fixture
-def kapcsolat(db_utvonal):
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+def conn(db_path):
+    conn = migracio.conn_nyitas(db_path)
     migracio.migral(conn)
     yield conn
     conn.close()
 
 
 @pytest.fixture
-def szervezet(kapcsolat) -> str:
-    return torzsadat_repo.szervezet_letrehoz(kapcsolat, nev="Aprajafalva", idozona="UTC")
+def org(conn) -> str:
+    return torzsadat_repo.org_create(conn, name="Aprajafalva", timezone="UTC")
 
 
 @pytest.fixture
-def bolt(kapcsolat, szervezet) -> str:
-    return torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Ügyifogyi")
+def shop(conn, org) -> str:
+    return torzsadat_repo.shop_create(conn, org_id=org, name="Ügyifogyi")
 
 
 # --- szervezetek_lekerdezese -----------------------------------------------
 
 
-def test_szervezetek_lekerdezese_ures(kapcsolat):
-    assert torzsadat_repo.szervezetek_lekerdezese(kapcsolat) == []
+def test_orgs_list_empty(conn):
+    assert torzsadat_repo.orgs_list(conn) == []
 
 
-def test_szervezetek_lekerdezese_egy_elem(kapcsolat, szervezet):
-    eredmeny = torzsadat_repo.szervezetek_lekerdezese(kapcsolat)
-    assert eredmeny == [{"id": szervezet, "nev": "Aprajafalva"}]
+def test_orgs_list_one_elem(conn, org):
+    result = torzsadat_repo.orgs_list(conn)
+    assert result == [{"id": org, "nev": "Aprajafalva"}]
 
 
-def test_szervezetek_lekerdezese_tobb_elem_nevre_rendezve(kapcsolat):
-    torzsadat_repo.szervezet_letrehoz(kapcsolat, nev="Zebra Kft", idozona="UTC")
-    torzsadat_repo.szervezet_letrehoz(kapcsolat, nev="Aprajafalva", idozona="UTC")
-    nevek = [s["nev"] for s in torzsadat_repo.szervezetek_lekerdezese(kapcsolat)]
-    assert nevek == ["Aprajafalva", "Zebra Kft"]
+def test_orgs_list_multiple_elem_name_rendezve(conn):
+    torzsadat_repo.org_create(conn, name="Zebra Kft", timezone="UTC")
+    torzsadat_repo.org_create(conn, name="Aprajafalva", timezone="UTC")
+    names = [s["nev"] for s in torzsadat_repo.orgs_list(conn)]
+    assert names == ["Aprajafalva", "Zebra Kft"]
 
 
 # --- boltok_lekerdezese ------------------------------------------------
 
 
-def test_boltok_lekerdezese_ures(kapcsolat, szervezet):
-    assert torzsadat_repo.boltok_lekerdezese(kapcsolat, szervezet_id=szervezet) == []
+def test_shops_list_empty(conn, org):
+    assert torzsadat_repo.shops_list(conn, org_id=org) == []
 
 
-def test_boltok_lekerdezese_egy_elem(kapcsolat, szervezet, bolt):
-    eredmeny = torzsadat_repo.boltok_lekerdezese(kapcsolat, szervezet_id=szervezet)
-    assert eredmeny == [{"id": bolt, "nev": "Ügyifogyi"}]
+def test_shops_list_one_elem(conn, org, shop):
+    result = torzsadat_repo.shops_list(conn, org_id=org)
+    assert result == [{"id": shop, "nev": "Ügyifogyi"}]
 
 
-def test_boltok_lekerdezese_tobb_elem_nevre_rendezve(kapcsolat, szervezet):
-    torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Törpilla")
-    torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Szundi")
-    nevek = [b["nev"] for b in torzsadat_repo.boltok_lekerdezese(kapcsolat, szervezet_id=szervezet)]
-    assert nevek == ["Szundi", "Törpilla"]
+def test_shops_list_multiple_elem_name_rendezve(conn, org):
+    torzsadat_repo.shop_create(conn, org_id=org, name="Törpilla")
+    torzsadat_repo.shop_create(conn, org_id=org, name="Szundi")
+    names = [b["nev"] for b in torzsadat_repo.shops_list(conn, org_id=org)]
+    assert names == ["Szundi", "Törpilla"]
 
 
-def test_boltok_lekerdezese_szur_szervezet_szerint(kapcsolat, szervezet, bolt):
-    masik_szervezet = torzsadat_repo.szervezet_letrehoz(kapcsolat, nev="Másik", idozona="UTC")
-    torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=masik_szervezet, nev="Idegen bolt")
-    eredmeny = torzsadat_repo.boltok_lekerdezese(kapcsolat, szervezet_id=szervezet)
-    assert eredmeny == [{"id": bolt, "nev": "Ügyifogyi"}]
+def test_shops_list_filter_org_by(conn, org, shop):
+    other_org = torzsadat_repo.org_create(conn, name="Másik", timezone="UTC")
+    torzsadat_repo.shop_create(conn, org_id=other_org, name="Idegen bolt")
+    result = torzsadat_repo.shops_list(conn, org_id=org)
+    assert result == [{"id": shop, "nev": "Ügyifogyi"}]
 
 
 # --- pultok_lekerdezese --------------------------------------------------
 
 
-def test_pultok_lekerdezese_ures(kapcsolat, bolt):
-    assert torzsadat_repo.pultok_lekerdezese(kapcsolat, bolt_id=bolt) == []
+def test_counters_list_empty(conn, shop):
+    assert torzsadat_repo.counters_list(conn, shop_id=shop) == []
 
 
-def test_pultok_lekerdezese_tobb_elem_es_szur_bolt_szerint(kapcsolat, szervezet, bolt):
-    p1 = torzsadat_repo.pult_letrehoz(kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="Pult B")
-    p2 = torzsadat_repo.pult_letrehoz(kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="Pult A")
-    masik_bolt = torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Másik bolt")
-    torzsadat_repo.pult_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=masik_bolt, nev="Idegen"
-    )
+def test_counters_list_multiple_elem_and_filter_shop_by(conn, org, shop):
+    p1 = torzsadat_repo.counter_create(conn, org_id=org, shop_id=shop, name="Pult B")
+    p2 = torzsadat_repo.counter_create(conn, org_id=org, shop_id=shop, name="Pult A")
+    other_shop = torzsadat_repo.shop_create(conn, org_id=org, name="Másik bolt")
+    torzsadat_repo.counter_create(conn, org_id=org, shop_id=other_shop, name="Idegen")
 
-    eredmeny = torzsadat_repo.pultok_lekerdezese(kapcsolat, bolt_id=bolt)
-    assert eredmeny == [{"id": p2, "nev": "Pult A"}, {"id": p1, "nev": "Pult B"}]
+    result = torzsadat_repo.counters_list(conn, shop_id=shop)
+    assert result == [{"id": p2, "nev": "Pult A"}, {"id": p1, "nev": "Pult B"}]
 
 
 # --- alkalmazottak_lekerdezese ------------------------------------------
 
 
-def test_alkalmazottak_lekerdezese_ures(kapcsolat, bolt):
-    assert torzsadat_repo.alkalmazottak_lekerdezese(kapcsolat, bolt_id=bolt) == []
+def test_employees_list_empty(conn, shop):
+    assert torzsadat_repo.employees_list(conn, shop_id=shop) == []
 
 
-def test_alkalmazottak_lekerdezese_tobb_elem_es_szur_bolt_szerint(kapcsolat, szervezet, bolt):
-    a1 = torzsadat_repo.alkalmazott_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="Durranó"
-    )
-    masik_bolt = torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Másik bolt")
-    torzsadat_repo.alkalmazott_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=masik_bolt, nev="Idegen"
-    )
+def test_employees_list_multiple_elem_and_filter_shop_by(conn, org, shop):
+    a1 = torzsadat_repo.employee_create(conn, org_id=org, shop_id=shop, name="Durranó")
+    other_shop = torzsadat_repo.shop_create(conn, org_id=org, name="Másik bolt")
+    torzsadat_repo.employee_create(conn, org_id=org, shop_id=other_shop, name="Idegen")
 
-    eredmeny = torzsadat_repo.alkalmazottak_lekerdezese(kapcsolat, bolt_id=bolt)
-    assert eredmeny == [{"id": a1, "nev": "Durranó"}]
+    result = torzsadat_repo.employees_list(conn, shop_id=shop)
+    assert result == [{"id": a1, "nev": "Durranó"}]
 
 
 # --- szolgaltatasok_lekerdezese ------------------------------------------
 
 
-def test_szolgaltatasok_lekerdezese_ures(kapcsolat, bolt):
-    assert torzsadat_repo.szolgaltatasok_lekerdezese(kapcsolat, bolt_id=bolt) == []
+def test_services_list_empty(conn, shop):
+    assert torzsadat_repo.services_list(conn, shop_id=shop) == []
 
 
-def test_szolgaltatasok_lekerdezese_egy_elem_alap_idotartammal(kapcsolat, szervezet, bolt):
-    sz_id = torzsadat_repo.szolgaltatas_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="petárda", alap_idotartam_perc=5
+def test_services_list_one_elem_alap_with_duration(conn, org, shop):
+    sz_id = torzsadat_repo.service_create(
+        conn, org_id=org, shop_id=shop, name="petárda", alap_duration_minute=5
     )
-    eredmeny = torzsadat_repo.szolgaltatasok_lekerdezese(kapcsolat, bolt_id=bolt)
-    assert eredmeny == [{"id": sz_id, "nev": "petárda", "alap_idotartam_perc": 5}]
+    result = torzsadat_repo.services_list(conn, shop_id=shop)
+    assert result == [{"id": sz_id, "nev": "petárda", "alap_idotartam_perc": 5}]
 
 
-def test_szolgaltatasok_lekerdezese_szur_bolt_szerint(kapcsolat, szervezet, bolt):
-    torzsadat_repo.szolgaltatas_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="petárda", alap_idotartam_perc=5
+def test_services_list_filter_shop_by(conn, org, shop):
+    torzsadat_repo.service_create(
+        conn, org_id=org, shop_id=shop, name="petárda", alap_duration_minute=5
     )
-    masik_bolt = torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Másik bolt")
-    torzsadat_repo.szolgaltatas_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=masik_bolt, nev="idegen", alap_idotartam_perc=10
+    other_shop = torzsadat_repo.shop_create(conn, org_id=org, name="Másik bolt")
+    torzsadat_repo.service_create(
+        conn, org_id=org, shop_id=other_shop, name="idegen", alap_duration_minute=10
     )
 
-    eredmeny = torzsadat_repo.szolgaltatasok_lekerdezese(kapcsolat, bolt_id=bolt)
-    assert [s["nev"] for s in eredmeny] == ["petárda"]
+    result = torzsadat_repo.services_list(conn, shop_id=shop)
+    assert [s["nev"] for s in result] == ["petárda"]
 
 
 # --- szerkesztés ----------------------------------------------------------
 
 
-def test_bolt_szerkesztese_atirja_a_nevet(kapcsolat, szervezet, bolt):
-    torzsadat_repo.bolt_szerkesztese(kapcsolat, bolt_id=bolt, nev="Új név")
-    eredmeny = torzsadat_repo.boltok_lekerdezese(kapcsolat, szervezet_id=szervezet)
-    assert eredmeny == [{"id": bolt, "nev": "Új név"}]
+def test_shop_update_renames_name(conn, org, shop):
+    torzsadat_repo.shop_update(conn, shop_id=shop, name="Új név")
+    result = torzsadat_repo.shops_list(conn, org_id=org)
+    assert result == [{"id": shop, "nev": "Új név"}]
 
 
-def test_pult_szerkesztese_atirja_a_nevet(kapcsolat, szervezet, bolt):
-    pult_id = torzsadat_repo.pult_letrehoz(kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="A")
-    torzsadat_repo.pult_szerkesztese(kapcsolat, pult_id=pult_id, nev="B")
-    eredmeny = torzsadat_repo.pultok_lekerdezese(kapcsolat, bolt_id=bolt)
-    assert eredmeny == [{"id": pult_id, "nev": "B"}]
+def test_counter_update_renames_name(conn, org, shop):
+    counter_id = torzsadat_repo.counter_create(conn, org_id=org, shop_id=shop, name="A")
+    torzsadat_repo.counter_update(conn, counter_id=counter_id, name="B")
+    result = torzsadat_repo.counters_list(conn, shop_id=shop)
+    assert result == [{"id": counter_id, "nev": "B"}]
 
 
-def test_alkalmazott_szerkesztese_atirja_a_nevet(kapcsolat, szervezet, bolt):
-    alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="Régi"
+def test_employee_update_renames_name(conn, org, shop):
+    employee_id = torzsadat_repo.employee_create(conn, org_id=org, shop_id=shop, name="Régi")
+    torzsadat_repo.employee_update(conn, employee_id=employee_id, name="Új")
+    result = torzsadat_repo.employees_list(conn, shop_id=shop)
+    assert result == [{"id": employee_id, "nev": "Új"}]
+
+
+def test_service_update_renames_name_and_duration(conn, org, shop):
+    service_id = torzsadat_repo.service_create(
+        conn, org_id=org, shop_id=shop, name="Régi", alap_duration_minute=5
     )
-    torzsadat_repo.alkalmazott_szerkesztese(kapcsolat, alkalmazott_id=alkalmazott_id, nev="Új")
-    eredmeny = torzsadat_repo.alkalmazottak_lekerdezese(kapcsolat, bolt_id=bolt)
-    assert eredmeny == [{"id": alkalmazott_id, "nev": "Új"}]
-
-
-def test_szolgaltatas_szerkesztese_atirja_a_nevet_es_idotartamot(kapcsolat, szervezet, bolt):
-    szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, nev="Régi", alap_idotartam_perc=5
-    )
-    torzsadat_repo.szolgaltatas_szerkesztese(
-        kapcsolat, szolgaltatas_id=szolgaltatas_id, nev="Új", alap_idotartam_perc=20
-    )
-    eredmeny = torzsadat_repo.szolgaltatasok_lekerdezese(kapcsolat, bolt_id=bolt)
-    assert eredmeny == [{"id": szolgaltatas_id, "nev": "Új", "alap_idotartam_perc": 20}]
+    torzsadat_repo.service_update(conn, service_id=service_id, name="Új", alap_duration_minute=20)
+    result = torzsadat_repo.services_list(conn, shop_id=shop)
+    assert result == [{"id": service_id, "nev": "Új", "alap_idotartam_perc": 20}]
 
 
 # --- kivetel_napok_reszletesen_lekerdezese --------------------------------
 
 
-def test_kivetel_napok_reszletesen_lekerdezese_ures(kapcsolat, szervezet):
-    assert (
-        torzsadat_repo.kivetel_napok_reszletesen_lekerdezese(kapcsolat, szervezet_id=szervezet)
-        == []
-    )
+def test_exception_days_in_detail_list_empty(conn, org):
+    assert torzsadat_repo.exception_days_in_detail_list(conn, org_id=org) == []
 
 
-def test_kivetel_napok_reszletesen_lekerdezese_szervezet_es_bolt_szintu(kapcsolat, szervezet, bolt):
-    szervezet_szintu = torzsadat_repo.kivetel_nap_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=None, datum="2026-12-25", indok="karácsony"
+def test_exception_days_in_detail_list_org_and_shop_level(conn, org, shop):
+    org_level = torzsadat_repo.exception_day_create(
+        conn, org_id=org, shop_id=None, date="2026-12-25", reason="karácsony"
     )
-    bolt_szintu = torzsadat_repo.kivetel_nap_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=bolt, datum="2026-08-20", indok="felújítás"
+    shop_level = torzsadat_repo.exception_day_create(
+        conn, org_id=org, shop_id=shop, date="2026-08-20", reason="felújítás"
     )
-    masik_bolt = torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet, nev="Másik")
-    torzsadat_repo.kivetel_nap_letrehoz(
-        kapcsolat, szervezet_id=szervezet, bolt_id=masik_bolt, datum="2026-09-01", indok="idegen"
+    other_shop = torzsadat_repo.shop_create(conn, org_id=org, name="Másik")
+    torzsadat_repo.exception_day_create(
+        conn, org_id=org, shop_id=other_shop, date="2026-09-01", reason="idegen"
     )
 
-    eredmeny = torzsadat_repo.kivetel_napok_reszletesen_lekerdezese(
-        kapcsolat, szervezet_id=szervezet, bolt_id=bolt
-    )
-    id_k = {e["id"] for e in eredmeny}
-    assert id_k == {szervezet_szintu, bolt_szintu}  # a másik bolt kivétele nem jön be
-    datumok = sorted(e["datum"] for e in eredmeny)
-    assert datumok == ["2026-08-20", "2026-12-25"]
+    result = torzsadat_repo.exception_days_in_detail_list(conn, org_id=org, shop_id=shop)
+    id_k = {e["id"] for e in result}
+    assert id_k == {org_level, shop_level}  # a másik bolt kivétele nem jön be
+    dates = sorted(e["datum"] for e in result)
+    assert dates == ["2026-08-20", "2026-12-25"]

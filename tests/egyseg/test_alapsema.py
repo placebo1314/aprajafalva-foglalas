@@ -11,7 +11,7 @@ import uuid
 
 import pytest
 
-from mag.repo import migracio
+from core.repo import migracio
 
 _MOST = "2026-08-15T10:00:00Z"
 
@@ -21,51 +21,49 @@ def _uuid() -> str:
 
 
 @pytest.fixture
-def db_utvonal(tmp_path) -> str:
+def db_path(tmp_path) -> str:
     return str(tmp_path / "teszt.db")
 
 
 @pytest.fixture
-def kapcsolat(db_utvonal):
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+def conn(db_path):
+    conn = migracio.conn_nyitas(db_path)
     migracio.migral(conn)
     yield conn
     conn.close()
 
 
-def _szervezet_beszur(conn: sqlite3.Connection) -> str:
-    szervezet_id = _uuid()
+def _org_insert(conn: sqlite3.Connection) -> str:
+    org_id = _uuid()
     conn.execute(
         "INSERT INTO szervezet (id, nev, idozona, letrehozva) VALUES (?, ?, ?, ?)",
-        (szervezet_id, "Aprajafalva", "Europe/Budapest", _MOST),
+        (org_id, "Aprajafalva", "Europe/Budapest", _MOST),
     )
-    return szervezet_id
+    return org_id
 
 
-def _bolt_beszur(conn: sqlite3.Connection, szervezet_id: str, nev: str = "Bolt") -> str:
-    bolt_id = _uuid()
+def _shop_insert(conn: sqlite3.Connection, org_id: str, name: str = "Bolt") -> str:
+    shop_id = _uuid()
     conn.execute(
         "INSERT INTO bolt (id, szervezet_id, nev, letrehozva) VALUES (?, ?, ?, ?)",
-        (bolt_id, szervezet_id, nev, _MOST),
+        (shop_id, org_id, name, _MOST),
     )
-    return bolt_id
+    return shop_id
 
 
-def _szolgaltatas_beszur(conn: sqlite3.Connection, szervezet_id: str, bolt_id: str) -> str:
-    szolgaltatas_id = _uuid()
+def _service_insert(conn: sqlite3.Connection, org_id: str, shop_id: str) -> str:
+    service_id = _uuid()
     conn.execute(
         "INSERT INTO szolgaltatas "
         "(id, szervezet_id, bolt_id, nev, alap_idotartam_perc, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (szolgaltatas_id, szervezet_id, bolt_id, "kis petárda", 5, _MOST),
+        (service_id, org_id, shop_id, "kis petárda", 5, _MOST),
     )
-    return szolgaltatas_id
+    return service_id
 
 
-def test_migracio_up_letrehozza_a_het_torzsadat_tablat(kapcsolat):
-    tablak = {
-        sor[0] for sor in kapcsolat.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-    }
+def test_migration_up_creates_week_master_data_tablat(conn):
+    tablak = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     elvart = {
         "szervezet",
         "bolt",
@@ -78,17 +76,17 @@ def test_migracio_up_letrehozza_a_het_torzsadat_tablat(kapcsolat):
     assert elvart <= tablak
 
 
-def test_visszagorgetes_teljesen_visszaallit(db_utvonal):
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
-    lefuttatott = migracio.migral(conn)
-    visszagorgetve = migracio.visszagorget(conn)
+def test_rollback_fully_restore(db_path):
+    conn = migracio.conn_nyitas(db_path)
+    ran = migracio.migral(conn)
+    rolled_back = migracio.rollback(conn)
 
     # A visszagörgetés fordított sorrendben pontosan a lefuttatott
     # migrációkat görgeti vissza — nem kötjük konkrét migrációszámhoz,
     # mert az újakkal bővülni fog.
-    assert visszagorgetve == list(reversed(lefuttatott))
+    assert rolled_back == list(reversed(ran))
 
-    tablak = {sor[0] for sor in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    tablak = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     conn.close()
 
     # A sema_verzio a migrációs rendszer saját nyilvántartása, nem
@@ -97,33 +95,33 @@ def test_visszagorgetes_teljesen_visszaallit(db_utvonal):
     assert tablak == {"sema_verzio"}
 
 
-def test_fk_kenyszer_elutasitja_nemletezo_hivatkozast(kapcsolat):
+def test_fk_constraint_rejects_nonexistent_reference(conn):
     with pytest.raises(sqlite3.IntegrityError):
-        kapcsolat.execute(
+        conn.execute(
             "INSERT INTO bolt (id, szervezet_id, nev, letrehozva) VALUES (?, ?, ?, ?)",
             (_uuid(), _uuid(), "Bolt egy nemlétező szervezetben", _MOST),
         )
 
 
-def test_varians_idotartam_feluliras_nem_tolthetho_ki(kapcsolat):
-    szervezet_id = _szervezet_beszur(kapcsolat)
-    bolt_id = _bolt_beszur(kapcsolat, szervezet_id)
-    szolgaltatas_id = _szolgaltatas_beszur(kapcsolat, szervezet_id, bolt_id)
+def test_variant_duration_feluliras_not_fillable_ki(conn):
+    org_id = _org_insert(conn)
+    shop_id = _shop_insert(conn, org_id)
+    service_id = _service_insert(conn, org_id, shop_id)
 
     with pytest.raises(sqlite3.IntegrityError):
-        kapcsolat.execute(
+        conn.execute(
             "INSERT INTO varians "
             "(id, szervezet_id, szolgaltatas_id, nev, idotartam_feluliras, letrehozva) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (_uuid(), szervezet_id, szolgaltatas_id, "piros", 10, _MOST),
+            (_uuid(), org_id, service_id, "piros", 10, _MOST),
         )
 
     # NULL viszont megengedett — ez a normál, elvárt eset.
-    kapcsolat.execute(
+    conn.execute(
         "INSERT INTO varians "
         "(id, szervezet_id, szolgaltatas_id, nev, idotartam_feluliras, letrehozva) "
         "VALUES (?, ?, ?, ?, NULL, ?)",
-        (_uuid(), szervezet_id, szolgaltatas_id, "piros", _MOST),
+        (_uuid(), org_id, service_id, "piros", _MOST),
     )
 
 
@@ -136,7 +134,7 @@ def test_varians_idotartam_feluliras_nem_tolthetho_ki(kapcsolat):
     ),
     strict=True,
 )
-def test_kereszt_szervezeti_hivatkozas_ma_nem_bukik_el(kapcsolat):
+def test_cross_org_reference_ma_not_bukik_el(conn):
     """A séma nem köti össze DB-szinten a `varians.szervezet_id`-t a
     hivatkozott `szolgaltatas.szervezet_id`-vel — ezt a
     migraciok/0001_alapsema.sql fejléc-kommentje is jelzi. Ez a teszt azt
@@ -146,18 +144,18 @@ def test_kereszt_szervezeti_hivatkozas_ma_nem_bukik_el(kapcsolat):
     a teszt átfordul, és a `strict=True` miatt ez hibaként jelzi, hogy az
     xfail jelölést el kell távolítani.
     """
-    a_szervezet = _szervezet_beszur(kapcsolat)
-    b_szervezet = _szervezet_beszur(kapcsolat)
+    org = _org_insert(conn)
+    b_org = _org_insert(conn)
 
-    b_bolt = _bolt_beszur(kapcsolat, b_szervezet, "B bolt")
-    b_szolgaltatas = _szolgaltatas_beszur(kapcsolat, b_szervezet, b_bolt)
+    b_shop = _shop_insert(conn, b_org, "B bolt")
+    b_service = _service_insert(conn, b_org, b_shop)
 
     # A varians A szervezet szervezet_id-jét kapja, de B szervezet
     # szolgáltatására hivatkozik — üzletileg értelmetlen kombináció.
     with pytest.raises(sqlite3.IntegrityError):
-        kapcsolat.execute(
+        conn.execute(
             "INSERT INTO varians "
             "(id, szervezet_id, szolgaltatas_id, nev, letrehozva) "
             "VALUES (?, ?, ?, ?, ?)",
-            (_uuid(), a_szervezet, b_szolgaltatas, "kereszt-szervezeti", _MOST),
+            (_uuid(), org, b_service, "kereszt-szervezeti", _MOST),
         )

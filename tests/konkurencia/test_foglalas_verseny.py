@@ -35,8 +35,8 @@ from pathlib import Path
 
 import pytest
 
-from mag.repo import foglalas_repo, migracio
-from mag.repo.foglalas_repo import Eredmeny
+from core.repo import foglalas_repo, migracio
+from core.repo.foglalas_repo import Result
 
 _MOST = "2026-08-15T10:00:00Z"
 
@@ -44,18 +44,18 @@ _MOST = "2026-08-15T10:00:00Z"
 # javasol; 30-at használunk — elég nagy ahhoz, hogy a busy_timeout-ot és a
 # WAL-viselkedést ténylegesen próbára tegye, elég kicsi ahhoz, hogy a teszt
 # CI-n is másodperceken belül lefusson.
-_SZALSZAM = 30
+_THREAD_COUNT = 30
 
 
 def _uuid() -> str:
     return uuid.uuid4().hex
 
 
-def _jovoben(perc: int = 5) -> str:
+def _jovoben(minute: int = 5) -> str:
     """Valódi 'most'-hoz képest a jövőben lévő ISO-8601 időpont — a hold
     `lejar > letrejott` CHECK-je a tényleges rendszerórát (most_iso())
     használja, nem a fix _MOST teszt-konstanst."""
-    return (datetime.now(UTC) + timedelta(minutes=perc)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return (datetime.now(UTC) + timedelta(minutes=minute)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 # --- törzsadat --------------------------------------------------------------
@@ -66,46 +66,46 @@ def _jovoben(perc: int = 5) -> str:
 # builder-t tartunk fenn ezen a rétegen.
 
 
-def _torzsadat_beszur(conn) -> dict[str, str]:
-    szervezet_id = _uuid()
+def _master_data_insert(conn) -> dict[str, str]:
+    org_id = _uuid()
     conn.execute(
         "INSERT INTO szervezet (id, nev, idozona, letrehozva) VALUES (?, ?, ?, ?)",
-        (szervezet_id, "Aprajafalva", "Europe/Budapest", _MOST),
+        (org_id, "Aprajafalva", "Europe/Budapest", _MOST),
     )
-    bolt_id = _uuid()
+    shop_id = _uuid()
     conn.execute(
         "INSERT INTO bolt (id, szervezet_id, nev, letrehozva) VALUES (?, ?, ?, ?)",
-        (bolt_id, szervezet_id, "Törpilla boltja", _MOST),
+        (shop_id, org_id, "Törpilla boltja", _MOST),
     )
-    pult_id = _uuid()
+    counter_id = _uuid()
     conn.execute(
         "INSERT INTO pult (id, szervezet_id, bolt_id, nev, letrehozva) VALUES (?, ?, ?, ?, ?)",
-        (pult_id, szervezet_id, bolt_id, "Pult 1", _MOST),
+        (counter_id, org_id, shop_id, "Pult 1", _MOST),
     )
-    alkalmazott_id = _uuid()
+    employee_id = _uuid()
     conn.execute(
         "INSERT INTO alkalmazott (id, szervezet_id, bolt_id, nev, letrehozva) "
         "VALUES (?, ?, ?, ?, ?)",
-        (alkalmazott_id, szervezet_id, bolt_id, "Törpilla", _MOST),
+        (employee_id, org_id, shop_id, "Törpilla", _MOST),
     )
-    szolgaltatas_id = _uuid()
+    service_id = _uuid()
     conn.execute(
         "INSERT INTO szolgaltatas "
         "(id, szervezet_id, bolt_id, nev, alap_idotartam_perc, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (szolgaltatas_id, szervezet_id, bolt_id, "kis petárda", 30, _MOST),
+        (service_id, org_id, shop_id, "kis petárda", 30, _MOST),
     )
     return {
-        "szervezet_id": szervezet_id,
-        "bolt_id": bolt_id,
-        "pult_id": pult_id,
-        "alkalmazott_id": alkalmazott_id,
-        "szolgaltatas_id": szolgaltatas_id,
+        "szervezet_id": org_id,
+        "bolt_id": shop_id,
+        "pult_id": counter_id,
+        "alkalmazott_id": employee_id,
+        "szolgaltatas_id": service_id,
     }
 
 
-def _muszak_beszur(conn, torzs: dict[str, str]) -> str:
-    muszak_id = _uuid()
+def _shift_insert(conn, master: dict[str, str]) -> str:
+    shift_id = _uuid()
     conn.execute(
         "INSERT INTO muszak "
         "(id, szervezet_id, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, "
@@ -113,12 +113,12 @@ def _muszak_beszur(conn, torzs: dict[str, str]) -> str:
         "foglalhato_arany, blokk_szabaly, allapot, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            muszak_id,
-            torzs["szervezet_id"],
-            torzs["bolt_id"],
-            torzs["pult_id"],
-            torzs["alkalmazott_id"],
-            torzs["szolgaltatas_id"],
+            shift_id,
+            master["szervezet_id"],
+            master["bolt_id"],
+            master["pult_id"],
+            master["alkalmazott_id"],
+            master["szolgaltatas_id"],
             "2026-08-18T08:00:00Z",
             "2026-08-18T16:00:00Z",
             30,
@@ -130,27 +130,27 @@ def _muszak_beszur(conn, torzs: dict[str, str]) -> str:
             _MOST,
         ),
     )
-    return muszak_id
+    return shift_id
 
 
-def _slot_beszur(
+def _slot_insert(
     conn,
-    torzs: dict[str, str],
-    muszak_id: str,
-    kezdet: str = "2026-08-18T08:00:00Z",
-    veg: str = "2026-08-18T08:30:00Z",
+    master: dict[str, str],
+    shift_id: str,
+    start: str = "2026-08-18T08:00:00Z",
+    end: str = "2026-08-18T08:30:00Z",
 ) -> str:
     slot_id = _uuid()
     conn.execute(
         "INSERT INTO slot (id, szervezet_id, muszak_id, kezdet, veg, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (slot_id, torzs["szervezet_id"], muszak_id, kezdet, veg, _MOST),
+        (slot_id, master["szervezet_id"], shift_id, start, end, _MOST),
     )
     return slot_id
 
 
 @pytest.fixture
-def db_utvonal(tmp_path) -> str:
+def db_path(tmp_path) -> str:
     """Fájlalapú SQLite adatbázis — NEM memóriában, mert a WAL/busy_timeout
     viselkedés csak fájlalapú adatbázison releváns (több valódi kapcsolat
     ugyanarra a fájlra, ahogy az éles rendszerben is történne)."""
@@ -158,17 +158,17 @@ def db_utvonal(tmp_path) -> str:
 
 
 @pytest.fixture
-def egy_slot(db_utvonal) -> str:
+def one_slot(db_path) -> str:
     """Migrál, és beszúr egy törzsadatot + egy műszakot + egy slotot.
     A visszaadott slot_id-re épül minden verseny-teszt. A beszúráshoz
     használt kapcsolatot azonnal bezárjuk — a versenyhelyzet-tesztek a
     saját, önálló kapcsolataikat nyitják meg."""
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+    conn = migracio.conn_nyitas(db_path)
     try:
         migracio.migral(conn)
-        torzs = _torzsadat_beszur(conn)
-        muszak_id = _muszak_beszur(conn, torzs)
-        slot_id = _slot_beszur(conn, torzs, muszak_id)
+        master = _master_data_insert(conn)
+        shift_id = _shift_insert(conn, master)
+        slot_id = _slot_insert(conn, master, shift_id)
         return slot_id
     finally:
         conn.close()
@@ -178,7 +178,7 @@ def egy_slot(db_utvonal) -> str:
 
 
 def _egyszerre_inditva(
-    feladatok: list[Callable[[], object]],
+    tasks: list[Callable[[], object]],
 ) -> tuple[list[object], list[BaseException]]:
     """`len(feladatok)` szálat indít, egy `threading.Barrier`-rel pontosan
     egyszerre engedve el őket a tényleges híváshoz — ez a determinisztikus
@@ -187,35 +187,35 @@ def _egyszerre_inditva(
     Minden feladat kivétele elkapva kerül vissza (nem propagálódik azonnal),
     hogy a hívó explicit ellenőrizhesse: a repo-rétegnek a versenyhelyzet
     egyetlen ágán sem szabadna kivételt dobnia."""
-    n = len(feladatok)
-    korlat = threading.Barrier(n)
-    eredmenyek: list[object] = [None] * n
-    hibak: list[BaseException] = []
-    hiba_zar = threading.Lock()
+    n = len(tasks)
+    barrier = threading.Barrier(n)
+    results: list[object] = [None] * n
+    errors: list[BaseException] = []
+    error_lock = threading.Lock()
 
-    def fuss(i: int, feladat: Callable[[], object]) -> None:
-        korlat.wait()
+    def run(i: int, task: Callable[[], object]) -> None:
+        barrier.wait()
         try:
-            eredmenyek[i] = feladat()
+            results[i] = task()
         except BaseException as exc:  # noqa: BLE001 - a teszt maga dönti el, mi számít hibának
-            with hiba_zar:
-                hibak.append(exc)
+            with error_lock:
+                errors.append(exc)
 
-    szalak = [threading.Thread(target=fuss, args=(i, f)) for i, f in enumerate(feladatok)]
-    for szal in szalak:
-        szal.start()
-    for szal in szalak:
-        szal.join(timeout=30)
-    meg_elo = [szal for szal in szalak if szal.is_alive()]
-    if meg_elo:
-        raise RuntimeError(f"{len(meg_elo)} szál nem fejeződött be 30 másodpercen belül")
-    return eredmenyek, hibak
+    threads = [threading.Thread(target=run, args=(i, f)) for i, f in enumerate(tasks)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    elo = [thread for thread in threads if thread.is_alive()]
+    if elo:
+        raise RuntimeError(f"{len(elo)} szál nem fejeződött be 30 másodpercen belül")
+    return results, errors
 
 
 # --- 1. Párhuzamos foglalás ugyanarra a slotra ------------------------------
 
 
-def test_parhuzamos_foglalas_pontosan_egy_sikeres(db_utvonal, egy_slot):
+def test_parhuzamos_booking_pontosan_one_success(db_path, one_slot):
     """N szál egyszerre foglalja ugyanazt a slotot, különböző
     idempotencia_kulccsal. Pontosan egynek szabad SIKERES-t kapnia, a
     többinek MEGELOZTEK-et — kivétel egyiknek sem, és a végén az
@@ -226,178 +226,176 @@ def test_parhuzamos_foglalas_pontosan_egy_sikeres(db_utvonal, egy_slot):
     (`check_same_thread`), ezért a kapcsolatnyitás nem történhet a fő
     szálon a worker-szálak indítása előtt."""
 
-    def _feladat(i: int) -> Eredmeny:
-        conn = migracio.kapcsolat_nyitas(db_utvonal)
+    def _task(i: int) -> Result:
+        conn = migracio.conn_nyitas(db_path)
         try:
-            return foglalas_repo.foglalas_letrehoz(
-                conn, egy_slot, "a" * 64, _uuid(), f"session-{i}"
-            )
+            return foglalas_repo.booking_create(conn, one_slot, "a" * 64, _uuid(), f"session-{i}")
         finally:
             conn.close()
 
-    feladatok = [(lambda i=i: _feladat(i)) for i in range(_SZALSZAM)]
-    eredmenyek, hibak = _egyszerre_inditva(feladatok)
+    tasks = [(lambda i=i: _task(i)) for i in range(_THREAD_COUNT)]
+    results, errors = _egyszerre_inditva(tasks)
 
-    assert hibak == [], f"a repo réteg kivételt dobott versenyhelyzetben: {hibak!r}"
-    assert len(eredmenyek) == _SZALSZAM
-    assert all(e in (Eredmeny.SIKERES, Eredmeny.MEGELOZTEK) for e in eredmenyek)
+    assert errors == [], f"a repo réteg kivételt dobott versenyhelyzetben: {errors!r}"
+    assert len(results) == _THREAD_COUNT
+    assert all(e in (Result.SUCCESS, Result.PREEMPTED) for e in results)
 
-    sikeresek = [e for e in eredmenyek if e is Eredmeny.SIKERES]
-    megelozottek = [e for e in eredmenyek if e is Eredmeny.MEGELOZTEK]
-    assert len(sikeresek) == 1, "pontosan egy szálnak kell nyernie — ez a dupla foglalás invariáns"
-    assert len(megelozottek) == _SZALSZAM - 1
+    successes = [e for e in results if e is Result.SUCCESS]
+    preceded = [e for e in results if e is Result.PREEMPTED]
+    assert len(successes) == 1, "pontosan egy szálnak kell nyernie — ez a dupla foglalás invariáns"
+    assert len(preceded) == _THREAD_COUNT - 1
 
-    ellenorzo = migracio.kapcsolat_nyitas(db_utvonal)
+    checker = migracio.conn_nyitas(db_path)
     try:
-        aktiv_szam = ellenorzo.execute(
+        active_count = checker.execute(
             "SELECT COUNT(*) FROM foglalas WHERE slot_id = ? AND allapot <> 'lemondva'",
-            (egy_slot,),
+            (one_slot,),
         ).fetchone()[0]
-        assert aktiv_szam == 1, "dupla foglalás történt — sérült a CLAUDE.md 1. invariánsa"
+        assert active_count == 1, "dupla foglalás történt — sérült a CLAUDE.md 1. invariánsa"
 
-        osszes_szam = ellenorzo.execute(
-            "SELECT COUNT(*) FROM foglalas WHERE slot_id = ?", (egy_slot,)
+        all_count = checker.execute(
+            "SELECT COUNT(*) FROM foglalas WHERE slot_id = ?", (one_slot,)
         ).fetchone()[0]
-        assert osszes_szam == 1, "nem várt extra foglalás-sor keletkezett a slotra"
+        assert all_count == 1, "nem várt extra foglalás-sor keletkezett a slotra"
     finally:
-        ellenorzo.close()
+        checker.close()
 
 
 # --- 2. Hold-verseny --------------------------------------------------------
 
 
-def test_parhuzamos_hold_pontosan_egy_sikeres(db_utvonal, egy_slot):
+def test_parhuzamos_hold_pontosan_one_success(db_path, one_slot):
     """N szál egyszerre próbál holdot tenni ugyanarra a slotra, különböző
     session_id-vel. Pontosan egynek SIKERES-t kell kapnia, a végén pontosan
     egy hold sor legyen a slotra."""
 
-    def _feladat(i: int) -> Eredmeny:
-        conn = migracio.kapcsolat_nyitas(db_utvonal)
+    def _task(i: int) -> Result:
+        conn = migracio.conn_nyitas(db_path)
         try:
-            return foglalas_repo.hold_letrehoz(conn, egy_slot, f"session-{i}", _jovoben())
+            return foglalas_repo.hold_create(conn, one_slot, f"session-{i}", _jovoben())
         finally:
             conn.close()
 
-    feladatok = [(lambda i=i: _feladat(i)) for i in range(_SZALSZAM)]
-    eredmenyek, hibak = _egyszerre_inditva(feladatok)
+    tasks = [(lambda i=i: _task(i)) for i in range(_THREAD_COUNT)]
+    results, errors = _egyszerre_inditva(tasks)
 
-    assert hibak == [], f"a repo réteg kivételt dobott versenyhelyzetben: {hibak!r}"
-    assert all(e in (Eredmeny.SIKERES, Eredmeny.MEGELOZTEK) for e in eredmenyek)
+    assert errors == [], f"a repo réteg kivételt dobott versenyhelyzetben: {errors!r}"
+    assert all(e in (Result.SUCCESS, Result.PREEMPTED) for e in results)
 
-    sikeresek = [e for e in eredmenyek if e is Eredmeny.SIKERES]
-    megelozottek = [e for e in eredmenyek if e is Eredmeny.MEGELOZTEK]
-    assert len(sikeresek) == 1, "pontosan egy szálnak kell holdot nyernie egy slotra"
-    assert len(megelozottek) == _SZALSZAM - 1
+    successes = [e for e in results if e is Result.SUCCESS]
+    preceded = [e for e in results if e is Result.PREEMPTED]
+    assert len(successes) == 1, "pontosan egy szálnak kell holdot nyernie egy slotra"
+    assert len(preceded) == _THREAD_COUNT - 1
 
-    ellenorzo = migracio.kapcsolat_nyitas(db_utvonal)
+    checker = migracio.conn_nyitas(db_path)
     try:
-        hold_szam = ellenorzo.execute(
-            "SELECT COUNT(*) FROM hold WHERE slot_id = ?", (egy_slot,)
+        hold_count = checker.execute(
+            "SELECT COUNT(*) FROM hold WHERE slot_id = ?", (one_slot,)
         ).fetchone()[0]
-        assert hold_szam == 1, "duplán holdolt slot — sérült a hold egyediségi garanciája"
+        assert hold_count == 1, "duplán holdolt slot — sérült a hold egyediségi garanciája"
     finally:
-        ellenorzo.close()
+        checker.close()
 
 
-def test_parhuzamos_hold_lejart_hold_utan_pontosan_egy_sikeres(db_utvonal, egy_slot):
+def test_parhuzamos_hold_lejart_hold_after_pontosan_one_success(db_path, one_slot):
     """Ha a slotra már ül egy LEJÁRT hold, két szál egyszerre próbál új
     holdot tenni rá — a hold_letrehoz a beszúrás előtt törli a lejárt
     holdot, ezért pontosan egy szálnak kell nyernie, nem egyiknek sem
     szabad MEGELOZTEK-et kapnia a régi (lejárt) sor miatt."""
-    elokeszito = migracio.kapcsolat_nyitas(db_utvonal)
+    preparer = migracio.conn_nyitas(db_path)
     try:
-        (szervezet_id,) = elokeszito.execute(
-            "SELECT szervezet_id FROM slot WHERE id = ?", (egy_slot,)
+        (org_id,) = preparer.execute(
+            "SELECT szervezet_id FROM slot WHERE id = ?", (one_slot,)
         ).fetchone()
-        elokeszito.execute(
+        preparer.execute(
             "INSERT INTO hold (id, szervezet_id, slot_id, session_id, letrejott, lejar) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 _uuid(),
-                szervezet_id,
-                egy_slot,
+                org_id,
+                one_slot,
                 "session-regi",
                 "2020-01-01T00:00:00Z",
                 "2020-01-01T00:00:01Z",
             ),
         )
     finally:
-        elokeszito.close()
+        preparer.close()
 
-    def _feladat(i: int) -> Eredmeny:
-        conn = migracio.kapcsolat_nyitas(db_utvonal)
+    def _task(i: int) -> Result:
+        conn = migracio.conn_nyitas(db_path)
         try:
-            return foglalas_repo.hold_letrehoz(conn, egy_slot, f"session-uj-{i}", _jovoben())
+            return foglalas_repo.hold_create(conn, one_slot, f"session-uj-{i}", _jovoben())
         finally:
             conn.close()
 
-    feladatok = [(lambda i=i: _feladat(i)) for i in range(2)]
-    eredmenyek, hibak = _egyszerre_inditva(feladatok)
+    tasks = [(lambda i=i: _task(i)) for i in range(2)]
+    results, errors = _egyszerre_inditva(tasks)
 
-    assert hibak == [], f"a repo réteg kivételt dobott versenyhelyzetben: {hibak!r}"
-    sikeresek = [e for e in eredmenyek if e is Eredmeny.SIKERES]
-    megelozottek = [e for e in eredmenyek if e is Eredmeny.MEGELOZTEK]
-    assert len(sikeresek) == 1, f"pontosan egy szálnak kell nyernie, kapott: {eredmenyek!r}"
-    assert len(megelozottek) == 1
+    assert errors == [], f"a repo réteg kivételt dobott versenyhelyzetben: {errors!r}"
+    successes = [e for e in results if e is Result.SUCCESS]
+    preceded = [e for e in results if e is Result.PREEMPTED]
+    assert len(successes) == 1, f"pontosan egy szálnak kell nyernie, kapott: {results!r}"
+    assert len(preceded) == 1
 
-    ellenorzo = migracio.kapcsolat_nyitas(db_utvonal)
+    checker = migracio.conn_nyitas(db_path)
     try:
-        sorok = ellenorzo.execute(
-            "SELECT session_id FROM hold WHERE slot_id = ?", (egy_slot,)
+        rows = checker.execute(
+            "SELECT session_id FROM hold WHERE slot_id = ?", (one_slot,)
         ).fetchall()
-        assert len(sorok) == 1, "a lejárt hold és/vagy a vesztes szál sora bent maradt"
-        assert sorok[0][0] != "session-regi", "a lejárt hold sora nem törlődött"
+        assert len(rows) == 1, "a lejárt hold és/vagy a vesztes szál sora bent maradt"
+        assert rows[0][0] != "session-regi", "a lejárt hold sora nem törlődött"
     finally:
-        ellenorzo.close()
+        checker.close()
 
 
 # --- 3. Idempotencia-ismétlés, párhuzamosan ---------------------------------
 
 
-def test_parhuzamos_idempotens_ismetles_mindegyik_sikeres(db_utvonal, egy_slot):
+def test_parhuzamos_idempotent_repetition_each_success(db_path, one_slot):
     """Ugyanaz az idempotencia_kulcs N szálból, párhuzamosan, ugyanarra a
     slotra: mindegyiknek SIKERES-t kell adnia (soha nem MEGELOZTEK, soha
     nem kivétel), és a végén pontosan egy foglalás-sor legyen."""
-    kozos_kulcs = _uuid()
+    common_key = _uuid()
 
-    def _feladat(i: int) -> Eredmeny:
-        conn = migracio.kapcsolat_nyitas(db_utvonal)
+    def _task(i: int) -> Result:
+        conn = migracio.conn_nyitas(db_path)
         try:
-            return foglalas_repo.foglalas_letrehoz(
-                conn, egy_slot, "a" * 64, kozos_kulcs, f"session-{i}"
+            return foglalas_repo.booking_create(
+                conn, one_slot, "a" * 64, common_key, f"session-{i}"
             )
         finally:
             conn.close()
 
-    feladatok = [(lambda i=i: _feladat(i)) for i in range(_SZALSZAM)]
-    eredmenyek, hibak = _egyszerre_inditva(feladatok)
+    tasks = [(lambda i=i: _task(i)) for i in range(_THREAD_COUNT)]
+    results, errors = _egyszerre_inditva(tasks)
 
-    assert hibak == [], f"a repo réteg kivételt dobott versenyhelyzetben: {hibak!r}"
-    assert eredmenyek == [Eredmeny.SIKERES] * _SZALSZAM, (
+    assert errors == [], f"a repo réteg kivételt dobott versenyhelyzetben: {errors!r}"
+    assert results == [Result.SUCCESS] * _THREAD_COUNT, (
         "az idempotens ismétlésnek MINDIG SIKERES-t kell adnia, sosem MEGELOZTEK-et — "
-        f"kapott eredmények: {eredmenyek!r}"
+        f"kapott eredmények: {results!r}"
     )
 
-    ellenorzo = migracio.kapcsolat_nyitas(db_utvonal)
+    checker = migracio.conn_nyitas(db_path)
     try:
-        osszes_szam = ellenorzo.execute(
-            "SELECT COUNT(*) FROM foglalas WHERE slot_id = ?", (egy_slot,)
+        all_count = checker.execute(
+            "SELECT COUNT(*) FROM foglalas WHERE slot_id = ?", (one_slot,)
         ).fetchone()[0]
-        assert osszes_szam == 1, "az idempotens ismétlés duplázott — elveszett/duplázott foglalás"
+        assert all_count == 1, "az idempotens ismétlés duplázott — elveszett/duplázott foglalás"
 
-        kulcs_szam = ellenorzo.execute(
+        key_count = checker.execute(
             "SELECT COUNT(DISTINCT idempotencia_kulcs) FROM foglalas WHERE slot_id = ?",
-            (egy_slot,),
+            (one_slot,),
         ).fetchone()[0]
-        assert kulcs_szam == 1
+        assert key_count == 1
     finally:
-        ellenorzo.close()
+        checker.close()
 
 
 # --- motor-hordozhatóság dokumentálása ---------------------------------------
 
 
-def test_migracio_ma_kizarolag_sqlite_ot_tamogat_dokumentalt_hiany():
+def test_migration_ma_only_sqlite_ot_tamogat_dokumentalt_hiany():
     """Ez a teszt NEM funkcionális elvárást bizonyít, hanem egy jelenlegi
     hiányt dokumentál, hogy ne merüljön feledésbe: a `db-hordozhatosag`
     skill és a CLAUDE.md szerint minden tesztnek SQLite-on ÉS Postgresen is
@@ -409,8 +407,8 @@ def test_migracio_ma_kizarolag_sqlite_ot_tamogat_dokumentalt_hiany():
     a megjegyzést törölni kell, és a fenti verseny-tesztek `db_utvonal`
     fixture-jét ki kell egészíteni egy Postgres-ághoz kötött kapcsolattal.
     """
-    forras = Path(migracio.__file__).read_text(encoding="utf-8")
-    assert "kizárólag SQLite-ot ismer" in forras, (
+    source = Path(migracio.__file__).read_text(encoding="utf-8")
+    assert "kizárólag SQLite-ot ismer" in source, (
         "a migracio.py leírása megváltozott — ha Postgres-támogatás került bele, "
         "a verseny-tesztek db_utvonal/kapcsolat fixture-jét ki kell egészíteni "
         "egy tényleges Postgres-ágra, hogy a 'teszt-mindketto' valóban két "

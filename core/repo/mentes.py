@@ -18,43 +18,43 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from mag.ido import most_iso
-from mag.repo.migracio import kapcsolat_nyitas
+from core.ido import most_iso
+from core.repo.migracio import conn_nyitas
 
 
-def pillanatkep_keszit(db_utvonal: str | Path, cel_utvonal: str | Path) -> Path:
+def snapshot_create(db_path: str | Path, target_path: str | Path) -> Path:
     """`VACUUM INTO` a `cel_utvonal`-ra. A cél nem létezhet előre — a
     `VACUUM INTO` maga is elutasítja a felülírást, ezt itt csak explicit
     hibaüzenettel ismételjük meg, hogy ne az SQLite nyers hibája jöjjön
     vissza."""
-    cel_utvonal = Path(cel_utvonal)
-    if cel_utvonal.exists():
-        raise FileExistsError(f"A pillanatkép célja már létezik: {cel_utvonal}")
-    cel_utvonal.parent.mkdir(parents=True, exist_ok=True)
+    target_path = Path(target_path)
+    if target_path.exists():
+        raise FileExistsError(f"A pillanatkép célja már létezik: {target_path}")
+    target_path.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = kapcsolat_nyitas(str(db_utvonal))
+    conn = conn_nyitas(str(db_path))
     try:
-        conn.execute("VACUUM INTO ?", (str(cel_utvonal),))
+        conn.execute("VACUUM INTO ?", (str(target_path),))
     finally:
         conn.close()
-    return cel_utvonal
+    return target_path
 
 
-def pillanatkep_nev(elotag: str = "aprajafalva") -> str:
+def snapshot_name(prefix: str = "aprajafalva") -> str:
     """`<előtag>-<ISO-8601 UTC időbélyeg, kettőspont nélkül>.db` —
     fájlnévbe kettőspont nem való, a formázás azt aláhúzásra cseréli."""
-    idobelyeg = most_iso().replace(":", "")
-    return f"{elotag}-{idobelyeg}.db"
+    timestamp = most_iso().replace(":", "")
+    return f"{prefix}-{timestamp}.db"
 
 
-def visszaallit(pillanatkep_utvonal: str | Path, cel_db_utvonal: str | Path) -> Path:
+def restore(snapshot_path: str | Path, target_db_path: str | Path) -> Path:
     """A pillanatképet egyszerű fájlmásolással állítja vissza — a
     `VACUUM INTO` már egy önmagában konzisztens, nem-WAL fájlt ad, nincs
     szükség speciális helyreállítási logikára vagy nyitott kapcsolatra."""
-    cel_db_utvonal = Path(cel_db_utvonal)
-    cel_db_utvonal.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(str(pillanatkep_utvonal), str(cel_db_utvonal))
-    return cel_db_utvonal
+    target_db_path = Path(target_db_path)
+    target_db_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(str(snapshot_path), str(target_db_path))
+    return target_db_path
 
 
 def _fo() -> int:
@@ -69,11 +69,11 @@ def _fo() -> int:
         )
         return 1
     if sys.argv[1] == "ment":
-        eredmeny = pillanatkep_keszit(sys.argv[2], sys.argv[3])
-        print(f"Pillanatkép kész: {eredmeny}")
+        result = snapshot_create(sys.argv[2], sys.argv[3])
+        print(f"Pillanatkép kész: {result}")
     else:
-        eredmeny = visszaallit(sys.argv[2], sys.argv[3])
-        print(f"Visszaállítva: {eredmeny}")
+        result = restore(sys.argv[2], sys.argv[3])
+        print(f"Visszaállítva: {result}")
     return 0
 
 

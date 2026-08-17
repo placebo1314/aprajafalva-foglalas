@@ -13,111 +13,107 @@ import sqlite3
 
 import pytest
 
-from mag.repo import foglalas_repo, mentes, migracio, muszak_repo, torzsadat_repo
+from core.repo import foglalas_repo, mentes, migracio, muszak_repo, torzsadat_repo
 
 
 @pytest.fixture
-def eredeti_db(tmp_path) -> str:
+def original_db(tmp_path) -> str:
     return str(tmp_path / "eredeti.db")
 
 
-def _foglalast_letrehoz(db_utvonal: str) -> dict:
+def _booking_create(db_path: str) -> dict:
     """Migrál, felvesz egy minimális törzsadatot, egy slotot, és egy
     aktív foglalást rajta. Visszaadja a legfontosabb azonosítókat."""
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+    conn = migracio.conn_nyitas(db_path)
     try:
         migracio.migral(conn)
-        szervezet_id = torzsadat_repo.szervezet_letrehoz(
-            conn, nev="Aprajafalva", idozona="Europe/Budapest"
+        org_id = torzsadat_repo.org_create(conn, name="Aprajafalva", timezone="Europe/Budapest")
+        shop_id = torzsadat_repo.shop_create(conn, org_id=org_id, name="Törpilla")
+        counter_id = torzsadat_repo.counter_create(
+            conn, org_id=org_id, shop_id=shop_id, name="Pult 1"
         )
-        bolt_id = torzsadat_repo.bolt_letrehoz(conn, szervezet_id=szervezet_id, nev="Törpilla")
-        pult_id = torzsadat_repo.pult_letrehoz(
-            conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Pult 1"
+        employee_id = torzsadat_repo.employee_create(
+            conn, org_id=org_id, shop_id=shop_id, name="Hulk Hugan"
         )
-        alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
-            conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Hulk Hugan"
-        )
-        szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+        service_id = torzsadat_repo.service_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=bolt_id,
-            nev="boldogság",
-            alap_idotartam_perc=15,
+            org_id=org_id,
+            shop_id=shop_id,
+            name="boldogság",
+            alap_duration_minute=15,
         )
-        muszak_id = muszak_repo.muszak_letrehoz(
+        shift_id = muszak_repo.shift_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=bolt_id,
-            pult_id=pult_id,
-            alkalmazott_id=alkalmazott_id,
-            szolgaltatas_id=szolgaltatas_id,
-            kezdet="2027-01-05T08:00:00Z",
-            veg="2027-01-05T08:15:00Z",
-            idotartam_perc=15,
-            puffer_utana_perc=0,
-            min_racs_perc=15,
-            foglalhato_arany=1.0,
-            blokk_szabaly={"szunetek": []},
+            org_id=org_id,
+            shop_id=shop_id,
+            counter_id=counter_id,
+            employee_id=employee_id,
+            service_id=service_id,
+            start="2027-01-05T08:00:00Z",
+            end="2027-01-05T08:15:00Z",
+            duration_minute=15,
+            buffer_after_minute=0,
+            min_grid_minute=15,
+            bookable_ratio=1.0,
+            block_rule={"szunetek": []},
         )
-        muszak = muszak_repo.muszak_betoltese(conn, muszak_id)
-        from mag.slot import generator
-        from mag.slot.blokk import FixBlokk
+        shift = muszak_repo.shift_load(conn, shift_id)
+        from core.slot import generator
+        from core.slot.blokk import FixedBlock
 
-        eredmeny = generator.general(muszak, FixBlokk())
-        muszak_repo.blokkok_slotok_mentese(
+        result = generator.generate(shift, FixedBlock())
+        muszak_repo.blocks_slots_save(
             conn,
-            muszak_id=muszak_id,
-            szervezet_id=szervezet_id,
-            blokkok=eredmeny.blokkok,
-            slotok=eredmeny.slotok,
+            shift_id=shift_id,
+            org_id=org_id,
+            blocks=result.blocks,
+            slots=result.slots,
         )
-        (slot_id,) = conn.execute(
-            "SELECT id FROM slot WHERE muszak_id = ?", (muszak_id,)
-        ).fetchone()
+        (slot_id,) = conn.execute("SELECT id FROM slot WHERE muszak_id = ?", (shift_id,)).fetchone()
 
-        foglalas_eredmeny = foglalas_repo.foglalas_letrehoz(
+        booking_result = foglalas_repo.booking_create(
             conn, slot_id, "a" * 64, "idem-mentes-teszt", "session-1"
         )
-        assert foglalas_eredmeny is foglalas_repo.Eredmeny.SIKERES
+        assert booking_result is foglalas_repo.Result.SUCCESS
 
-        foglalas = foglalas_repo.foglalas_lekerdezes_idempotencia_szerint(conn, "idem-mentes-teszt")
+        booking = foglalas_repo.booking_query_idempotency_by(conn, "idem-mentes-teszt")
     finally:
         conn.close()
 
     return {
         "slot_id": slot_id,
-        "foglalas_id": foglalas["id"],
-        "foglalasi_kod": foglalas["foglalasi_kod"],
+        "foglalas_id": booking["id"],
+        "foglalasi_kod": booking["foglalasi_kod"],
     }
 
 
-def test_mentes_torles_visszaallitas_a_foglalas_megvan(tmp_path, eredeti_db):
-    adat = _foglalast_letrehoz(eredeti_db)
+def test_mentes_delete_restore_booking_exists(tmp_path, original_db):
+    data = _booking_create(original_db)
 
-    pillanatkep_utvonal = tmp_path / "pillanatkep.db"
-    mentes.pillanatkep_keszit(eredeti_db, pillanatkep_utvonal)
-    assert pillanatkep_utvonal.exists()
+    snapshot_path = tmp_path / "pillanatkep.db"
+    mentes.snapshot_create(original_db, snapshot_path)
+    assert snapshot_path.exists()
 
     # "Katasztrófa": az eredeti adatbázis (és a WAL-melléktermékei) eltűnnek.
-    os.remove(eredeti_db)
-    for melleklet in (eredeti_db + "-wal", eredeti_db + "-shm"):
-        if os.path.exists(melleklet):
-            os.remove(melleklet)
-    assert not os.path.exists(eredeti_db)
+    os.remove(original_db)
+    for attachment in (original_db + "-wal", original_db + "-shm"):
+        if os.path.exists(attachment):
+            os.remove(attachment)
+    assert not os.path.exists(original_db)
 
-    visszaallitott_db = tmp_path / "visszaallitott.db"
-    mentes.visszaallit(pillanatkep_utvonal, visszaallitott_db)
+    restored_db = tmp_path / "visszaallitott.db"
+    mentes.restore(snapshot_path, restored_db)
 
-    conn = sqlite3.connect(str(visszaallitott_db))
+    conn = sqlite3.connect(str(restored_db))
     try:
-        sor = conn.execute(
+        row = conn.execute(
             "SELECT id, slot_id, foglalasi_kod, allapot FROM foglalas WHERE id = ?",
-            (adat["foglalas_id"],),
+            (data["foglalas_id"],),
         ).fetchone()
-        assert sor is not None, "a foglalás nem élte túl a mentés-visszaállítás kört"
-        assert sor[1] == adat["slot_id"]
-        assert sor[2] == adat["foglalasi_kod"]
-        assert sor[3] == "aktiv"
+        assert row is not None, "a foglalás nem élte túl a mentés-visszaállítás kört"
+        assert row[1] == data["slot_id"]
+        assert row[2] == data["foglalasi_kod"]
+        assert row[3] == "aktiv"
 
         # A parciális UNIQUE index a visszaállított DB-ben is érvényben
         # van — nem csak az adat, a kényszer is túléli a kört.
@@ -129,16 +125,16 @@ def test_mentes_torles_visszaallitas_a_foglalas_megvan(tmp_path, eredeti_db):
                 "SELECT '1' || substr(id, 2), szervezet_id, slot_id, vasarlo_kulcs, "
                 "kulcs_verzio, 'masik-kulcs', 'MASIKKOD', allapot, letrehozva "
                 "FROM foglalas WHERE id = ?",
-                (adat["foglalas_id"],),
+                (data["foglalas_id"],),
             )
     finally:
         conn.close()
 
 
-def test_pillanatkep_nem_irja_felul_a_meglevo_celt(tmp_path, eredeti_db):
-    _foglalast_letrehoz(eredeti_db)
-    cel = tmp_path / "pillanatkep.db"
-    mentes.pillanatkep_keszit(eredeti_db, cel)
+def test_snapshot_not_writes_felul_existing_target(tmp_path, original_db):
+    _booking_create(original_db)
+    target = tmp_path / "pillanatkep.db"
+    mentes.snapshot_create(original_db, target)
 
     with pytest.raises(FileExistsError):
-        mentes.pillanatkep_keszit(eredeti_db, cel)
+        mentes.snapshot_create(original_db, target)

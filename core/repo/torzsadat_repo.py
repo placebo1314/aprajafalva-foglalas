@@ -11,155 +11,153 @@ from __future__ import annotations
 
 import sqlite3
 
-from mag.azonosito import uj_uuid
-from mag.ido import most_iso
+from core.azonosito import new_uuid
+from core.ido import most_iso
 
 
-def szervezet_letrehoz(
-    conn: sqlite3.Connection, *, nev: str, idozona: str, id_: str | None = None
+def org_create(
+    conn: sqlite3.Connection, *, name: str, timezone: str, id_: str | None = None
 ) -> str:
-    szervezet_id = id_ or uj_uuid()
+    org_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO szervezet (id, nev, idozona, letrehozva) VALUES (?, ?, ?, ?)",
-        (szervezet_id, nev, idozona, most_iso()),
+        (org_id, name, timezone, most_iso()),
     )
-    return szervezet_id
+    return org_id
 
 
-def bolt_letrehoz(
-    conn: sqlite3.Connection, *, szervezet_id: str, nev: str, id_: str | None = None
-) -> str:
-    bolt_id = id_ or uj_uuid()
+def shop_create(conn: sqlite3.Connection, *, org_id: str, name: str, id_: str | None = None) -> str:
+    shop_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO bolt (id, szervezet_id, nev, letrehozva) VALUES (?, ?, ?, ?)",
-        (bolt_id, szervezet_id, nev, most_iso()),
+        (shop_id, org_id, name, most_iso()),
     )
-    return bolt_id
+    return shop_id
 
 
-def pult_letrehoz(
+def counter_create(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str,
-    nev: str,
+    org_id: str,
+    shop_id: str,
+    name: str,
     id_: str | None = None,
 ) -> str:
-    pult_id = id_ or uj_uuid()
+    counter_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO pult (id, szervezet_id, bolt_id, nev, letrehozva) VALUES (?, ?, ?, ?, ?)",
-        (pult_id, szervezet_id, bolt_id, nev, most_iso()),
+        (counter_id, org_id, shop_id, name, most_iso()),
     )
-    return pult_id
+    return counter_id
 
 
-def alkalmazott_letrehoz(
+def employee_create(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str,
-    nev: str,
+    org_id: str,
+    shop_id: str,
+    name: str,
     id_: str | None = None,
 ) -> str:
-    alkalmazott_id = id_ or uj_uuid()
+    employee_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO alkalmazott (id, szervezet_id, bolt_id, nev, letrehozva) "
         "VALUES (?, ?, ?, ?, ?)",
-        (alkalmazott_id, szervezet_id, bolt_id, nev, most_iso()),
+        (employee_id, org_id, shop_id, name, most_iso()),
     )
-    return alkalmazott_id
+    return employee_id
 
 
-def szolgaltatas_letrehoz(
+def service_create(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str,
-    nev: str,
-    alap_idotartam_perc: int,
+    org_id: str,
+    shop_id: str,
+    name: str,
+    alap_duration_minute: int,
     id_: str | None = None,
 ) -> str:
-    szolgaltatas_id = id_ or uj_uuid()
+    service_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO szolgaltatas "
         "(id, szervezet_id, bolt_id, nev, alap_idotartam_perc, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (szolgaltatas_id, szervezet_id, bolt_id, nev, alap_idotartam_perc, most_iso()),
+        (service_id, org_id, shop_id, name, alap_duration_minute, most_iso()),
     )
-    return szolgaltatas_id
+    return service_id
 
 
-def szervezetek_lekerdezese(conn: sqlite3.Connection) -> list[dict]:
+def orgs_list(conn: sqlite3.Connection) -> list[dict]:
     """Az összes szervezet, névre rendezve — az admin felület
     (`felulet/admin/`) induláskori szervezet-választójának."""
-    sorok = conn.execute("SELECT id, nev FROM szervezet ORDER BY nev").fetchall()
-    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+    rows = conn.execute("SELECT id, nev FROM szervezet ORDER BY nev").fetchall()
+    return [{"id": row[0], "nev": row[1]} for row in rows]
 
 
-def boltok_lekerdezese(conn: sqlite3.Connection, *, szervezet_id: str) -> list[dict]:
+def shops_list(conn: sqlite3.Connection, *, org_id: str) -> list[dict]:
     """Egy szervezet boltjai, névre rendezve — az admin felület (`felulet/admin/`)
     bolt-választójának való listázás."""
-    sorok = conn.execute(
-        "SELECT id, nev FROM bolt WHERE szervezet_id = ? ORDER BY nev", (szervezet_id,)
+    rows = conn.execute(
+        "SELECT id, nev FROM bolt WHERE szervezet_id = ? ORDER BY nev", (org_id,)
     ).fetchall()
-    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+    return [{"id": row[0], "nev": row[1]} for row in rows]
 
 
-def pultok_lekerdezese(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
+def counters_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
     """Egy bolt pultjai, névre rendezve."""
-    sorok = conn.execute(
-        "SELECT id, nev FROM pult WHERE bolt_id = ? ORDER BY nev", (bolt_id,)
+    rows = conn.execute(
+        "SELECT id, nev FROM pult WHERE bolt_id = ? ORDER BY nev", (shop_id,)
     ).fetchall()
-    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+    return [{"id": row[0], "nev": row[1]} for row in rows]
 
 
-def alkalmazottak_lekerdezese(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
+def employees_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
     """Egy bolt alkalmazottai, névre rendezve."""
-    sorok = conn.execute(
-        "SELECT id, nev FROM alkalmazott WHERE bolt_id = ? ORDER BY nev", (bolt_id,)
+    rows = conn.execute(
+        "SELECT id, nev FROM alkalmazott WHERE bolt_id = ? ORDER BY nev", (shop_id,)
     ).fetchall()
-    return [{"id": sor[0], "nev": sor[1]} for sor in sorok]
+    return [{"id": row[0], "nev": row[1]} for row in rows]
 
 
-def szolgaltatasok_lekerdezese(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
+def services_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
     """Egy bolt szolgáltatásai, névre rendezve."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT id, nev, alap_idotartam_perc FROM szolgaltatas WHERE bolt_id = ? ORDER BY nev",
-        (bolt_id,),
+        (shop_id,),
     ).fetchall()
-    return [{"id": sor[0], "nev": sor[1], "alap_idotartam_perc": sor[2]} for sor in sorok]
+    return [{"id": row[0], "nev": row[1], "alap_idotartam_perc": row[2]} for row in rows]
 
 
-def kivetel_nap_letrehoz(
+def exception_day_create(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str | None,
-    datum: str,
-    indok: str,
+    org_id: str,
+    shop_id: str | None,
+    date: str,
+    reason: str,
     id_: str | None = None,
 ) -> str:
-    kivetel_id = id_ or uj_uuid()
+    exception_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO kivetel_nap (id, szervezet_id, bolt_id, datum, indok, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?)",
-        (kivetel_id, szervezet_id, bolt_id, datum, indok, most_iso()),
+        (exception_id, org_id, shop_id, date, reason, most_iso()),
     )
-    return kivetel_id
+    return exception_id
 
 
-def kivetel_napok_reszletesen_lekerdezese(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+def exception_days_in_detail_list(
+    conn: sqlite3.Connection, *, org_id: str, shop_id: str | None = None
 ) -> list[dict]:
     """A `kivetel_napok_lekerdezese` (muszak_repo.py) csak a dátumok
     halmazát adja (a generátornak csak az kell) — ez itt a teljes sort
     adja vissza (id, indok is), az admin felület listázásához."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT id, bolt_id, datum, indok FROM kivetel_nap "
         "WHERE szervezet_id = ? AND (bolt_id IS NULL OR bolt_id = ?) ORDER BY datum",
-        (szervezet_id, bolt_id),
+        (org_id, shop_id),
     ).fetchall()
-    return [{"id": sor[0], "bolt_id": sor[1], "datum": sor[2], "indok": sor[3]} for sor in sorok]
+    return [{"id": row[0], "bolt_id": row[1], "datum": row[2], "indok": row[3]} for row in rows]
 
 
 # --- szerkesztés (nev, ill. szolgaltatasnal alap_idotartam_perc is) ------
@@ -170,22 +168,22 @@ def kivetel_napok_reszletesen_lekerdezese(
 # és valószínűleg ADR-t igényelne, nem ide tartozik.
 
 
-def bolt_szerkesztese(conn: sqlite3.Connection, *, bolt_id: str, nev: str) -> None:
-    conn.execute("UPDATE bolt SET nev = ? WHERE id = ?", (nev, bolt_id))
+def shop_update(conn: sqlite3.Connection, *, shop_id: str, name: str) -> None:
+    conn.execute("UPDATE bolt SET nev = ? WHERE id = ?", (name, shop_id))
 
 
-def pult_szerkesztese(conn: sqlite3.Connection, *, pult_id: str, nev: str) -> None:
-    conn.execute("UPDATE pult SET nev = ? WHERE id = ?", (nev, pult_id))
+def counter_update(conn: sqlite3.Connection, *, counter_id: str, name: str) -> None:
+    conn.execute("UPDATE pult SET nev = ? WHERE id = ?", (name, counter_id))
 
 
-def alkalmazott_szerkesztese(conn: sqlite3.Connection, *, alkalmazott_id: str, nev: str) -> None:
-    conn.execute("UPDATE alkalmazott SET nev = ? WHERE id = ?", (nev, alkalmazott_id))
+def employee_update(conn: sqlite3.Connection, *, employee_id: str, name: str) -> None:
+    conn.execute("UPDATE alkalmazott SET nev = ? WHERE id = ?", (name, employee_id))
 
 
-def szolgaltatas_szerkesztese(
-    conn: sqlite3.Connection, *, szolgaltatas_id: str, nev: str, alap_idotartam_perc: int
+def service_update(
+    conn: sqlite3.Connection, *, service_id: str, name: str, alap_duration_minute: int
 ) -> None:
     conn.execute(
         "UPDATE szolgaltatas SET nev = ?, alap_idotartam_perc = ? WHERE id = ?",
-        (nev, alap_idotartam_perc, szolgaltatas_id),
+        (name, alap_duration_minute, service_id),
     )

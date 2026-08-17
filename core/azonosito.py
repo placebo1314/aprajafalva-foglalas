@@ -10,6 +10,6 @@ from __future__ import annotations
 import uuid
 
 
-def uj_uuid() -> str:
+def new_uuid() -> str:
     """32 karakteres hex UUID, a `length(id) = 32` CHECK-eknek megfelelően."""
     return uuid.uuid4().hex

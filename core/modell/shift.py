@@ -16,46 +16,46 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class Muszak:
+class Shift:
     """A generáláshoz szükséges műszak-mezők — a snapshot eredménye
     (docs/domain.md, "Snapshot")."""
 
     id: str
-    szervezet_id: str
-    kezdet: str  # ISO-8601 UTC
-    veg: str  # ISO-8601 UTC
-    idotartam_perc: int
-    puffer_utana_perc: int
-    min_racs_perc: int
-    foglalhato_arany: float
-    blokk_szabaly: dict = field(default_factory=dict)
+    org_id: str
+    start: str  # ISO-8601 UTC
+    end: str  # ISO-8601 UTC
+    duration_minute: int
+    buffer_after_minute: int
+    min_grid_minute: int
+    bookable_ratio: float
+    block_rule: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
-class Blokk:
+class Block:
     """Egy `muszak_blokk` sor jövőbeli tartalma — még id és letrehozva
     nélkül, azokat a perzisztáló repo-függvény adja hozzá."""
 
     tipus: str  # 'szunet' | 'ebed' | 'szabad_sav'
-    kezdet: str
-    veg: str
-    rogzitett: bool
-    beszamit_kvotaba: bool
+    start: str
+    end: str
+    fixed: bool
+    counts_toward_into_quota: bool
 
-    def hossz_perc(self) -> int:
-        from mag.slot._idomatek import perc_kulonbseg
+    def length_minute(self) -> int:
+        from core.slot._idomatek import minute_difference
 
-        return perc_kulonbseg(self.kezdet, self.veg)
+        return minute_difference(self.start, self.end)
 
 
 @dataclass(frozen=True)
 class Slot:
     """Egy `slot` sor jövőbeli tartalma — id és letrehozva nélkül."""
 
-    kezdet: str
-    veg: str
+    start: str
+    end: str
 
-    def hossz_perc(self) -> int:
-        from mag.slot._idomatek import perc_kulonbseg
+    def length_minute(self) -> int:
+        from core.slot._idomatek import minute_difference
 
-        return perc_kulonbseg(self.kezdet, self.veg)
+        return minute_difference(self.start, self.end)

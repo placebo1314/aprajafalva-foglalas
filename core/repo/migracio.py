@@ -19,99 +19,99 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-from mag.ido import most_iso
+from core.ido import most_iso
 
-GYOKER = Path(__file__).resolve().parents[2]
-MIGRACIOK_KONYVTAR = GYOKER / "migraciok"
+ROOT = Path(__file__).resolve().parents[2]
+MIGRATIONS_DIRECTORY = ROOT / "migrations"
 
-_FAJLNEV_MINTA = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
-_UP_MINTA = re.compile(r"^--\s*up\s*$", re.MULTILINE | re.IGNORECASE)
-_DOWN_MINTA = re.compile(r"^--\s*down\s*$", re.MULTILINE | re.IGNORECASE)
+_FILENAME_PATTERN = re.compile(r"^(\d{4})_[a-z0-9_]+\.sql$")
+_UP_PATTERN = re.compile(r"^--\s*up\s*$", re.MULTILINE | re.IGNORECASE)
+_DOWN_PATTERN = re.compile(r"^--\s*down\s*$", re.MULTILINE | re.IGNORECASE)
 
 
-class MigracioHiba(RuntimeError):
+class MigrationError(RuntimeError):
     """Migrációs fájl formátuma vagy futtatása hibás."""
 
 
 @dataclass(frozen=True)
-class Migracio:
-    sorszam: str
-    nev: str
-    fajl: Path
+class Migration:
+    seq: str
+    name: str
+    file: Path
     up_sql: str
     down_sql: str
 
 
-def kapcsolat_nyitas(db_utvonal: str) -> sqlite3.Connection:
+def conn_nyitas(db_path: str) -> sqlite3.Connection:
     """Kapcsolatot nyit, és beállítja a kötelező pragmákat.
 
     `isolation_level=None`: a sqlite3 modul nem nyit és nem zár tranzakciót
     magától — a `BEGIN IMMEDIATE` / `COMMIT` / `ROLLBACK` mindig explicit.
     """
-    conn = sqlite3.connect(db_utvonal, isolation_level=None)
+    conn = sqlite3.connect(db_path, isolation_level=None)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 
-def _migraciok_beolvasasa() -> list[Migracio]:
-    migraciok: list[Migracio] = []
-    for fajl in sorted(MIGRACIOK_KONYVTAR.glob("*.sql")):
-        illeszkedes = _FAJLNEV_MINTA.match(fajl.name)
+def _migrations_read() -> list[Migration]:
+    migrations: list[Migration] = []
+    for file in sorted(MIGRATIONS_DIRECTORY.glob("*.sql")):
+        illeszkedes = _FILENAME_PATTERN.match(file.name)
         if not illeszkedes:
-            raise MigracioHiba(
-                f"Érvénytelen migrációs fájlnév: {fajl.name} (elvárt minta: 0001_nev.sql)"
+            raise MigrationError(
+                f"Érvénytelen migrációs fájlnév: {file.name} (elvárt minta: 0001_nev.sql)"
             )
-        sorszam = illeszkedes.group(1)
-        up_sql, down_sql = _szakaszokra_bontas(fajl)
-        migraciok.append(Migracio(sorszam, fajl.stem, fajl, up_sql, down_sql))
+        seq = illeszkedes.group(1)
+        up_sql, down_sql = _into_segments_split(file)
+        migrations.append(Migration(seq, file.stem, file, up_sql, down_sql))
 
-    latott: set[str] = set()
-    for m in migraciok:
-        if m.sorszam in latott:
-            raise MigracioHiba(f"Duplikált migrációs sorszám: {m.sorszam}")
-        latott.add(m.sorszam)
-    return migraciok
+    seen: set[str] = set()
+    for m in migrations:
+        if m.seq in seen:
+            raise MigrationError(f"Duplikált migrációs sorszám: {m.seq}")
+        seen.add(m.seq)
+    return migrations
 
 
-def _szakaszokra_bontas(fajl: Path) -> tuple[str, str]:
-    szoveg = fajl.read_text(encoding="utf-8")
-    up_illeszkedes = _UP_MINTA.search(szoveg)
-    down_illeszkedes = _DOWN_MINTA.search(szoveg)
-    if not up_illeszkedes or not down_illeszkedes:
-        raise MigracioHiba(f"{fajl.name}: hiányzik a '-- up' vagy '-- down' szakaszjelölő")
-    if down_illeszkedes.start() < up_illeszkedes.start():
-        raise MigracioHiba(f"{fajl.name}: a '-- down' a '-- up' előtt szerepel")
+def _into_segments_split(file: Path) -> tuple[str, str]:
+    szoveg = file.read_text(encoding="utf-8")
+    up_match = _UP_PATTERN.search(szoveg)
+    down_match = _DOWN_PATTERN.search(szoveg)
+    if not up_match or not down_match:
+        raise MigrationError(f"{file.name}: hiányzik a '-- up' vagy '-- down' szakaszjelölő")
+    if down_match.start() < up_match.start():
+        raise MigrationError(f"{file.name}: a '-- down' a '-- up' előtt szerepel")
 
-    up_sql = szoveg[up_illeszkedes.end() : down_illeszkedes.start()].strip()
-    down_sql = szoveg[down_illeszkedes.end() :].strip()
+    up_sql = szoveg[up_match.end() : down_match.start()].strip()
+    down_sql = szoveg[down_match.end() :].strip()
     if not up_sql:
-        raise MigracioHiba(f"{fajl.name}: üres 'up' szakasz")
+        raise MigrationError(f"{file.name}: üres 'up' szakasz")
     if not down_sql:
-        raise MigracioHiba(f"{fajl.name}: üres 'down' szakasz — a down kötelező")
+        raise MigrationError(f"{file.name}: üres 'down' szakasz — a down kötelező")
     return up_sql, down_sql
 
 
-def _allitasokra_bontas(sql: str) -> list[str]:
+def _into_statements_split(sql: str) -> list[str]:
     """SQL szöveget önálló utasításokra bont, sztringen/kommenten belüli
     pontosvesszőt figyelmen kívül hagyva."""
-    allitasok: list[str] = []
-    puffer = ""
-    for sor in sql.splitlines(keepends=True):
-        puffer += sor
-        if sqlite3.complete_statement(puffer):
-            csonkitott = puffer.strip()
-            if csonkitott:
-                allitasok.append(csonkitott)
-            puffer = ""
-    maradek = puffer.strip()
+    statements: list[str] = []
+    buffer = ""
+    for row in sql.splitlines(keepends=True):
+        buffer += row
+        if sqlite3.complete_statement(buffer):
+            truncated = buffer.strip()
+            if truncated:
+                statements.append(truncated)
+            buffer = ""
+    maradek = buffer.strip()
     if maradek:
-        raise MigracioHiba(f"Befejezetlen SQL utasítás a szakasz végén: {maradek!r}")
-    return allitasok
+        raise MigrationError(f"Befejezetlen SQL utasítás a szakasz végén: {maradek!r}")
+    return statements
 
 
-def _sema_verzio_biztositasa(conn: sqlite3.Connection) -> None:
+def _schema_version_ensure(conn: sqlite3.Connection) -> None:
     """A `sema_verzio` a migrációs rendszer saját nyilvántartása, nem
     domain-tábla — ezért nem migrációs fájlból jön, hanem itt, közvetlenül.
     Ez tudatos kivétel a "kézi sémamódosítás soha" elv alól (CLAUDE.md):
@@ -132,9 +132,9 @@ def _sema_verzio_biztositasa(conn: sqlite3.Connection) -> None:
     )
 
 
-def _lefutott_sorszamok(conn: sqlite3.Connection) -> set[str]:
-    _sema_verzio_biztositasa(conn)
-    return {sor[0] for sor in conn.execute("SELECT sorszam FROM sema_verzio")}
+def _ran_seqs(conn: sqlite3.Connection) -> set[str]:
+    _schema_version_ensure(conn)
+    return {row[0] for row in conn.execute("SELECT sorszam FROM sema_verzio")}
 
 
 def migral(conn: sqlite3.Connection) -> list[str]:
@@ -144,57 +144,57 @@ def migral(conn: sqlite3.Connection) -> list[str]:
     lefut és bekerül a `sema_verzio`-ba, vagy hiba esetén minden változása
     visszagördül. Visszaadja a most lefuttatott migrációk sorszámát.
     """
-    migraciok = _migraciok_beolvasasa()
-    lefutott = _lefutott_sorszamok(conn)
-    vegrehajtott: list[str] = []
-    for m in migraciok:
-        if m.sorszam in lefutott:
+    migrations = _migrations_read()
+    ran = _ran_seqs(conn)
+    executed: list[str] = []
+    for m in migrations:
+        if m.seq in ran:
             continue
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for allitas in _allitasokra_bontas(m.up_sql):
-                conn.execute(allitas)
+            for statement in _into_statements_split(m.up_sql):
+                conn.execute(statement)
             conn.execute(
                 "INSERT INTO sema_verzio (sorszam, nev, lefutott) VALUES (?, ?, ?)",
-                (m.sorszam, m.nev, most_iso()),
+                (m.seq, m.name, most_iso()),
             )
         except Exception:
             conn.execute("ROLLBACK")
             raise
         else:
             conn.execute("COMMIT")
-            vegrehajtott.append(m.sorszam)
-    return vegrehajtott
+            executed.append(m.seq)
+    return executed
 
 
-def visszagorget(conn: sqlite3.Connection, sorszamig: str | None = None) -> list[str]:
+def rollback(conn: sqlite3.Connection, up_to_seq: str | None = None) -> list[str]:
     """Visszagörgeti a lefutott migrációkat fordított sorrendben.
 
     `sorszamig` megadásakor csak addig görget vissza (azt a migrációt már
     nem vonja vissza); ha `None`, mindent visszagörget. Visszaadja a most
     visszagörgetett migrációk sorszámát, végrehajtási sorrendben.
     """
-    migraciok = {m.sorszam: m for m in _migraciok_beolvasasa()}
-    lefutott = sorted(_lefutott_sorszamok(conn), reverse=True)
-    visszagorgetett: list[str] = []
-    for sorszam in lefutott:
-        if sorszamig is not None and sorszam <= sorszamig:
+    migrations = {m.seq: m for m in _migrations_read()}
+    ran = sorted(_ran_seqs(conn), reverse=True)
+    rolled_back: list[str] = []
+    for seq in ran:
+        if up_to_seq is not None and seq <= up_to_seq:
             break
-        m = migraciok.get(sorszam)
+        m = migrations.get(seq)
         if m is None:
-            raise MigracioHiba(f"Lefutott migráció fájlja hiányzik a migraciok/-ból: {sorszam}")
+            raise MigrationError(f"Lefutott migráció fájlja hiányzik a migraciok/-ból: {seq}")
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for allitas in _allitasokra_bontas(m.down_sql):
-                conn.execute(allitas)
-            conn.execute("DELETE FROM sema_verzio WHERE sorszam = ?", (sorszam,))
+            for statement in _into_statements_split(m.down_sql):
+                conn.execute(statement)
+            conn.execute("DELETE FROM sema_verzio WHERE sorszam = ?", (seq,))
         except Exception:
             conn.execute("ROLLBACK")
             raise
         else:
             conn.execute("COMMIT")
-            visszagorgetett.append(sorszam)
-    return visszagorgetett
+            rolled_back.append(seq)
+    return rolled_back
 
 
 def _fo() -> None:
@@ -209,16 +209,16 @@ def _fo() -> None:
         print("Használat: python -m mag.repo.migracio <db_utvonal> [--vissza [sorszamig]]")
         raise SystemExit(1)
 
-    db_utvonal = sys.argv[1]
-    conn = kapcsolat_nyitas(db_utvonal)
+    db_path = sys.argv[1]
+    conn = conn_nyitas(db_path)
     try:
         if len(sys.argv) > 2 and sys.argv[2] == "--vissza":
-            sorszamig = sys.argv[3] if len(sys.argv) > 3 else None
-            eredmeny = visszagorget(conn, sorszamig)
-            print(f"Visszagörgetve: {eredmeny}" if eredmeny else "Nincs mit visszagörgetni.")
+            up_to_seq = sys.argv[3] if len(sys.argv) > 3 else None
+            result = rollback(conn, up_to_seq)
+            print(f"Visszagörgetve: {result}" if result else "Nincs mit visszagörgetni.")
         else:
-            eredmeny = migral(conn)
-            print(f"Lefuttatva: {eredmeny}" if eredmeny else "Minden migráció naprakész.")
+            result = migral(conn)
+            print(f"Lefuttatva: {result}" if result else "Minden migráció naprakész.")
     finally:
         conn.close()
 

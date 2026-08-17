@@ -10,29 +10,29 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from mag.azonosito import uj_uuid
-from mag.ido import most_iso
-from mag.modell.muszak import Blokk, Muszak, Slot
+from core.azonosito import new_uuid
+from core.ido import most_iso
+from core.modell.shift import Block, Shift, Slot
 
 
-def muszak_letrehoz(
+def shift_create(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str,
-    pult_id: str,
-    alkalmazott_id: str,
-    szolgaltatas_id: str,
-    kezdet: str,
-    veg: str,
-    idotartam_perc: int,
-    puffer_utana_perc: int,
-    min_racs_perc: int,
-    foglalhato_arany: float,
-    blokk_szabaly: dict,
+    org_id: str,
+    shop_id: str,
+    counter_id: str,
+    employee_id: str,
+    service_id: str,
+    start: str,
+    end: str,
+    duration_minute: int,
+    buffer_after_minute: int,
+    min_grid_minute: int,
+    bookable_ratio: float,
+    block_rule: dict,
     id_: str | None = None,
 ) -> str:
-    muszak_id = id_ or uj_uuid()
+    shift_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO muszak "
         "(id, szervezet_id, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, "
@@ -40,136 +40,136 @@ def muszak_letrehoz(
         "foglalhato_arany, blokk_szabaly, allapot, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aktiv', ?)",
         (
-            muszak_id,
-            szervezet_id,
-            bolt_id,
-            pult_id,
-            alkalmazott_id,
-            szolgaltatas_id,
-            kezdet,
-            veg,
-            idotartam_perc,
-            puffer_utana_perc,
-            min_racs_perc,
-            foglalhato_arany,
-            json.dumps(blokk_szabaly, ensure_ascii=False),
+            shift_id,
+            org_id,
+            shop_id,
+            counter_id,
+            employee_id,
+            service_id,
+            start,
+            end,
+            duration_minute,
+            buffer_after_minute,
+            min_grid_minute,
+            bookable_ratio,
+            json.dumps(block_rule, ensure_ascii=False),
             most_iso(),
         ),
     )
-    return muszak_id
+    return shift_id
 
 
-def muszak_betoltese(conn: sqlite3.Connection, muszak_id: str) -> Muszak | None:
-    sor = conn.execute(
+def shift_load(conn: sqlite3.Connection, shift_id: str) -> Shift | None:
+    row = conn.execute(
         "SELECT id, szervezet_id, kezdet, veg, idotartam_perc, puffer_utana_perc, "
         "min_racs_perc, foglalhato_arany, blokk_szabaly FROM muszak WHERE id = ?",
-        (muszak_id,),
+        (shift_id,),
     ).fetchone()
-    if sor is None:
+    if row is None:
         return None
     (
         mid,
-        szervezet_id,
-        kezdet,
-        veg,
-        idotartam_perc,
-        puffer_utana_perc,
-        min_racs_perc,
-        foglalhato_arany,
-        blokk_szabaly_json,
-    ) = sor
-    return Muszak(
+        org_id,
+        start,
+        end,
+        duration_minute,
+        buffer_after_minute,
+        min_grid_minute,
+        bookable_ratio,
+        block_rule_json,
+    ) = row
+    return Shift(
         id=mid,
-        szervezet_id=szervezet_id,
-        kezdet=kezdet,
-        veg=veg,
-        idotartam_perc=idotartam_perc,
-        puffer_utana_perc=puffer_utana_perc,
-        min_racs_perc=min_racs_perc,
-        foglalhato_arany=foglalhato_arany,
-        blokk_szabaly=json.loads(blokk_szabaly_json),
+        org_id=org_id,
+        start=start,
+        end=end,
+        duration_minute=duration_minute,
+        buffer_after_minute=buffer_after_minute,
+        min_grid_minute=min_grid_minute,
+        bookable_ratio=bookable_ratio,
+        block_rule=json.loads(block_rule_json),
     )
 
 
-def muszak_alapadatai(conn: sqlite3.Connection, *, muszak_id: str) -> dict | None:
+def shift_alapadatai(conn: sqlite3.Connection, *, shift_id: str) -> dict | None:
     """A `muszak_betoltese`-nél bővebb, nyers sor — a törzsadat-kapcsoló
     oszlopokkal (`bolt_id`, `pult_id`, `alkalmazott_id`, `szolgaltatas_id`)
     is, amiket a `Muszak` dataclass szándékosan nem tartalmaz (a
     slotgenerátor tiszta számítás, nem kell neki a törzsadat-kapocs).
     Ez a lekérdezés a sablon-mentéshez kell (`mag/api/adminszolgaltatas.py`),
     ahol pont ezekre a kapcsoló oszlopokra van szükség."""
-    sor = conn.execute(
+    row = conn.execute(
         "SELECT szervezet_id, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, kezdet, veg, "
         "idotartam_perc, puffer_utana_perc, min_racs_perc, foglalhato_arany, blokk_szabaly "
         "FROM muszak WHERE id = ?",
-        (muszak_id,),
+        (shift_id,),
     ).fetchone()
-    if sor is None:
+    if row is None:
         return None
     (
-        szervezet_id,
-        bolt_id,
-        pult_id,
-        alkalmazott_id,
-        szolgaltatas_id,
-        kezdet,
-        veg,
-        idotartam_perc,
-        puffer_utana_perc,
-        min_racs_perc,
-        foglalhato_arany,
-        blokk_szabaly_json,
-    ) = sor
+        org_id,
+        shop_id,
+        counter_id,
+        employee_id,
+        service_id,
+        start,
+        end,
+        duration_minute,
+        buffer_after_minute,
+        min_grid_minute,
+        bookable_ratio,
+        block_rule_json,
+    ) = row
     return {
-        "szervezet_id": szervezet_id,
-        "bolt_id": bolt_id,
-        "pult_id": pult_id,
-        "alkalmazott_id": alkalmazott_id,
-        "szolgaltatas_id": szolgaltatas_id,
-        "kezdet": kezdet,
-        "veg": veg,
-        "idotartam_perc": idotartam_perc,
-        "puffer_utana_perc": puffer_utana_perc,
-        "min_racs_perc": min_racs_perc,
-        "foglalhato_arany": foglalhato_arany,
-        "blokk_szabaly": json.loads(blokk_szabaly_json),
+        "szervezet_id": org_id,
+        "bolt_id": shop_id,
+        "pult_id": counter_id,
+        "alkalmazott_id": employee_id,
+        "szolgaltatas_id": service_id,
+        "kezdet": start,
+        "veg": end,
+        "idotartam_perc": duration_minute,
+        "puffer_utana_perc": buffer_after_minute,
+        "min_racs_perc": min_grid_minute,
+        "foglalhato_arany": bookable_ratio,
+        "blokk_szabaly": json.loads(block_rule_json),
     }
 
 
-def blokkok_slotok_mentese(
+def blocks_slots_save(
     conn: sqlite3.Connection,
     *,
-    muszak_id: str,
-    szervezet_id: str,
-    blokkok: list[Blokk],
-    slotok: list[Slot],
+    shift_id: str,
+    org_id: str,
+    blocks: list[Block],
+    slots: list[Slot],
 ) -> None:
     """Egyetlen `BEGIN IMMEDIATE` tranzakcióban menti a generált
     blokkokat és slotokat — vagy mindkettő teljesen bekerül, vagy semmi."""
     conn.execute("BEGIN IMMEDIATE")
     try:
-        for b in blokkok:
+        for b in blocks:
             conn.execute(
                 "INSERT INTO muszak_blokk "
                 "(id, szervezet_id, muszak_id, tipus, kezdet, veg, rogzitett, "
                 "beszamit_kvotaba, letrehozva) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    uj_uuid(),
-                    szervezet_id,
-                    muszak_id,
+                    new_uuid(),
+                    org_id,
+                    shift_id,
                     b.tipus,
-                    b.kezdet,
-                    b.veg,
-                    int(b.rogzitett),
-                    int(b.beszamit_kvotaba),
+                    b.start,
+                    b.end,
+                    int(b.fixed),
+                    int(b.counts_toward_into_quota),
                     most_iso(),
                 ),
             )
-        for s in slotok:
+        for s in slots:
             conn.execute(
                 "INSERT INTO slot (id, szervezet_id, muszak_id, kezdet, veg, letrehozva) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (uj_uuid(), szervezet_id, muszak_id, s.kezdet, s.veg, most_iso()),
+                (new_uuid(), org_id, shift_id, s.start, s.end, most_iso()),
             )
     except Exception:
         conn.execute("ROLLBACK")
@@ -178,13 +178,13 @@ def blokkok_slotok_mentese(
         conn.execute("COMMIT")
 
 
-def muszakok_lekerdezese(
+def shifts_list(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str | None = None,
-    datum_tol: str | None = None,
-    datum_ig: str | None = None,
+    org_id: str,
+    shop_id: str | None = None,
+    date_tol: str | None = None,
+    date_ig: str | None = None,
 ) -> list[dict]:
     """Műszakok listája egy időablakban (naptárnézethez, `felulet/admin/`),
     bolt/pult/alkalmazott/szolgáltatás névvel kiegészítve — a felület nem
@@ -195,7 +195,7 @@ def muszakok_lekerdezese(
     is visszaadja (aloszekvenciás lekérdezéssel), hogy a naptárnézet
     üresen generált (kivetel_nap miatt kihagyott) műszakot is meg tudjon
     különböztetni."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT m.id, m.bolt_id, b.nev, m.pult_id, p.nev, m.alkalmazott_id, a.nev, "
         "m.szolgaltatas_id, sz.nev, m.kezdet, m.veg, m.allapot, "
         "(SELECT COUNT(*) FROM slot WHERE slot.muszak_id = m.id) AS slot_szam "
@@ -209,55 +209,55 @@ def muszakok_lekerdezese(
         "AND (? IS NULL OR m.kezdet >= ?) "
         "AND (? IS NULL OR m.kezdet < ?) "
         "ORDER BY m.kezdet",
-        (szervezet_id, bolt_id, bolt_id, datum_tol, datum_tol, datum_ig, datum_ig),
+        (org_id, shop_id, shop_id, date_tol, date_tol, date_ig, date_ig),
     ).fetchall()
     return [
         {
-            "muszak_id": sor[0],
-            "bolt_id": sor[1],
-            "bolt_nev": sor[2],
-            "pult_id": sor[3],
-            "pult_nev": sor[4],
-            "alkalmazott_id": sor[5],
-            "alkalmazott_nev": sor[6],
-            "szolgaltatas_id": sor[7],
-            "szolgaltatas_nev": sor[8],
-            "kezdet": sor[9],
-            "veg": sor[10],
-            "allapot": sor[11],
-            "slot_szam": sor[12],
+            "muszak_id": row[0],
+            "bolt_id": row[1],
+            "bolt_nev": row[2],
+            "pult_id": row[3],
+            "pult_nev": row[4],
+            "alkalmazott_id": row[5],
+            "alkalmazott_nev": row[6],
+            "szolgaltatas_id": row[7],
+            "szolgaltatas_nev": row[8],
+            "kezdet": row[9],
+            "veg": row[10],
+            "allapot": row[11],
+            "slot_szam": row[12],
         }
-        for sor in sorok
+        for row in rows
     ]
 
 
-def blokkok_lekerdezese(conn: sqlite3.Connection, *, muszak_id: str) -> list[dict]:
+def blocks_list(conn: sqlite3.Connection, *, shift_id: str) -> list[dict]:
     """Egy műszak blokkjai (szünet/ebéd/szabad sáv), kezdet szerint
     rendezve — a naptárnézet ezekkel rajzolja ki a slotok közti réseket."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT tipus, kezdet, veg, rogzitett, beszamit_kvotaba "
         "FROM muszak_blokk WHERE muszak_id = ? ORDER BY kezdet",
-        (muszak_id,),
+        (shift_id,),
     ).fetchall()
     return [
         {
-            "tipus": sor[0],
-            "kezdet": sor[1],
-            "veg": sor[2],
-            "rogzitett": bool(sor[3]),
-            "beszamit_kvotaba": bool(sor[4]),
+            "tipus": row[0],
+            "kezdet": row[1],
+            "veg": row[2],
+            "rogzitett": bool(row[3]),
+            "beszamit_kvotaba": bool(row[4]),
         }
-        for sor in sorok
+        for row in rows
     ]
 
 
-def kivetel_napok_lekerdezese(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+def exception_days_list(
+    conn: sqlite3.Connection, *, org_id: str, shop_id: str | None = None
 ) -> frozenset[str]:
     """A szervezet-szintű (`bolt_id IS NULL`) és a megadott bolt szintű
     kivételnapok dátumainak uniója, `YYYY-MM-DD` szövegként."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT datum FROM kivetel_nap WHERE szervezet_id = ? AND (bolt_id IS NULL OR bolt_id = ?)",
-        (szervezet_id, bolt_id),
+        (org_id, shop_id),
     ).fetchall()
-    return frozenset(sor[0] for sor in sorok)
+    return frozenset(row[0] for row in rows)

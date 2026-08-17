@@ -18,24 +18,24 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mag.modell.muszak import Blokk, Muszak, Slot
-from mag.slot._idomatek import hozzaad_perc, perc_kulonbseg
-from mag.slot.blokk import BlokkStrategia
+from core.modell.shift import Block, Shift, Slot
+from core.slot._idomatek import add_minute, minute_difference
+from core.slot.blokk import BlockStrategy
 
 
 @dataclass(frozen=True)
-class GeneralasEredmeny:
-    kihagyva: bool
-    kihagyas_oka: str | None
-    blokkok: list[Blokk]
-    slotok: list[Slot]
+class GenerationResult:
+    skipped: bool
+    skip_oka: str | None
+    blocks: list[Block]
+    slots: list[Slot]
 
 
-def general(
-    muszak: Muszak,
-    strategia: BlokkStrategia,
-    kivetel_napok: frozenset[str] = frozenset(),
-) -> GeneralasEredmeny:
+def generate(
+    shift: Shift,
+    strategia: BlockStrategy,
+    exception_days: frozenset[str] = frozenset(),
+) -> GenerationResult:
     """Egyetlen műszakra generálja a blokkokat és a slotokat.
 
     `kivetel_napok`: `YYYY-MM-DD` dátumok halmaza (lásd
@@ -44,54 +44,54 @@ def general(
     (blueprint 9. szakasz: „enélkül a slotgenerátor karácsonyra is
     generál").
     """
-    datum = muszak.kezdet[:10]
-    if datum in kivetel_napok:
-        return GeneralasEredmeny(kihagyva=True, kihagyas_oka=datum, blokkok=[], slotok=[])
+    date = shift.start[:10]
+    if date in exception_days:
+        return GenerationResult(skipped=True, skip_oka=date, blocks=[], slots=[])
 
-    blokkok = strategia.general(muszak)
-    szabad_szakaszok = _szabad_szakaszok(muszak, blokkok)
-    slotok: list[Slot] = []
-    for szakasz_kezdet, szakasz_veg in szabad_szakaszok:
-        slotok.extend(_slotok_szakaszba(muszak, szakasz_kezdet, szakasz_veg))
-    return GeneralasEredmeny(kihagyva=False, kihagyas_oka=None, blokkok=blokkok, slotok=slotok)
+    blocks = strategia.generate(shift)
+    free_segments = _free_segments(shift, blocks)
+    slots: list[Slot] = []
+    for segment_start, segment_end in free_segments:
+        slots.extend(_slots_into_segment(shift, segment_start, segment_end))
+    return GenerationResult(skipped=False, skip_oka=None, blocks=blocks, slots=slots)
 
 
-def _szabad_szakaszok(muszak: Muszak, blokkok: list[Blokk]) -> list[tuple[str, str]]:
+def _free_segments(shift: Shift, blocks: list[Block]) -> list[tuple[str, str]]:
     """A műszak időablakából a blokkok (feltételezve: nem fedik egymást,
     kezdet szerint rendezve) kivágása után maradó szabad szakaszok."""
-    szakaszok: list[tuple[str, str]] = []
-    kurzor = muszak.kezdet
-    for b in blokkok:
-        if b.kezdet > kurzor:
-            szakaszok.append((kurzor, b.kezdet))
-        if b.veg > kurzor:
-            kurzor = b.veg
-    if kurzor < muszak.veg:
-        szakaszok.append((kurzor, muszak.veg))
-    return szakaszok
+    segments: list[tuple[str, str]] = []
+    cursor = shift.start
+    for b in blocks:
+        if b.start > cursor:
+            segments.append((cursor, b.start))
+        if b.end > cursor:
+            cursor = b.end
+    if cursor < shift.end:
+        segments.append((cursor, shift.end))
+    return segments
 
 
-def _grid_kerekites(idopont: str, viszonyitasi_pont: str, racs_perc: int) -> str:
+def _grid_rounding(moment: str, reference_pont: str, grid_minute: int) -> str:
     """`idopont`-ot felfelé kerekíti a `viszonyitasi_pont`-tól számított
     `racs_perc` méretű rácsra — így egy blokk után induló szabad szakasz
     is mindig "kerek" időponton kezdi a slotgenerálást."""
-    if racs_perc <= 0:
-        return idopont
-    eltelt = perc_kulonbseg(viszonyitasi_pont, idopont)
-    maradek = eltelt % racs_perc
+    if grid_minute <= 0:
+        return moment
+    elapsed = minute_difference(reference_pont, moment)
+    maradek = elapsed % grid_minute
     if maradek == 0:
-        return idopont
-    return hozzaad_perc(idopont, racs_perc - maradek)
+        return moment
+    return add_minute(moment, grid_minute - maradek)
 
 
-def _slotok_szakaszba(muszak: Muszak, kezdet: str, veg: str) -> list[Slot]:
-    cadencia = muszak.idotartam_perc + muszak.puffer_utana_perc
-    slotok: list[Slot] = []
-    kurzor = _grid_kerekites(kezdet, muszak.kezdet, muszak.min_racs_perc)
+def _slots_into_segment(shift: Shift, start: str, end: str) -> list[Slot]:
+    cadence = shift.duration_minute + shift.buffer_after_minute
+    slots: list[Slot] = []
+    cursor = _grid_rounding(start, shift.start, shift.min_grid_minute)
     while True:
-        slot_vege = hozzaad_perc(kurzor, muszak.idotartam_perc)
-        if slot_vege > veg:
+        slot_end = add_minute(cursor, shift.duration_minute)
+        if slot_end > end:
             break
-        slotok.append(Slot(kurzor, slot_vege))
-        kurzor = hozzaad_perc(kurzor, cadencia)
-    return slotok
+        slots.append(Slot(cursor, slot_end))
+        cursor = add_minute(cursor, cadence)
+    return slots

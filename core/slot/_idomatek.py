@@ -14,19 +14,19 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 
-def parse(idopont: str) -> datetime:
-    return datetime.fromisoformat(idopont)
+def parse(moment: str) -> datetime:
+    return datetime.fromisoformat(moment)
 
 
-def formaz(idopont: datetime) -> str:
-    return idopont.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+def formaz(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def perc_kulonbseg(kezdet: str, veg: str) -> int:
+def minute_difference(start: str, end: str) -> int:
     """`veg - kezdet` percben, lefelé kerekítve."""
-    delta = parse(veg) - parse(kezdet)
+    delta = parse(end) - parse(start)
     return int(delta.total_seconds() // 60)
 
 
-def hozzaad_perc(idopont: str, perc: int) -> str:
-    return formaz(parse(idopont) + timedelta(minutes=perc))
+def add_minute(moment: str, minute: int) -> str:
+    return formaz(parse(moment) + timedelta(minutes=minute))

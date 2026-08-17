@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import sqlite3
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date as _date
+from datetime import timedelta
 
-from mag.modell.muszak import Blokk
-from mag.repo import foglalas_repo, muszak_repo, sablon_repo, torzsadat_repo
-from mag.slot import generator
-from mag.slot.blokk import FixBlokk
-from mag.szabalyok import kenyszerek
+from core.modell.shift import Block
+from core.repo import foglalas_repo, muszak_repo, sablon_repo, torzsadat_repo
+from core.slot import generator
+from core.slot.blokk import FixedBlock
+from core.szabalyok import kenyszerek
 
 # Két KÜLÖNBÖZŐ "sablon" fogalom van ebben a modulban, szándékosan más
 # névvel: a lenti `SABLONOK` a "műszak felvitele" űrlap MEZŐ-előtöltése
@@ -39,7 +40,7 @@ from mag.szabalyok import kenyszerek
 # Törpilla-pult mintája alapján (roadmap "Az első tíz lépés" 6. pontja).
 # Az admin ettől függetlenül felülírhatja a mezőket — a sablon csak
 # kiindulás, nem kényszer.
-SABLONOK: dict[str, dict] = {
+TEMPLATES: dict[str, dict] = {
     "gyors_penztar": {
         "cimke": "Gyors pénztár (10 perc + 10 perc szünet minden vásárlás után)",
         "idotartam_perc": 10,
@@ -79,24 +80,24 @@ SABLONOK: dict[str, dict] = {
 }
 
 
-def szervezetek(conn: sqlite3.Connection) -> list[dict]:
-    return torzsadat_repo.szervezetek_lekerdezese(conn)
+def orgs(conn: sqlite3.Connection) -> list[dict]:
+    return torzsadat_repo.orgs_list(conn)
 
 
-def boltok(conn: sqlite3.Connection, *, szervezet_id: str) -> list[dict]:
-    return torzsadat_repo.boltok_lekerdezese(conn, szervezet_id=szervezet_id)
+def shops(conn: sqlite3.Connection, *, org_id: str) -> list[dict]:
+    return torzsadat_repo.shops_list(conn, org_id=org_id)
 
 
-def pultok(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
-    return torzsadat_repo.pultok_lekerdezese(conn, bolt_id=bolt_id)
+def counters(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
+    return torzsadat_repo.counters_list(conn, shop_id=shop_id)
 
 
-def alkalmazottak(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
-    return torzsadat_repo.alkalmazottak_lekerdezese(conn, bolt_id=bolt_id)
+def employees(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
+    return torzsadat_repo.employees_list(conn, shop_id=shop_id)
 
 
-def szolgaltatasok(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
-    return torzsadat_repo.szolgaltatasok_lekerdezese(conn, bolt_id=bolt_id)
+def services(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
+    return torzsadat_repo.services_list(conn, shop_id=shop_id)
 
 
 # ---------------------------------------------------------------------
@@ -110,178 +111,170 @@ def szolgaltatasok(conn: sqlite3.Connection, *, bolt_id: str) -> list[dict]:
 # ---------------------------------------------------------------------
 
 
-def bolt_hozzaadasa(conn: sqlite3.Connection, *, szervezet_id: str, nev: str) -> dict:
-    nev = nev.strip()
-    if not nev:
+def shop_add(conn: sqlite3.Connection, *, org_id: str, name: str) -> dict:
+    name = name.strip()
+    if not name:
         return {"bolt_id": None, "hiba": "A bolt neve nem lehet üres."}
-    bolt_id = torzsadat_repo.bolt_letrehoz(conn, szervezet_id=szervezet_id, nev=nev)
-    return {"bolt_id": bolt_id, "hiba": None}
+    shop_id = torzsadat_repo.shop_create(conn, org_id=org_id, name=name)
+    return {"bolt_id": shop_id, "hiba": None}
 
 
-def bolt_szerkesztese(conn: sqlite3.Connection, *, bolt_id: str, nev: str) -> dict:
-    nev = nev.strip()
-    if not nev:
+def shop_update(conn: sqlite3.Connection, *, shop_id: str, name: str) -> dict:
+    name = name.strip()
+    if not name:
         return {"hiba": "A bolt neve nem lehet üres."}
-    torzsadat_repo.bolt_szerkesztese(conn, bolt_id=bolt_id, nev=nev)
+    torzsadat_repo.shop_update(conn, shop_id=shop_id, name=name)
     return {"hiba": None}
 
 
-def pult_hozzaadasa(conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str, nev: str) -> dict:
-    nev = nev.strip()
-    if not nev:
+def counter_add(conn: sqlite3.Connection, *, org_id: str, shop_id: str, name: str) -> dict:
+    name = name.strip()
+    if not name:
         return {"pult_id": None, "hiba": "A pult neve nem lehet üres."}
-    pult_id = torzsadat_repo.pult_letrehoz(
-        conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev=nev
-    )
-    return {"pult_id": pult_id, "hiba": None}
+    counter_id = torzsadat_repo.counter_create(conn, org_id=org_id, shop_id=shop_id, name=name)
+    return {"pult_id": counter_id, "hiba": None}
 
 
-def pult_szerkesztese(conn: sqlite3.Connection, *, pult_id: str, nev: str) -> dict:
-    nev = nev.strip()
-    if not nev:
+def counter_update(conn: sqlite3.Connection, *, counter_id: str, name: str) -> dict:
+    name = name.strip()
+    if not name:
         return {"hiba": "A pult neve nem lehet üres."}
-    torzsadat_repo.pult_szerkesztese(conn, pult_id=pult_id, nev=nev)
+    torzsadat_repo.counter_update(conn, counter_id=counter_id, name=name)
     return {"hiba": None}
 
 
-def alkalmazott_hozzaadasa(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str, nev: str
-) -> dict:
-    nev = nev.strip()
-    if not nev:
+def employee_add(conn: sqlite3.Connection, *, org_id: str, shop_id: str, name: str) -> dict:
+    name = name.strip()
+    if not name:
         return {"alkalmazott_id": None, "hiba": "Az alkalmazott neve nem lehet üres."}
-    alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
-        conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev=nev
-    )
-    return {"alkalmazott_id": alkalmazott_id, "hiba": None}
+    employee_id = torzsadat_repo.employee_create(conn, org_id=org_id, shop_id=shop_id, name=name)
+    return {"alkalmazott_id": employee_id, "hiba": None}
 
 
-def alkalmazott_szerkesztese(conn: sqlite3.Connection, *, alkalmazott_id: str, nev: str) -> dict:
-    nev = nev.strip()
-    if not nev:
+def employee_update(conn: sqlite3.Connection, *, employee_id: str, name: str) -> dict:
+    name = name.strip()
+    if not name:
         return {"hiba": "Az alkalmazott neve nem lehet üres."}
-    torzsadat_repo.alkalmazott_szerkesztese(conn, alkalmazott_id=alkalmazott_id, nev=nev)
+    torzsadat_repo.employee_update(conn, employee_id=employee_id, name=name)
     return {"hiba": None}
 
 
-def szolgaltatas_hozzaadasa(
+def service_add(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str,
-    nev: str,
-    alap_idotartam_perc: int,
+    org_id: str,
+    shop_id: str,
+    name: str,
+    alap_duration_minute: int,
 ) -> dict:
-    nev = nev.strip()
-    if not nev:
+    name = name.strip()
+    if not name:
         return {"szolgaltatas_id": None, "hiba": "A szolgáltatás neve nem lehet üres."}
-    if alap_idotartam_perc <= 0:
+    if alap_duration_minute <= 0:
         return {
             "szolgaltatas_id": None,
             "hiba": "Az alapértelmezett időtartam pozitív kell legyen.",
         }
-    szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+    service_id = torzsadat_repo.service_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=bolt_id,
-        nev=nev,
-        alap_idotartam_perc=alap_idotartam_perc,
+        org_id=org_id,
+        shop_id=shop_id,
+        name=name,
+        alap_duration_minute=alap_duration_minute,
     )
-    return {"szolgaltatas_id": szolgaltatas_id, "hiba": None}
+    return {"szolgaltatas_id": service_id, "hiba": None}
 
 
-def szolgaltatas_szerkesztese(
-    conn: sqlite3.Connection, *, szolgaltatas_id: str, nev: str, alap_idotartam_perc: int
+def service_update(
+    conn: sqlite3.Connection, *, service_id: str, name: str, alap_duration_minute: int
 ) -> dict:
-    nev = nev.strip()
-    if not nev:
+    name = name.strip()
+    if not name:
         return {"hiba": "A szolgáltatás neve nem lehet üres."}
-    if alap_idotartam_perc <= 0:
+    if alap_duration_minute <= 0:
         return {"hiba": "Az alapértelmezett időtartam pozitív kell legyen."}
-    torzsadat_repo.szolgaltatas_szerkesztese(
+    torzsadat_repo.service_update(
         conn,
-        szolgaltatas_id=szolgaltatas_id,
-        nev=nev,
-        alap_idotartam_perc=alap_idotartam_perc,
+        service_id=service_id,
+        name=name,
+        alap_duration_minute=alap_duration_minute,
     )
     return {"hiba": None}
 
 
-def kivetel_nap_hozzaadasa(
+def exception_day_add(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str | None,
-    datum: str,
-    indok: str,
+    org_id: str,
+    shop_id: str | None,
+    date: str,
+    reason: str,
 ) -> dict:
-    indok = indok.strip()
-    if not indok:
+    reason = reason.strip()
+    if not reason:
         return {"kivetel_id": None, "hiba": "Az indok nem lehet üres."}
     try:
-        date.fromisoformat(datum)
+        _date.fromisoformat(date)
     except ValueError:
-        return {"kivetel_id": None, "hiba": f"Érvénytelen dátum: {datum!r} (ÉÉÉÉ-HH-NN kell)."}
-    kivetel_id = torzsadat_repo.kivetel_nap_letrehoz(
-        conn, szervezet_id=szervezet_id, bolt_id=bolt_id, datum=datum, indok=indok
+        return {"kivetel_id": None, "hiba": f"Érvénytelen dátum: {date!r} (ÉÉÉÉ-HH-NN kell)."}
+    exception_id = torzsadat_repo.exception_day_create(
+        conn, org_id=org_id, shop_id=shop_id, date=date, reason=reason
     )
-    return {"kivetel_id": kivetel_id, "hiba": None}
+    return {"kivetel_id": exception_id, "hiba": None}
 
 
-def kivetel_napok(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+def exception_days(
+    conn: sqlite3.Connection, *, org_id: str, shop_id: str | None = None
 ) -> list[dict]:
-    return torzsadat_repo.kivetel_napok_reszletesen_lekerdezese(
-        conn, szervezet_id=szervezet_id, bolt_id=bolt_id
-    )
+    return torzsadat_repo.exception_days_in_detail_list(conn, org_id=org_id, shop_id=shop_id)
 
 
-def het_muszakjai(
+def week_shifts(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    het_kezdete_datum: str,
-    bolt_id: str | None = None,
+    org_id: str,
+    week_start_date: str,
+    shop_id: str | None = None,
 ) -> list[dict]:
     """Egy hét (7 nap, `het_kezdete_datum`-tól, 'YYYY-MM-DD') műszakjai —
     a naptárnézet ('felulet/admin/') ezt rendezi pultok/napok szerint."""
-    from mag.slot._idomatek import hozzaad_perc
+    from core.slot._idomatek import add_minute
 
-    datum_tol = f"{het_kezdete_datum}T00:00:00Z"
-    datum_ig = hozzaad_perc(datum_tol, 7 * 24 * 60)
-    return muszak_repo.muszakok_lekerdezese(
+    date_tol = f"{week_start_date}T00:00:00Z"
+    date_ig = add_minute(date_tol, 7 * 24 * 60)
+    return muszak_repo.shifts_list(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=bolt_id,
-        datum_tol=datum_tol,
-        datum_ig=datum_ig,
+        org_id=org_id,
+        shop_id=shop_id,
+        date_tol=date_tol,
+        date_ig=date_ig,
     )
 
 
-def muszak_reszletei(conn: sqlite3.Connection, *, muszak_id: str) -> dict:
+def shift_details(conn: sqlite3.Connection, *, shift_id: str) -> dict:
     """Egy műszak blokkjai és slotjai (állapottal együtt) — a naptárnézet
     egy műszakra kattintva ezt jeleníti meg."""
     return {
-        "blokkok": muszak_repo.blokkok_lekerdezese(conn, muszak_id=muszak_id),
-        "slotok": foglalas_repo.slot_allapotok_lekerdezese(conn, muszak_id=muszak_id),
+        "blokkok": muszak_repo.blocks_list(conn, shift_id=shift_id),
+        "slotok": foglalas_repo.slot_statuses_list(conn, shift_id=shift_id),
     }
 
 
-def muszak_felvitel(
+def shift_felvitel(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str,
-    pult_id: str,
-    alkalmazott_id: str,
-    szolgaltatas_id: str,
-    kezdet: str,
-    veg: str,
-    idotartam_perc: int,
-    puffer_utana_perc: int,
-    min_racs_perc: int,
-    foglalhato_arany: float,
-    blokk_szabaly: dict,
+    org_id: str,
+    shop_id: str,
+    counter_id: str,
+    employee_id: str,
+    service_id: str,
+    start: str,
+    end: str,
+    duration_minute: int,
+    buffer_after_minute: int,
+    min_grid_minute: int,
+    bookable_ratio: float,
+    block_rule: dict,
 ) -> dict:
     """Műszak felvitele ÉS slot/blokk generálás egy lépésben — ezt hívja
     az admin felület "műszak felvitele" űrlapja a mentés gombra kattintva.
@@ -299,7 +292,7 @@ def muszak_felvitel(
     kulcs a visszaadott dict-ben, nincs kivétel, és a hívó (a felület)
     egységesen tudja megjeleníteni). A `mag/repo/` rétegen és a
     kényszeren magán ez nem változtat."""
-    if veg <= kezdet:
+    if end <= start:
         return {
             "muszak_id": None,
             "kihagyva": False,
@@ -307,54 +300,52 @@ def muszak_felvitel(
             "slot_szam": 0,
             "blokk_szam": 0,
             "hiba": (
-                f"A műszak vége ({veg}) nem lehet korábbi vagy egyenlő, mint a kezdete ({kezdet})."
+                f"A műszak vége ({end}) nem lehet korábbi vagy egyenlő, mint a kezdete ({start})."
             ),
         }
 
-    muszak_id = muszak_repo.muszak_letrehoz(
+    shift_id = muszak_repo.shift_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=bolt_id,
-        pult_id=pult_id,
-        alkalmazott_id=alkalmazott_id,
-        szolgaltatas_id=szolgaltatas_id,
-        kezdet=kezdet,
-        veg=veg,
-        idotartam_perc=idotartam_perc,
-        puffer_utana_perc=puffer_utana_perc,
-        min_racs_perc=min_racs_perc,
-        foglalhato_arany=foglalhato_arany,
-        blokk_szabaly=blokk_szabaly,
+        org_id=org_id,
+        shop_id=shop_id,
+        counter_id=counter_id,
+        employee_id=employee_id,
+        service_id=service_id,
+        start=start,
+        end=end,
+        duration_minute=duration_minute,
+        buffer_after_minute=buffer_after_minute,
+        min_grid_minute=min_grid_minute,
+        bookable_ratio=bookable_ratio,
+        block_rule=block_rule,
     )
-    muszak = muszak_repo.muszak_betoltese(conn, muszak_id)
-    kivetel_napok = muszak_repo.kivetel_napok_lekerdezese(conn, szervezet_id=szervezet_id)
-    eredmeny = generator.general(muszak, FixBlokk(), kivetel_napok=kivetel_napok)
-    if not eredmeny.kihagyva:
-        muszak_repo.blokkok_slotok_mentese(
+    shift = muszak_repo.shift_load(conn, shift_id)
+    exception_days = muszak_repo.exception_days_list(conn, org_id=org_id)
+    result = generator.generate(shift, FixedBlock(), exception_days=exception_days)
+    if not result.skipped:
+        muszak_repo.blocks_slots_save(
             conn,
-            muszak_id=muszak_id,
-            szervezet_id=szervezet_id,
-            blokkok=eredmeny.blokkok,
-            slotok=eredmeny.slotok,
+            shift_id=shift_id,
+            org_id=org_id,
+            blocks=result.blocks,
+            slots=result.slots,
         )
     return {
-        "muszak_id": muszak_id,
-        "kihagyva": eredmeny.kihagyva,
-        "kihagyas_oka": eredmeny.kihagyas_oka,
-        "slot_szam": len(eredmeny.slotok),
-        "blokk_szam": len(eredmeny.blokkok),
+        "muszak_id": shift_id,
+        "kihagyva": result.skipped,
+        "kihagyas_oka": result.skip_oka,
+        "slot_szam": len(result.slots),
+        "blokk_szam": len(result.blocks),
         "hiba": None,
     }
 
 
-def foglalasok(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
-) -> list[dict]:
-    return foglalas_repo.foglalasok_lekerdezese(conn, szervezet_id=szervezet_id, bolt_id=bolt_id)
+def bookings(conn: sqlite3.Connection, *, org_id: str, shop_id: str | None = None) -> list[dict]:
+    return foglalas_repo.bookings_list(conn, org_id=org_id, shop_id=shop_id)
 
 
-def foglalas_lemond(conn: sqlite3.Connection, *, foglalasi_kod: str) -> foglalas_repo.Eredmeny:
-    return foglalas_repo.foglalas_lemond(conn, foglalasi_kod)
+def booking_lemond(conn: sqlite3.Connection, *, booking_code: str) -> foglalas_repo.Result:
+    return foglalas_repo.booking_lemond(conn, booking_code)
 
 
 # ---------------------------------------------------------------------
@@ -363,7 +354,7 @@ def foglalas_lemond(conn: sqlite3.Connection, *, foglalasi_kod: str) -> foglalas
 # ---------------------------------------------------------------------
 
 
-def muszak_sablon_mentese(conn: sqlite3.Connection, *, muszak_id: str, nev: str) -> dict:
+def shift_template_save(conn: sqlite3.Connection, *, shift_id: str, name: str) -> dict:
     """Sablon mentése egy MEGLÉVŐ műszakból: pult, alkalmazott,
     szolgáltatás, napi óra-időablak (a `kezdet`/`veg` óra-részéből) és a
     snapshot-mezők (idotartam_perc, stb.) + blokkszabály.
@@ -372,112 +363,110 @@ def muszak_sablon_mentese(conn: sqlite3.Connection, *, muszak_id: str, nev: str)
     (lásd migraciok/0003 megjegyzése) — ha a műszak éjfélen átnyúlik vagy
     a kezdete/vége nem kerek óra, ÉRTELMES elutasítást ad (`hiba` kulcs),
     nem kivételt."""
-    alapadat = muszak_repo.muszak_alapadatai(conn, muszak_id=muszak_id)
-    if alapadat is None:
-        return {"sablon_id": None, "hiba": f"Nincs ilyen műszak: {muszak_id}"}
+    base_data = muszak_repo.shift_alapadatai(conn, shift_id=shift_id)
+    if base_data is None:
+        return {"sablon_id": None, "hiba": f"Nincs ilyen műszak: {shift_id}"}
 
-    kezdet_datum, kezdet_ora_resz = alapadat["kezdet"][:10], alapadat["kezdet"][11:19]
-    veg_datum, veg_ora_resz = alapadat["veg"][:10], alapadat["veg"][11:19]
-    if kezdet_datum != veg_datum:
+    start_date, start_hour_part = base_data["kezdet"][:10], base_data["kezdet"][11:19]
+    end_date, end_hour_part = base_data["veg"][:10], base_data["veg"][11:19]
+    if start_date != end_date:
         return {
             "sablon_id": None,
             "hiba": "Éjfélen átnyúló műszakból ma nem menthető sablon (lásd migraciok/0003).",
         }
-    if kezdet_ora_resz[3:] != "00:00" or veg_ora_resz[3:] != "00:00":
+    if start_hour_part[3:] != "00:00" or end_hour_part[3:] != "00:00":
         return {
             "sablon_id": None,
             "hiba": "A sablon csak kerek órára eső időablakot tud menteni.",
         }
 
-    kezdet_ora = int(kezdet_ora_resz[:2])
-    veg_ora = int(veg_ora_resz[:2])
-    if veg_ora == 0:  # éjfél, mint záró óra — 24-ként kezeljük (lásd CHECK)
-        veg_ora = 24
+    start_hour = int(start_hour_part[:2])
+    end_hour = int(end_hour_part[:2])
+    if end_hour == 0:  # éjfél, mint záró óra — 24-ként kezeljük (lásd CHECK)
+        end_hour = 24
 
-    sablon_id = sablon_repo.sablon_letrehoz(
+    template_id = sablon_repo.template_create(
         conn,
-        szervezet_id=alapadat["szervezet_id"],
-        nev=nev,
-        bolt_id=alapadat["bolt_id"],
-        pult_id=alapadat["pult_id"],
-        alkalmazott_id=alapadat["alkalmazott_id"],
-        szolgaltatas_id=alapadat["szolgaltatas_id"],
-        kezdet_ora=kezdet_ora,
-        veg_ora=veg_ora,
-        idotartam_perc=alapadat["idotartam_perc"],
-        puffer_utana_perc=alapadat["puffer_utana_perc"],
-        min_racs_perc=alapadat["min_racs_perc"],
-        foglalhato_arany=alapadat["foglalhato_arany"],
-        blokk_szabaly=alapadat["blokk_szabaly"],
+        org_id=base_data["szervezet_id"],
+        name=name,
+        shop_id=base_data["bolt_id"],
+        counter_id=base_data["pult_id"],
+        employee_id=base_data["alkalmazott_id"],
+        service_id=base_data["szolgaltatas_id"],
+        start_hour=start_hour,
+        end_hour=end_hour,
+        duration_minute=base_data["idotartam_perc"],
+        buffer_after_minute=base_data["puffer_utana_perc"],
+        min_grid_minute=base_data["min_racs_perc"],
+        bookable_ratio=base_data["foglalhato_arany"],
+        block_rule=base_data["blokk_szabaly"],
     )
-    return {"sablon_id": sablon_id, "hiba": None}
+    return {"sablon_id": template_id, "hiba": None}
 
 
-def muszak_sablonok(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+def shift_templates(
+    conn: sqlite3.Connection, *, org_id: str, shop_id: str | None = None
 ) -> list[dict]:
-    return sablon_repo.sablonok_lekerdezese(conn, szervezet_id=szervezet_id, bolt_id=bolt_id)
+    return sablon_repo.templates_list(conn, org_id=org_id, shop_id=shop_id)
 
 
-def muszak_sablon_alkalmazasa_napra(
-    conn: sqlite3.Connection, *, sablon_id: str, datum: str
-) -> dict:
+def shift_template_apply_for_day(conn: sqlite3.Connection, *, template_id: str, date: str) -> dict:
     """A sablont egyetlen napra alkalmazza — létrehozza a műszakot és
     lefuttatja a generátort, ugyanúgy, mint `muszak_felvitel`."""
-    sablon = sablon_repo.sablon_betoltese(conn, sablon_id=sablon_id)
-    if sablon is None:
-        return {"hiba": f"Nincs ilyen sablon: {sablon_id}", "muszak_id": None}
+    template = sablon_repo.template_load(conn, template_id=template_id)
+    if template is None:
+        return {"hiba": f"Nincs ilyen sablon: {template_id}", "muszak_id": None}
 
-    kezdet = f"{datum}T{sablon['kezdet_ora']:02d}:00:00Z"
-    veg_ora = sablon["veg_ora"]
-    if veg_ora == 24:
-        veg_nap = date.fromisoformat(datum) + timedelta(days=1)
-        veg = f"{veg_nap.isoformat()}T00:00:00Z"
+    start = f"{date}T{template['kezdet_ora']:02d}:00:00Z"
+    end_hour = template["veg_ora"]
+    if end_hour == 24:
+        end_day = _date.fromisoformat(date) + timedelta(days=1)
+        end = f"{end_day.isoformat()}T00:00:00Z"
     else:
-        veg = f"{datum}T{veg_ora:02d}:00:00Z"
+        end = f"{date}T{end_hour:02d}:00:00Z"
 
-    return muszak_felvitel(
+    return shift_felvitel(
         conn,
-        szervezet_id=sablon["szervezet_id"],
-        bolt_id=sablon["bolt_id"],
-        pult_id=sablon["pult_id"],
-        alkalmazott_id=sablon["alkalmazott_id"],
-        szolgaltatas_id=sablon["szolgaltatas_id"],
-        kezdet=kezdet,
-        veg=veg,
-        idotartam_perc=sablon["idotartam_perc"],
-        puffer_utana_perc=sablon["puffer_utana_perc"],
-        min_racs_perc=sablon["min_racs_perc"],
-        foglalhato_arany=sablon["foglalhato_arany"],
-        blokk_szabaly=sablon["blokk_szabaly"],
+        org_id=template["szervezet_id"],
+        shop_id=template["bolt_id"],
+        counter_id=template["pult_id"],
+        employee_id=template["alkalmazott_id"],
+        service_id=template["szolgaltatas_id"],
+        start=start,
+        end=end,
+        duration_minute=template["idotartam_perc"],
+        buffer_after_minute=template["puffer_utana_perc"],
+        min_grid_minute=template["min_racs_perc"],
+        bookable_ratio=template["foglalhato_arany"],
+        block_rule=template["blokk_szabaly"],
     )
 
 
-def muszak_sablon_alkalmazasa_hetre(
-    conn: sqlite3.Connection, *, sablon_id: str, het_kezdete_datum: str
+def shift_template_apply_for_week(
+    conn: sqlite3.Connection, *, template_id: str, week_start_date: str
 ) -> list[dict]:
     """A sablont a hét mind a 7 napjára alkalmazza (a seed/betolt.py
     heti mintáját követve — egy sablon egy pultra napi ismétlődés).
     Kivételnapra eső nap a szokásos módon (`generator.general`)
     kihagyásra kerül, de a `muszak` sor létrejön — ez NEM hiba, a
     visszaadott lista elemén `kihagyva: True` jelzi."""
-    het_kezdete = date.fromisoformat(het_kezdete_datum)
-    eredmenyek = []
-    for nap_index in range(7):
-        nap = het_kezdete + timedelta(days=nap_index)
-        eredmenyek.append(
-            muszak_sablon_alkalmazasa_napra(conn, sablon_id=sablon_id, datum=nap.isoformat())
+    week_start = _date.fromisoformat(week_start_date)
+    results = []
+    for day_index in range(7):
+        day = week_start + timedelta(days=day_index)
+        results.append(
+            shift_template_apply_for_day(conn, template_id=template_id, date=day.isoformat())
         )
-    return eredmenyek
+    return results
 
 
-def het_masolasa(
+def week_copy(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    forras_het_kezdete: str,
-    cel_het_kezdete: str,
-    bolt_id: str | None = None,
+    org_id: str,
+    source_week_start: str,
+    target_week_start: str,
+    shop_id: str | None = None,
 ) -> list[dict]:
     """A `forras_het_kezdete` hetén ténylegesen létező műszakokat
     lemásolja a `cel_het_kezdete` hetére — minden műszakot annyi nappal
@@ -489,47 +478,47 @@ def het_masolasa(
     ELMENTETT sablont ismétel minden napra, ez itt a forrás hét TÉNYLEGES,
     változatos beosztását (több pult, eltérő napi mintázat) másolja át,
     sablon nélkül."""
-    eltolas_nap = (
-        date.fromisoformat(cel_het_kezdete) - date.fromisoformat(forras_het_kezdete)
+    offset_day = (
+        _date.fromisoformat(target_week_start) - _date.fromisoformat(source_week_start)
     ).days
-    forras_muszakok = het_muszakjai(
+    source_shifts = week_shifts(
         conn,
-        szervezet_id=szervezet_id,
-        het_kezdete_datum=forras_het_kezdete,
-        bolt_id=bolt_id,
+        org_id=org_id,
+        week_start_date=source_week_start,
+        shop_id=shop_id,
     )
-    eredmenyek = []
-    for muszak in forras_muszakok:
-        alapadat = muszak_repo.muszak_alapadatai(conn, muszak_id=muszak["muszak_id"])
-        uj_kezdet = _datum_eltol(alapadat["kezdet"], eltolas_nap)
-        uj_veg = _datum_eltol(alapadat["veg"], eltolas_nap)
-        eredmenyek.append(
-            muszak_felvitel(
+    results = []
+    for shift in source_shifts:
+        base_data = muszak_repo.shift_alapadatai(conn, shift_id=shift["muszak_id"])
+        new_start = _date_shift_by(base_data["kezdet"], offset_day)
+        new_end = _date_shift_by(base_data["veg"], offset_day)
+        results.append(
+            shift_felvitel(
                 conn,
-                szervezet_id=szervezet_id,
-                bolt_id=muszak["bolt_id"],
-                pult_id=muszak["pult_id"],
-                alkalmazott_id=muszak["alkalmazott_id"],
-                szolgaltatas_id=muszak["szolgaltatas_id"],
-                kezdet=uj_kezdet,
-                veg=uj_veg,
-                idotartam_perc=alapadat["idotartam_perc"],
-                puffer_utana_perc=alapadat["puffer_utana_perc"],
-                min_racs_perc=alapadat["min_racs_perc"],
-                foglalhato_arany=alapadat["foglalhato_arany"],
-                blokk_szabaly=alapadat["blokk_szabaly"],
+                org_id=org_id,
+                shop_id=shift["bolt_id"],
+                counter_id=shift["pult_id"],
+                employee_id=shift["alkalmazott_id"],
+                service_id=shift["szolgaltatas_id"],
+                start=new_start,
+                end=new_end,
+                duration_minute=base_data["idotartam_perc"],
+                buffer_after_minute=base_data["puffer_utana_perc"],
+                min_grid_minute=base_data["min_racs_perc"],
+                bookable_ratio=base_data["foglalhato_arany"],
+                block_rule=base_data["blokk_szabaly"],
             )
         )
-    return eredmenyek
+    return results
 
 
-def _datum_eltol(idobelyeg: str, nap: int) -> str:
+def _date_shift_by(timestamp: str, day: int) -> str:
     """`idobelyeg` (ISO-8601 UTC, pl. '2026-08-18T08:00:00Z') `nap` nappal
     eltolva — a `mag/slot/_idomatek.hozzaad_perc`-hez hasonló, de napban,
     nem percben számol (a hét-másolás mindig egész napokkal tol)."""
-    from mag.slot._idomatek import hozzaad_perc
+    from core.slot._idomatek import add_minute
 
-    return hozzaad_perc(idobelyeg, nap * 24 * 60)
+    return add_minute(timestamp, day * 24 * 60)
 
 
 # ---------------------------------------------------------------------
@@ -542,17 +531,17 @@ def _datum_eltol(idobelyeg: str, nap: int) -> str:
 # rendszer (blueprint 7. szakasz, "Kényszerkapcsolók" — profilok, még nem
 # épült meg), ez a két érték csak egy ÁTMENETI, felülírható alapértelmezés
 # az ütközéslistához, NEM egy törzsadatban rögzített, végleges szabály.
-_ALAP_MIN_OSSZES_SZUNET_PERC = 20
-_ALAP_MAX_FOLYAMATOS_MUNKA_PERC = 360
+_ALAP_MIN_ALL_BREAK_MINUTE = 20
+_ALAP_MAX_CONTINUOUS_WORK_MINUTE = 360
 
 
-def utkozeslista(
+def conflict_list(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    bolt_id: str | None = None,
-    min_osszes_szunet_perc: int = _ALAP_MIN_OSSZES_SZUNET_PERC,
-    max_folyamatos_munka_perc: int = _ALAP_MAX_FOLYAMATOS_MUNKA_PERC,
+    org_id: str,
+    shop_id: str | None = None,
+    min_all_break_minute: int = _ALAP_MIN_ALL_BREAK_MINUTE,
+    max_continuous_work_minute: int = _ALAP_MAX_CONTINUOUS_WORK_MINUTE,
 ) -> list[dict]:
     """Problémás műszakok listája — az admin felület "Ütközéslista"
     nézetének. Három ok miatt kerülhet ide egy tétel:
@@ -566,15 +555,13 @@ def utkozeslista(
 
     Az egész szervezetet (vagy egy boltot) végignézi, nem egyetlen hetet —
     ez audit-nézet, nem naptár."""
-    muszakok = muszak_repo.muszakok_lekerdezese(conn, szervezet_id=szervezet_id, bolt_id=bolt_id)
-    kivetel_napok = muszak_repo.kivetel_napok_lekerdezese(
-        conn, szervezet_id=szervezet_id, bolt_id=bolt_id
-    )
+    shifts = muszak_repo.shifts_list(conn, org_id=org_id, shop_id=shop_id)
+    exception_days = muszak_repo.exception_days_list(conn, org_id=org_id, shop_id=shop_id)
 
-    problemak: list[dict] = []
+    problems: list[dict] = []
 
-    for m in muszakok:
-        kivetel_napon_van = m["kezdet"][:10] in kivetel_napok
+    for m in shifts:
+        exception_on_day_has = m["kezdet"][:10] in exception_days
 
         # Kivétel napon a műszak SOR létezik, de a generátor szándékosan
         # nem tett bele blokkot/slotot (lásd generator.general() és
@@ -583,22 +570,33 @@ def utkozeslista(
         # szünet" hibát, de ez itt NEM valódi sértés, csak a kihagyás
         # mellékhatása. Ezért kivétel napon nem futtatjuk a kényszer-
         # ellenőrzést.
-        if not kivetel_napon_van:
-            muszak_obj = muszak_repo.muszak_betoltese(conn, muszak_id=m["muszak_id"])
-            blokkok = [
-                Blokk(**b) for b in muszak_repo.blokkok_lekerdezese(conn, muszak_id=m["muszak_id"])
+        if not exception_on_day_has:
+            shift_obj = muszak_repo.shift_load(conn, shift_id=m["muszak_id"])
+            # A repo dict kulcsai a séma nyelvét követik (kezdet/veg/...),
+            # a Block dataclass mezői viszont angolra fordultak (start/
+            # end/...) — ezért itt NEM lehet vak **b szétbontás, a
+            # leképezést explicit kell megadni.
+            blocks = [
+                Block(
+                    tipus=b["tipus"],
+                    start=b["kezdet"],
+                    end=b["veg"],
+                    fixed=b["rogzitett"],
+                    counts_toward_into_quota=b["beszamit_kvotaba"],
+                )
+                for b in muszak_repo.blocks_list(conn, shift_id=m["muszak_id"])
             ]
-            for sertes in kenyszerek.ellenoriz(
-                muszak_obj,
-                blokkok,
-                min_osszes_szunet_perc=min_osszes_szunet_perc,
-                max_folyamatos_munka_perc=max_folyamatos_munka_perc,
+            for violation in kenyszerek.check(
+                shift_obj,
+                blocks,
+                min_all_break_minute=min_all_break_minute,
+                max_continuous_work_minute=max_continuous_work_minute,
             ):
-                problemak.append(_problema(m, "kenyszer_sertes", sertes.szabaly, sertes.uzenet))
+                problems.append(_problem(m, "kenyszer_sertes", violation.rule, violation.message))
 
-        if m["slot_szam"] == 0 and not kivetel_napon_van:
-            problemak.append(
-                _problema(
+        if m["slot_szam"] == 0 and not exception_on_day_has:
+            problems.append(
+                _problem(
                     m,
                     "nulla_slot",
                     "nulla_slot",
@@ -607,38 +605,38 @@ def utkozeslista(
                 )
             )
 
-    pultonkent: dict[str, list[dict]] = defaultdict(list)
-    for m in muszakok:
-        pultonkent[m["pult_id"]].append(m)
-    for pult_muszakok in pultonkent.values():
-        rendezve = sorted(pult_muszakok, key=lambda m: m["kezdet"])
-        for elozo, kovetkezo in zip(rendezve, rendezve[1:], strict=False):
-            if elozo["veg"] > kovetkezo["kezdet"]:
-                problemak.append(
-                    _problema(
-                        elozo,
+    per_counter: dict[str, list[dict]] = defaultdict(list)
+    for m in shifts:
+        per_counter[m["pult_id"]].append(m)
+    for counter_shifts in per_counter.values():
+        rendezve = sorted(counter_shifts, key=lambda m: m["kezdet"])
+        for previous, next in zip(rendezve, rendezve[1:], strict=False):
+            if previous["veg"] > next["kezdet"]:
+                problems.append(
+                    _problem(
+                        previous,
                         "atfedes",
                         "atfedo_muszak",
-                        f"Átfedő műszakok ugyanazon a pulton ({elozo['pult_nev']}): "
-                        f"{elozo['kezdet']}–{elozo['veg']} és "
-                        f"{kovetkezo['kezdet']}–{kovetkezo['veg']} "
-                        f"({elozo['alkalmazott_nev']} / {kovetkezo['alkalmazott_nev']}).",
-                        masik_muszak_id=kovetkezo["muszak_id"],
+                        f"Átfedő műszakok ugyanazon a pulton ({previous['pult_nev']}): "
+                        f"{previous['kezdet']}–{previous['veg']} és "
+                        f"{next['kezdet']}–{next['veg']} "
+                        f"({previous['alkalmazott_nev']} / {next['alkalmazott_nev']}).",
+                        other_shift_id=next["muszak_id"],
                     )
                 )
 
-    return problemak
+    return problems
 
 
-def _problema(
-    m: dict, tipus: str, szabaly: str, uzenet: str, *, masik_muszak_id: str | None = None
+def _problem(
+    m: dict, tipus: str, rule: str, message: str, *, other_shift_id: str | None = None
 ) -> dict:
     return {
         "tipus": tipus,
-        "szabaly": szabaly,
-        "uzenet": uzenet,
+        "szabaly": rule,
+        "uzenet": message,
         "muszak_id": m["muszak_id"],
-        "masik_muszak_id": masik_muszak_id,
+        "masik_muszak_id": other_shift_id,
         "bolt_nev": m["bolt_nev"],
         "pult_nev": m["pult_nev"],
         "alkalmazott_nev": m["alkalmazott_nev"],

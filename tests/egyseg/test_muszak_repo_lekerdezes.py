@@ -11,202 +11,196 @@ from __future__ import annotations
 
 import pytest
 
-from mag.modell.muszak import Blokk, Slot
-from mag.repo import migracio, muszak_repo, torzsadat_repo
+from core.modell.shift import Block, Slot
+from core.repo import migracio, muszak_repo, torzsadat_repo
 
 _MOST = "2026-08-15T10:00:00Z"
 
 
 @pytest.fixture
-def db_utvonal(tmp_path) -> str:
+def db_path(tmp_path) -> str:
     return str(tmp_path / "teszt.db")
 
 
 @pytest.fixture
-def kapcsolat(db_utvonal):
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+def conn(db_path):
+    conn = migracio.conn_nyitas(db_path)
     migracio.migral(conn)
     yield conn
     conn.close()
 
 
 @pytest.fixture
-def torzs(kapcsolat) -> dict[str, str]:
-    szervezet_id = torzsadat_repo.szervezet_letrehoz(kapcsolat, nev="Aprajafalva", idozona="UTC")
-    bolt_id = torzsadat_repo.bolt_letrehoz(kapcsolat, szervezet_id=szervezet_id, nev="Ügyifogyi")
-    pult_id = torzsadat_repo.pult_letrehoz(
-        kapcsolat, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Pult 1"
+def master(conn) -> dict[str, str]:
+    org_id = torzsadat_repo.org_create(conn, name="Aprajafalva", timezone="UTC")
+    shop_id = torzsadat_repo.shop_create(conn, org_id=org_id, name="Ügyifogyi")
+    counter_id = torzsadat_repo.counter_create(conn, org_id=org_id, shop_id=shop_id, name="Pult 1")
+    employee_id = torzsadat_repo.employee_create(
+        conn, org_id=org_id, shop_id=shop_id, name="Durranó"
     )
-    alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
-        kapcsolat, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Durranó"
-    )
-    szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
-        kapcsolat,
-        szervezet_id=szervezet_id,
-        bolt_id=bolt_id,
-        nev="petárda",
-        alap_idotartam_perc=10,
+    service_id = torzsadat_repo.service_create(
+        conn,
+        org_id=org_id,
+        shop_id=shop_id,
+        name="petárda",
+        alap_duration_minute=10,
     )
     return {
-        "szervezet_id": szervezet_id,
-        "bolt_id": bolt_id,
-        "pult_id": pult_id,
-        "alkalmazott_id": alkalmazott_id,
-        "szolgaltatas_id": szolgaltatas_id,
+        "szervezet_id": org_id,
+        "bolt_id": shop_id,
+        "pult_id": counter_id,
+        "alkalmazott_id": employee_id,
+        "szolgaltatas_id": service_id,
     }
 
 
-def _muszak(kapcsolat, torzs, kezdet: str, veg: str) -> str:
-    return muszak_repo.muszak_letrehoz(
-        kapcsolat,
-        szervezet_id=torzs["szervezet_id"],
-        bolt_id=torzs["bolt_id"],
-        pult_id=torzs["pult_id"],
-        alkalmazott_id=torzs["alkalmazott_id"],
-        szolgaltatas_id=torzs["szolgaltatas_id"],
-        kezdet=kezdet,
-        veg=veg,
-        idotartam_perc=10,
-        puffer_utana_perc=0,
-        min_racs_perc=10,
-        foglalhato_arany=1.0,
-        blokk_szabaly={"szunetek": []},
+def _shift(conn, master, start: str, end: str) -> str:
+    return muszak_repo.shift_create(
+        conn,
+        org_id=master["szervezet_id"],
+        shop_id=master["bolt_id"],
+        counter_id=master["pult_id"],
+        employee_id=master["alkalmazott_id"],
+        service_id=master["szolgaltatas_id"],
+        start=start,
+        end=end,
+        duration_minute=10,
+        buffer_after_minute=0,
+        min_grid_minute=10,
+        bookable_ratio=1.0,
+        block_rule={"szunetek": []},
     )
 
 
 # --- muszakok_lekerdezese -------------------------------------------------
 
 
-def test_muszakok_lekerdezese_ures(kapcsolat, torzs):
-    eredmeny = muszak_repo.muszakok_lekerdezese(kapcsolat, szervezet_id=torzs["szervezet_id"])
-    assert eredmeny == []
+def test_shifts_list_empty(conn, master):
+    result = muszak_repo.shifts_list(conn, org_id=master["szervezet_id"])
+    assert result == []
 
 
-def test_muszakok_lekerdezese_egy_elem_nevekkel(kapcsolat, torzs):
-    muszak_id = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    eredmeny = muszak_repo.muszakok_lekerdezese(kapcsolat, szervezet_id=torzs["szervezet_id"])
-    assert len(eredmeny) == 1
-    sor = eredmeny[0]
-    assert sor["muszak_id"] == muszak_id
-    assert sor["bolt_nev"] == "Ügyifogyi"
-    assert sor["pult_nev"] == "Pult 1"
-    assert sor["alkalmazott_nev"] == "Durranó"
-    assert sor["szolgaltatas_nev"] == "petárda"
-    assert sor["slot_szam"] == 0  # nincs slot mentve, csak a muszak sor
+def test_shifts_list_one_elem_nevekkel(conn, master):
+    shift_id = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    result = muszak_repo.shifts_list(conn, org_id=master["szervezet_id"])
+    assert len(result) == 1
+    row = result[0]
+    assert row["muszak_id"] == shift_id
+    assert row["bolt_nev"] == "Ügyifogyi"
+    assert row["pult_nev"] == "Pult 1"
+    assert row["alkalmazott_nev"] == "Durranó"
+    assert row["szolgaltatas_nev"] == "petárda"
+    assert row["slot_szam"] == 0  # nincs slot mentve, csak a muszak sor
 
 
-def test_muszakok_lekerdezese_tobb_elem_kezdet_szerint_rendezve(kapcsolat, torzs):
-    kesobbi = _muszak(kapcsolat, torzs, "2026-08-19T08:00:00Z", "2026-08-19T09:00:00Z")
-    korabbi = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    eredmeny = muszak_repo.muszakok_lekerdezese(kapcsolat, szervezet_id=torzs["szervezet_id"])
-    assert [e["muszak_id"] for e in eredmeny] == [korabbi, kesobbi]
+def test_shifts_list_multiple_elem_start_by_rendezve(conn, master):
+    later = _shift(conn, master, "2026-08-19T08:00:00Z", "2026-08-19T09:00:00Z")
+    earlier = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    result = muszak_repo.shifts_list(conn, org_id=master["szervezet_id"])
+    assert [e["muszak_id"] for e in result] == [earlier, later]
 
 
-def test_muszakok_lekerdezese_datum_ablakra_szur(kapcsolat, torzs):
-    _muszak(kapcsolat, torzs, "2026-08-17T08:00:00Z", "2026-08-17T09:00:00Z")
-    bent = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    _muszak(kapcsolat, torzs, "2026-08-25T08:00:00Z", "2026-08-25T09:00:00Z")
+def test_shifts_list_date_window_filter(conn, master):
+    _shift(conn, master, "2026-08-17T08:00:00Z", "2026-08-17T09:00:00Z")
+    bent = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    _shift(conn, master, "2026-08-25T08:00:00Z", "2026-08-25T09:00:00Z")
 
-    eredmeny = muszak_repo.muszakok_lekerdezese(
-        kapcsolat,
-        szervezet_id=torzs["szervezet_id"],
-        datum_tol="2026-08-18T00:00:00Z",
-        datum_ig="2026-08-19T00:00:00Z",
+    result = muszak_repo.shifts_list(
+        conn,
+        org_id=master["szervezet_id"],
+        date_tol="2026-08-18T00:00:00Z",
+        date_ig="2026-08-19T00:00:00Z",
     )
-    assert [e["muszak_id"] for e in eredmeny] == [bent]
+    assert [e["muszak_id"] for e in result] == [bent]
 
 
-def test_muszakok_lekerdezese_bolt_szerint_szur(kapcsolat, torzs):
-    sajat = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    masik_bolt = torzsadat_repo.bolt_letrehoz(
-        kapcsolat, szervezet_id=torzs["szervezet_id"], nev="Törpilla"
+def test_shifts_list_shop_by_filter(conn, master):
+    own = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    other_shop = torzsadat_repo.shop_create(conn, org_id=master["szervezet_id"], name="Törpilla")
+    other_counter = torzsadat_repo.counter_create(
+        conn, org_id=master["szervezet_id"], shop_id=other_shop, name="Törpilla pult"
     )
-    masik_pult = torzsadat_repo.pult_letrehoz(
-        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=masik_bolt, nev="Törpilla pult"
+    other_employee = torzsadat_repo.employee_create(
+        conn, org_id=master["szervezet_id"], shop_id=other_shop, name="Törpilla"
     )
-    masik_alkalmazott = torzsadat_repo.alkalmazott_letrehoz(
-        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=masik_bolt, nev="Törpilla"
+    other_service = torzsadat_repo.service_create(
+        conn,
+        org_id=master["szervezet_id"],
+        shop_id=other_shop,
+        name="boldogság",
+        alap_duration_minute=15,
     )
-    masik_szolg = torzsadat_repo.szolgaltatas_letrehoz(
-        kapcsolat,
-        szervezet_id=torzs["szervezet_id"],
-        bolt_id=masik_bolt,
-        nev="boldogság",
-        alap_idotartam_perc=15,
-    )
-    muszak_repo.muszak_letrehoz(
-        kapcsolat,
-        szervezet_id=torzs["szervezet_id"],
-        bolt_id=masik_bolt,
-        pult_id=masik_pult,
-        alkalmazott_id=masik_alkalmazott,
-        szolgaltatas_id=masik_szolg,
-        kezdet="2026-08-18T08:00:00Z",
-        veg="2026-08-18T09:00:00Z",
-        idotartam_perc=10,
-        puffer_utana_perc=0,
-        min_racs_perc=10,
-        foglalhato_arany=1.0,
-        blokk_szabaly={"szunetek": []},
+    muszak_repo.shift_create(
+        conn,
+        org_id=master["szervezet_id"],
+        shop_id=other_shop,
+        counter_id=other_counter,
+        employee_id=other_employee,
+        service_id=other_service,
+        start="2026-08-18T08:00:00Z",
+        end="2026-08-18T09:00:00Z",
+        duration_minute=10,
+        buffer_after_minute=0,
+        min_grid_minute=10,
+        bookable_ratio=1.0,
+        block_rule={"szunetek": []},
     )
 
-    eredmeny = muszak_repo.muszakok_lekerdezese(
-        kapcsolat, szervezet_id=torzs["szervezet_id"], bolt_id=torzs["bolt_id"]
-    )
-    assert [e["muszak_id"] for e in eredmeny] == [sajat]
+    result = muszak_repo.shifts_list(conn, org_id=master["szervezet_id"], shop_id=master["bolt_id"])
+    assert [e["muszak_id"] for e in result] == [own]
 
 
-def test_muszakok_lekerdezese_slot_szam_a_mentett_slotokat_tukrozi(kapcsolat, torzs):
-    muszak_id = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    slotok = [Slot("2026-08-18T08:00:00Z", "2026-08-18T08:10:00Z")]
-    muszak_repo.blokkok_slotok_mentese(
-        kapcsolat,
-        muszak_id=muszak_id,
-        szervezet_id=torzs["szervezet_id"],
-        blokkok=[],
-        slotok=slotok,
+def test_shifts_list_slot_count_saved_slots_tukrozi(conn, master):
+    shift_id = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    slots = [Slot("2026-08-18T08:00:00Z", "2026-08-18T08:10:00Z")]
+    muszak_repo.blocks_slots_save(
+        conn,
+        shift_id=shift_id,
+        org_id=master["szervezet_id"],
+        blocks=[],
+        slots=slots,
     )
-    eredmeny = muszak_repo.muszakok_lekerdezese(kapcsolat, szervezet_id=torzs["szervezet_id"])
-    assert eredmeny[0]["slot_szam"] == 1
+    result = muszak_repo.shifts_list(conn, org_id=master["szervezet_id"])
+    assert result[0]["slot_szam"] == 1
 
 
 # --- blokkok_lekerdezese --------------------------------------------------
 
 
-def test_blokkok_lekerdezese_ures(kapcsolat, torzs):
-    muszak_id = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    assert muszak_repo.blokkok_lekerdezese(kapcsolat, muszak_id=muszak_id) == []
+def test_blocks_list_empty(conn, master):
+    shift_id = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    assert muszak_repo.blocks_list(conn, shift_id=shift_id) == []
 
 
-def test_blokkok_lekerdezese_tobb_elem_kezdet_szerint_rendezve(kapcsolat, torzs):
-    muszak_id = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    blokkok = [
-        Blokk("szunet", "2026-08-18T08:30:00Z", "2026-08-18T08:40:00Z", True, True),
-        Blokk("szunet", "2026-08-18T08:00:00Z", "2026-08-18T08:10:00Z", True, True),
+def test_blocks_list_multiple_elem_start_by_rendezve(conn, master):
+    shift_id = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    blocks = [
+        Block("szunet", "2026-08-18T08:30:00Z", "2026-08-18T08:40:00Z", True, True),
+        Block("szunet", "2026-08-18T08:00:00Z", "2026-08-18T08:10:00Z", True, True),
     ]
-    muszak_repo.blokkok_slotok_mentese(
-        kapcsolat,
-        muszak_id=muszak_id,
-        szervezet_id=torzs["szervezet_id"],
-        blokkok=blokkok,
-        slotok=[],
+    muszak_repo.blocks_slots_save(
+        conn,
+        shift_id=shift_id,
+        org_id=master["szervezet_id"],
+        blocks=blocks,
+        slots=[],
     )
-    eredmeny = muszak_repo.blokkok_lekerdezese(kapcsolat, muszak_id=muszak_id)
-    assert [b["kezdet"] for b in eredmeny] == ["2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z"]
-    assert eredmeny[0]["tipus"] == "szunet"
-    assert eredmeny[0]["rogzitett"] is True
-    assert eredmeny[0]["beszamit_kvotaba"] is True
+    result = muszak_repo.blocks_list(conn, shift_id=shift_id)
+    assert [b["kezdet"] for b in result] == ["2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z"]
+    assert result[0]["tipus"] == "szunet"
+    assert result[0]["rogzitett"] is True
+    assert result[0]["beszamit_kvotaba"] is True
 
 
-def test_blokkok_lekerdezese_szur_muszak_szerint(kapcsolat, torzs):
-    muszak_1 = _muszak(kapcsolat, torzs, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    muszak_2 = _muszak(kapcsolat, torzs, "2026-08-19T08:00:00Z", "2026-08-19T09:00:00Z")
-    muszak_repo.blokkok_slotok_mentese(
-        kapcsolat,
-        muszak_id=muszak_2,
-        szervezet_id=torzs["szervezet_id"],
-        blokkok=[Blokk("szabad_sav", "2026-08-19T08:50:00Z", "2026-08-19T09:00:00Z", True, False)],
-        slotok=[],
+def test_blocks_list_filter_shift_by(conn, master):
+    shift_1 = _shift(conn, master, "2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    shift_2 = _shift(conn, master, "2026-08-19T08:00:00Z", "2026-08-19T09:00:00Z")
+    muszak_repo.blocks_slots_save(
+        conn,
+        shift_id=shift_2,
+        org_id=master["szervezet_id"],
+        blocks=[Block("szabad_sav", "2026-08-19T08:50:00Z", "2026-08-19T09:00:00Z", True, False)],
+        slots=[],
     )
-    assert muszak_repo.blokkok_lekerdezese(kapcsolat, muszak_id=muszak_1) == []
-    assert len(muszak_repo.blokkok_lekerdezese(kapcsolat, muszak_id=muszak_2)) == 1
+    assert muszak_repo.blocks_list(conn, shift_id=shift_1) == []
+    assert len(muszak_repo.blocks_list(conn, shift_id=shift_2)) == 1

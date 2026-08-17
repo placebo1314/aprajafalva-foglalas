@@ -14,15 +14,15 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from mag.modell.muszak import Blokk, Muszak
-from mag.slot._idomatek import hozzaad_perc, perc_kulonbseg
+from core.modell.shift import Block, Shift
+from core.slot._idomatek import add_minute, minute_difference
 
 
-class BlokkStrategia(Protocol):
-    def general(self, muszak: Muszak) -> list[Blokk]: ...
+class BlockStrategy(Protocol):
+    def generate(self, shift: Shift) -> list[Block]: ...
 
 
-class FixBlokk:
+class FixedBlock:
     """Generál, nem mozgat, ütközésnél elutasít (v1, ADR-009).
 
     A `muszak.blokk_szabaly` JSON-ból olvassa a szünet-mintázatot:
@@ -44,102 +44,102 @@ class FixBlokk:
     emiatt.
     """
 
-    def general(self, muszak: Muszak) -> list[Blokk]:
-        szunet_blokkok: list[Blokk] = []
-        for szabaly in muszak.blokk_szabaly.get("szunetek", []):
-            szunet_blokkok.extend(self._szunet_generalas(muszak, szabaly))
+    def generate(self, shift: Shift) -> list[Block]:
+        break_blocks: list[Block] = []
+        for rule in shift.block_rule.get("szunetek", []):
+            break_blocks.extend(self._break_generation(shift, rule))
 
-        szabad_sav_blokkok = self._szabad_sav(muszak, szunet_blokkok)
-        return sorted(szunet_blokkok + szabad_sav_blokkok, key=lambda b: b.kezdet)
+        free_band_blocks = self._free_band(shift, break_blocks)
+        return sorted(break_blocks + free_band_blocks, key=lambda b: b.start)
 
-    def _szunet_generalas(self, muszak: Muszak, szabaly: dict) -> list[Blokk]:
-        mintazat = szabaly["mintazat"]
+    def _break_generation(self, shift: Shift, rule: dict) -> list[Block]:
+        mintazat = rule["mintazat"]
         if mintazat == "minden_slot_utan":
-            return self._minden_slot_utan(muszak, szabaly)
+            return self._all_slot_after(shift, rule)
         if mintazat == "oranta":
-            return self._oranta(muszak, szabaly)
+            return self._hourly(shift, rule)
         raise ValueError(f"Ismeretlen szünetmintázat: {mintazat!r}")
 
-    def _minden_slot_utan(self, muszak: Muszak, szabaly: dict) -> list[Blokk]:
+    def _all_slot_after(self, shift: Shift, rule: dict) -> list[Block]:
         """Ciklus: (szolgáltatás-idő) + (szünet), amíg belefér a műszakba."""
-        tipus = szabaly["tipus"]
-        hossz = szabaly["hossz_perc"]
-        cadencia = muszak.idotartam_perc + muszak.puffer_utana_perc
-        blokkok = []
-        kezdet = muszak.kezdet
+        tipus = rule["tipus"]
+        length = rule["hossz_perc"]
+        cadence = shift.duration_minute + shift.buffer_after_minute
+        blocks = []
+        start = shift.start
         while True:
-            szolgaltatas_vege = hozzaad_perc(kezdet, cadencia)
-            szunet_vege = hozzaad_perc(szolgaltatas_vege, hossz)
-            if szunet_vege > muszak.veg:
+            service_end = add_minute(start, cadence)
+            break_end = add_minute(service_end, length)
+            if break_end > shift.end:
                 break
-            blokkok.append(Blokk(tipus, szolgaltatas_vege, szunet_vege, True, True))
-            kezdet = szunet_vege
-        return blokkok
+            blocks.append(Block(tipus, service_end, break_end, True, True))
+            start = break_end
+        return blocks
 
-    def _oranta(self, muszak: Muszak, szabaly: dict) -> list[Blokk]:
+    def _hourly(self, shift: Shift, rule: dict) -> list[Block]:
         """Óránként egy blokk: annyi szolgáltatás után, amennyi a szünet
         előtt még belefér a névleges (műszakkezdettől számított) órába."""
-        tipus = szabaly["tipus"]
-        hossz = szabaly["hossz_perc"]
-        cadencia = muszak.idotartam_perc + muszak.puffer_utana_perc
-        blokkok = []
-        ora_kezdet = muszak.kezdet
-        while ora_kezdet < muszak.veg:
-            rendelkezesre_all = 60 - hossz
-            szolgaltatas_szam = max(rendelkezesre_all // cadencia, 0)
-            szunet_kezdet = hozzaad_perc(ora_kezdet, szolgaltatas_szam * cadencia)
-            szunet_vege = hozzaad_perc(szunet_kezdet, hossz)
-            if szunet_vege > muszak.veg:
+        tipus = rule["tipus"]
+        length = rule["hossz_perc"]
+        cadence = shift.duration_minute + shift.buffer_after_minute
+        blocks = []
+        hour_start = shift.start
+        while hour_start < shift.end:
+            available_all = 60 - length
+            service_count = max(available_all // cadence, 0)
+            break_start = add_minute(hour_start, service_count * cadence)
+            break_end = add_minute(break_start, length)
+            if break_end > shift.end:
                 break
-            blokkok.append(Blokk(tipus, szunet_kezdet, szunet_vege, True, True))
-            ora_kezdet = hozzaad_perc(ora_kezdet, 60)
-        return blokkok
+            blocks.append(Block(tipus, break_start, break_end, True, True))
+            hour_start = add_minute(hour_start, 60)
+        return blocks
 
-    def _szabad_sav(self, muszak: Muszak, szunet_blokkok: list[Blokk]) -> list[Blokk]:
+    def _free_band(self, shift: Shift, break_blocks: list[Block]) -> list[Block]:
         """Óránként egy szabad sáv blokk: a névleges óra
         `(1 - foglalhato_arany)` hányada, az óra szünettel nem foglalt
         részének a VÉGÉHEZ illesztve. Ha egy órában a szünet miatt nincs
         elég hely, a blokk lerövidül a rendelkezésre álló résznyire, vagy
         — ha nincs szabad rész — teljesen elmarad abban az órában."""
-        if muszak.foglalhato_arany >= 1.0:
+        if shift.bookable_ratio >= 1.0:
             return []
 
-        blokkok: list[Blokk] = []
-        ora_kezdet = muszak.kezdet
-        while ora_kezdet < muszak.veg:
-            ora_veg = min(hozzaad_perc(ora_kezdet, 60), muszak.veg)
-            ora_hossz = perc_kulonbseg(ora_kezdet, ora_veg)
-            cel_hossz = round(ora_hossz * (1 - muszak.foglalhato_arany))
+        blocks: list[Block] = []
+        hour_start = shift.start
+        while hour_start < shift.end:
+            hour_end = min(add_minute(hour_start, 60), shift.end)
+            hour_length = minute_difference(hour_start, hour_end)
+            target_length = round(hour_length * (1 - shift.bookable_ratio))
 
-            if cel_hossz > 0:
-                resek = self._szabad_reszek(ora_kezdet, ora_veg, szunet_blokkok)
-                if resek:
-                    res_kezdet, res_veg = resek[-1]
-                    hossz = min(cel_hossz, perc_kulonbseg(res_kezdet, res_veg))
-                    if hossz > 0:
-                        blokk_kezdet = hozzaad_perc(res_veg, -hossz)
-                        blokkok.append(Blokk("szabad_sav", blokk_kezdet, res_veg, True, False))
+            if target_length > 0:
+                gaps = self._free_parts(hour_start, hour_end, break_blocks)
+                if gaps:
+                    gap_start, gap_end = gaps[-1]
+                    length = min(target_length, minute_difference(gap_start, gap_end))
+                    if length > 0:
+                        block_start = add_minute(gap_end, -length)
+                        blocks.append(Block("szabad_sav", block_start, gap_end, True, False))
 
-            ora_kezdet = hozzaad_perc(ora_kezdet, 60)
-        return blokkok
+            hour_start = add_minute(hour_start, 60)
+        return blocks
 
     @staticmethod
-    def _szabad_reszek(
-        ora_kezdet: str, ora_veg: str, szunet_blokkok: list[Blokk]
+    def _free_parts(
+        hour_start: str, hour_end: str, break_blocks: list[Block]
     ) -> list[tuple[str, str]]:
         """Az `[ora_kezdet, ora_veg)` ablakból a rá eső szünetblokkok
         kivágása után maradó szabad részek, kezdet szerint rendezve."""
-        erintett = sorted(
-            (max(b.kezdet, ora_kezdet), min(b.veg, ora_veg))
-            for b in szunet_blokkok
-            if b.kezdet < ora_veg and b.veg > ora_kezdet
+        affected = sorted(
+            (max(b.start, hour_start), min(b.end, hour_end))
+            for b in break_blocks
+            if b.start < hour_end and b.end > hour_start
         )
-        resek: list[tuple[str, str]] = []
-        kurzor = ora_kezdet
-        for k, v in erintett:
-            if k > kurzor:
-                resek.append((kurzor, k))
-            kurzor = max(kurzor, v)
-        if kurzor < ora_veg:
-            resek.append((kurzor, ora_veg))
-        return resek
+        gaps: list[tuple[str, str]] = []
+        cursor = hour_start
+        for k, v in affected:
+            if k > cursor:
+                gaps.append((cursor, k))
+            cursor = max(cursor, v)
+        if cursor < hour_end:
+            gaps.append((cursor, hour_end))
+        return gaps

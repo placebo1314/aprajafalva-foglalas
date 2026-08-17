@@ -12,181 +12,179 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from mag.api import cli
-from mag.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo
+from core.api import cli
+from core.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo
 
 
 @pytest.fixture
-def db_utvonal(tmp_path) -> str:
+def db_path(tmp_path) -> str:
     return str(tmp_path / "cli.db")
 
 
 @pytest.fixture
-def alapadat(db_utvonal) -> dict:
+def base_data(db_path) -> dict:
     """Migrál, és felvesz egy minimális törzsadatot + egy 1 órás,
     szünet nélküli műszakot — elég egy CLI-teszthez, seed nélkül."""
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+    conn = migracio.conn_nyitas(db_path)
     try:
         migracio.migral(conn)
-        szervezet_id = torzsadat_repo.szervezet_letrehoz(
-            conn, nev="Aprajafalva", idozona="Europe/Budapest"
+        org_id = torzsadat_repo.org_create(conn, name="Aprajafalva", timezone="Europe/Budapest")
+        shop_id = torzsadat_repo.shop_create(conn, org_id=org_id, name="Törpilla")
+        counter_id = torzsadat_repo.counter_create(
+            conn, org_id=org_id, shop_id=shop_id, name="Pult 1"
         )
-        bolt_id = torzsadat_repo.bolt_letrehoz(conn, szervezet_id=szervezet_id, nev="Törpilla")
-        pult_id = torzsadat_repo.pult_letrehoz(
-            conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Pult 1"
+        employee_id = torzsadat_repo.employee_create(
+            conn, org_id=org_id, shop_id=shop_id, name="Hulk Hugan"
         )
-        alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
-            conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Hulk Hugan"
-        )
-        szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+        service_id = torzsadat_repo.service_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=bolt_id,
-            nev="boldogság",
-            alap_idotartam_perc=15,
+            org_id=org_id,
+            shop_id=shop_id,
+            name="boldogság",
+            alap_duration_minute=15,
         )
-        muszak_id = muszak_repo.muszak_letrehoz(
+        shift_id = muszak_repo.shift_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=bolt_id,
-            pult_id=pult_id,
-            alkalmazott_id=alkalmazott_id,
-            szolgaltatas_id=szolgaltatas_id,
-            kezdet="2027-01-05T08:00:00Z",
-            veg="2027-01-05T09:00:00Z",
-            idotartam_perc=15,
-            puffer_utana_perc=0,
-            min_racs_perc=15,
-            foglalhato_arany=1.0,
-            blokk_szabaly={"szunetek": []},
+            org_id=org_id,
+            shop_id=shop_id,
+            counter_id=counter_id,
+            employee_id=employee_id,
+            service_id=service_id,
+            start="2027-01-05T08:00:00Z",
+            end="2027-01-05T09:00:00Z",
+            duration_minute=15,
+            buffer_after_minute=0,
+            min_grid_minute=15,
+            bookable_ratio=1.0,
+            block_rule={"szunetek": []},
         )
     finally:
         conn.close()
     return {
-        "szervezet_id": szervezet_id,
-        "bolt_id": bolt_id,
-        "szolgaltatas_id": szolgaltatas_id,
-        "muszak_id": muszak_id,
+        "szervezet_id": org_id,
+        "bolt_id": shop_id,
+        "szolgaltatas_id": service_id,
+        "muszak_id": shift_id,
     }
 
 
-def test_migral_uj_adatbazison(db_utvonal):
-    kod = cli._migral([db_utvonal])
-    assert kod == 0
-    conn = sqlite3.connect(db_utvonal)
-    tablak = {sor[0] for sor in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+def test_migral_new_on_database(db_path):
+    code = cli._migral([db_path])
+    assert code == 0
+    conn = sqlite3.connect(db_path)
+    tablak = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     conn.close()
     assert "muszak" in tablak
 
 
-def test_slotok_general_es_ment(db_utvonal, alapadat):
-    kod = cli._slotok([db_utvonal, alapadat["muszak_id"]])
-    assert kod == 0
-    conn = sqlite3.connect(db_utvonal)
-    slot_szam = conn.execute(
-        "SELECT COUNT(*) FROM slot WHERE muszak_id = ?", (alapadat["muszak_id"],)
+def test_slots_generate_and_saves(db_path, base_data):
+    code = cli._slots([db_path, base_data["muszak_id"]])
+    assert code == 0
+    conn = sqlite3.connect(db_path)
+    slot_count = conn.execute(
+        "SELECT COUNT(*) FROM slot WHERE muszak_id = ?", (base_data["muszak_id"],)
     ).fetchone()[0]
     conn.close()
-    assert slot_szam == 4  # 60 perc / 15 perc, szünet nélkül
+    assert slot_count == 4  # 60 perc / 15 perc, szünet nélkül
 
 
-def test_slotok_nincs_ilyen_muszak(db_utvonal, alapadat):
-    kod = cli._slotok([db_utvonal, "0" * 32])
-    assert kod == 1
+def test_slots_no_ilyen_shift(db_path, base_data):
+    code = cli._slots([db_path, "0" * 32])
+    assert code == 1
 
 
-def test_keres_ures_szabad_slot_nelkul(db_utvonal, alapadat):
-    kod = cli._keres([db_utvonal, alapadat["szervezet_id"]])
-    assert kod == 0  # "nincs szabad időpont" is sikeres futás, nem hiba
+def test_search_empty_free_slot_without(db_path, base_data):
+    code = cli._search([db_path, base_data["szervezet_id"]])
+    assert code == 0  # "nincs szabad időpont" is sikeres futás, nem hiba
 
 
-def test_keres_talal_szabad_slotot(db_utvonal, alapadat, capsys):
-    cli._slotok([db_utvonal, alapadat["muszak_id"]])
+def test_search_finds_free_slot(db_path, base_data, capsys):
+    cli._slots([db_path, base_data["muszak_id"]])
     capsys.readouterr()  # az eddigi kimenet eldobása
 
-    kod = cli._keres([db_utvonal, alapadat["szervezet_id"], "--bolt", alapadat["bolt_id"]])
+    code = cli._search([db_path, base_data["szervezet_id"], "--bolt", base_data["bolt_id"]])
 
-    assert kod == 0
-    kimenet = capsys.readouterr().out
-    assert kimenet.count("\n") == 4  # 4 slot, soronként egy
+    assert code == 0
+    output = capsys.readouterr().out
+    assert output.count("\n") == 4  # 4 slot, soronként egy
 
 
-def test_foglal_es_lemond_folyamata(db_utvonal, alapadat, capsys):
-    cli._slotok([db_utvonal, alapadat["muszak_id"]])
-    conn = sqlite3.connect(db_utvonal)
+def test_foglal_and_lemond_process(db_path, base_data, capsys):
+    cli._slots([db_path, base_data["muszak_id"]])
+    conn = sqlite3.connect(db_path)
     slot_id = conn.execute(
         "SELECT id FROM slot WHERE muszak_id = ? ORDER BY kezdet LIMIT 1",
-        (alapadat["muszak_id"],),
+        (base_data["muszak_id"],),
     ).fetchone()[0]
     conn.close()
     capsys.readouterr()
 
-    foglal_kod = cli._foglal([db_utvonal, slot_id, "a" * 64, "idem-1", "session-1"])
-    assert foglal_kod == 0
-    kimenet = capsys.readouterr().out
-    assert "sikeres" in kimenet
-    assert "Foglalási kód:" in kimenet
+    foglal_code = cli._foglal([db_path, slot_id, "a" * 64, "idem-1", "session-1"])
+    assert foglal_code == 0
+    output = capsys.readouterr().out
+    assert "sikeres" in output
+    assert "Foglalási kód:" in output
 
-    conn = sqlite3.connect(db_utvonal)
-    foglalasi_kod = conn.execute(
+    conn = sqlite3.connect(db_path)
+    booking_code = conn.execute(
         "SELECT foglalasi_kod FROM foglalas WHERE idempotencia_kulcs = 'idem-1'"
     ).fetchone()[0]
     conn.close()
 
-    lemond_kod = cli._lemond([db_utvonal, foglalasi_kod])
-    assert lemond_kod == 0
+    lemond_code = cli._lemond([db_path, booking_code])
+    assert lemond_code == 0
 
-    ujra_lemond_kod = cli._lemond([db_utvonal, foglalasi_kod])
-    assert ujra_lemond_kod == 1  # már lemondva — nem SIKERES
+    ujra_lemond_code = cli._lemond([db_path, booking_code])
+    assert ujra_lemond_code == 1  # már lemondva — nem SIKERES
 
 
-def test_foglal_masodik_probalkozas_megeloztek(db_utvonal, alapadat, capsys):
-    cli._slotok([db_utvonal, alapadat["muszak_id"]])
-    conn = sqlite3.connect(db_utvonal)
+def test_foglal_second_attempt_preempted(db_path, base_data, capsys):
+    cli._slots([db_path, base_data["muszak_id"]])
+    conn = sqlite3.connect(db_path)
     slot_id = conn.execute(
         "SELECT id FROM slot WHERE muszak_id = ? ORDER BY kezdet LIMIT 1",
-        (alapadat["muszak_id"],),
+        (base_data["muszak_id"],),
     ).fetchone()[0]
     conn.close()
 
-    cli._foglal([db_utvonal, slot_id, "a" * 64, "idem-1", "session-1"])
+    cli._foglal([db_path, slot_id, "a" * 64, "idem-1", "session-1"])
     capsys.readouterr()
-    masodik_kod = cli._foglal([db_utvonal, slot_id, "b" * 64, "idem-2", "session-2"])
+    second_code = cli._foglal([db_path, slot_id, "b" * 64, "idem-2", "session-2"])
 
-    assert masodik_kod == 1
+    assert second_code == 1
     assert "megeloztek" in capsys.readouterr().out
 
 
-def test_holdok_takaritas(db_utvonal, alapadat, capsys):
-    cli._slotok([db_utvonal, alapadat["muszak_id"]])
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+def test_holds_cleanup(db_path, base_data, capsys):
+    cli._slots([db_path, base_data["muszak_id"]])
+    conn = migracio.conn_nyitas(db_path)
     slot_id = conn.execute(
-        "SELECT id FROM slot WHERE muszak_id = ? LIMIT 1", (alapadat["muszak_id"],)
+        "SELECT id FROM slot WHERE muszak_id = ? LIMIT 1", (base_data["muszak_id"],)
     ).fetchone()[0]
     # A lejar > letrejott CHECK a valódi rendszerórát nézi (most_iso()),
     # ezért a hold létrehozásakor a jövőben kell lennie — a "takarítás"
     # pillanatát viszont ennél is későbbre, 2099-re állítjuk, hogy már
     # lejártnak számítson.
-    kozeli_jovo = (datetime.now(UTC) + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    foglalas_repo.hold_letrehoz(conn, slot_id, "session-1", kozeli_jovo)
+    near_jovo = (datetime.now(UTC) + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    foglalas_repo.hold_create(conn, slot_id, "session-1", near_jovo)
     conn.close()
     capsys.readouterr()
 
-    kod = cli._holdok_takaritas([db_utvonal, "2099-01-01T00:00:00Z"])
+    code = cli._holds_cleanup([db_path, "2099-01-01T00:00:00Z"])
 
-    assert kod == 0
+    assert code == 0
     assert "Törölve: 1" in capsys.readouterr().out
 
 
-def test_parancs_nelkuli_hivas_sugot_ir_ki(capsys):
+def test_command_nelkuli_call_sugot_write_ki(capsys):
     import sys
 
-    ismert = list(sys.argv)
+    known = list(sys.argv)
     try:
         sys.argv = ["mag.api.cli"]
-        kod = cli._fo()
+        code = cli._fo()
     finally:
-        sys.argv = ismert
+        sys.argv = known
 
-    assert kod == 1
+    assert code == 1
     assert "Parancssori felület" in capsys.readouterr().out

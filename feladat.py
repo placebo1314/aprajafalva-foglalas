@@ -29,7 +29,7 @@ def fut(parancs: list[str], kornyezet: dict | None = None) -> int:
 
 
 def teszt(_: list[str]) -> int:
-    return fut([sys.executable, "-m", "pytest", "tesztek/", "-q"])
+    return fut([sys.executable, "-m", "pytest", "tests/", "-q"])
 
 
 def teszt_mindketto(_: list[str]) -> int:
@@ -41,20 +41,20 @@ def teszt_mindketto(_: list[str]) -> int:
                 "ez az ág ténylegesen ugyanazt a SQLite-ot futtatja, nem bizonyít "
                 "semmit Postgresen."
             )
-        if kod := fut([sys.executable, "-m", "pytest", "tesztek/", "-q"], {"ADATTAR": motor}):
+        if kod := fut([sys.executable, "-m", "pytest", "tests/", "-q"], {"ADATTAR": motor}):
             return kod
     return 0
 
 
 def golden(argv: list[str]) -> int:
-    return fut([sys.executable, "-m", "tesztek.golden.futtato", *argv])
+    return fut([sys.executable, "-m", "tests.golden.futtato", *argv])
 
 
 def migracio(argv: list[str]) -> int:
     if not argv:
         print('Használat: python feladat.py migracio "<leiras>"')
         return 1
-    return fut([sys.executable, "-m", "eszkozok.uj_migracio", argv[0]])
+    return fut([sys.executable, "-m", "tools.uj_migracio", argv[0]])
 
 
 def seed(_: list[str]) -> int:

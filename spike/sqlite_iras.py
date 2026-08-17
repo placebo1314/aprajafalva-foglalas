@@ -31,9 +31,9 @@ from pathlib import Path
 GYOKER = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(GYOKER))
 
-from mag.modell.muszak import Slot  # noqa: E402
-from mag.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo  # noqa: E402
-from mag.slot._idomatek import hozzaad_perc  # noqa: E402
+from core.modell.shift import Slot  # noqa: E402
+from core.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo  # noqa: E402
+from core.slot._idomatek import add_minute  # noqa: E402
 
 _MOST = "2026-08-17T09:00:00Z"
 
@@ -46,52 +46,50 @@ def _elokeszit(db_utvonal: str, szalszam: int) -> list[str]:
     """Migrál, felvesz törzsadatot, és szalszam db külön slotot — minden
     szál a sajátjára ír, hogy a mérés az írási latenciáról szóljon, ne a
     slot-egyediségi versenyről."""
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+    conn = migracio.conn_nyitas(db_utvonal)
     try:
         migracio.migral(conn)
-        szervezet_id = torzsadat_repo.szervezet_letrehoz(
-            conn, nev="Spike", idozona="Europe/Budapest"
+        szervezet_id = torzsadat_repo.org_create(conn, name="Spike", timezone="Europe/Budapest")
+        bolt_id = torzsadat_repo.shop_create(conn, org_id=szervezet_id, name="Spike bolt")
+        pult_id = torzsadat_repo.counter_create(
+            conn, org_id=szervezet_id, shop_id=bolt_id, name="Pult"
         )
-        bolt_id = torzsadat_repo.bolt_letrehoz(conn, szervezet_id=szervezet_id, nev="Spike bolt")
-        pult_id = torzsadat_repo.pult_letrehoz(
-            conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Pult"
+        alkalmazott_id = torzsadat_repo.employee_create(
+            conn, org_id=szervezet_id, shop_id=bolt_id, name="Dolgozo"
         )
-        alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
-            conn, szervezet_id=szervezet_id, bolt_id=bolt_id, nev="Dolgozo"
-        )
-        szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+        szolgaltatas_id = torzsadat_repo.service_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=bolt_id,
-            nev="Spike szolgaltatas",
-            alap_idotartam_perc=10,
+            org_id=szervezet_id,
+            shop_id=bolt_id,
+            name="Spike szolgaltatas",
+            alap_duration_minute=10,
         )
-        muszak_id = muszak_repo.muszak_letrehoz(
+        muszak_id = muszak_repo.shift_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=bolt_id,
-            pult_id=pult_id,
-            alkalmazott_id=alkalmazott_id,
-            szolgaltatas_id=szolgaltatas_id,
-            kezdet="2027-01-04T08:00:00Z",
-            veg="2027-01-05T08:00:00Z",  # 24 óra — bőven elég szalszam slotra
-            idotartam_perc=10,
-            puffer_utana_perc=0,
-            min_racs_perc=10,
-            foglalhato_arany=1.0,
-            blokk_szabaly={"szunetek": []},
+            org_id=szervezet_id,
+            shop_id=bolt_id,
+            counter_id=pult_id,
+            employee_id=alkalmazott_id,
+            service_id=szolgaltatas_id,
+            start="2027-01-04T08:00:00Z",
+            end="2027-01-05T08:00:00Z",  # 24 óra — bőven elég szalszam slotra
+            duration_minute=10,
+            buffer_after_minute=0,
+            min_grid_minute=10,
+            bookable_ratio=1.0,
+            block_rule={"szunetek": []},
         )
         kezdet = "2027-01-04T08:00:00Z"
         slotok = [
-            Slot(hozzaad_perc(kezdet, i * 10), hozzaad_perc(kezdet, (i + 1) * 10))
+            Slot(add_minute(kezdet, i * 10), add_minute(kezdet, (i + 1) * 10))
             for i in range(szalszam)
         ]
-        muszak_repo.blokkok_slotok_mentese(
-            conn, muszak_id=muszak_id, szervezet_id=szervezet_id, blokkok=[], slotok=slotok
+        muszak_repo.blocks_slots_save(
+            conn, shift_id=muszak_id, org_id=szervezet_id, blocks=[], slots=slotok
         )
         # A slot-id-ket a meglévő repo-függvényen keresztül kérjük vissza —
         # nem raw SQL-lel (CLAUDE.md 5. invariáns a spike/-ra is vonatkozik).
-        talalatok = foglalas_repo.szabad_slotok_keresese(conn, szervezet_id=szervezet_id)
+        talalatok = foglalas_repo.free_slots_search(conn, org_id=szervezet_id)
         slot_id_k = [slot_id for slot_id, _kezdet, _veg in talalatok]
     finally:
         conn.close()
@@ -101,12 +99,12 @@ def _elokeszit(db_utvonal: str, szalszam: int) -> list[str]:
 def _feladat(
     db_utvonal: str, slot_id: str, korlat: threading.Barrier, eredmenyek: list, hibak: list, i: int
 ) -> None:
-    conn = migracio.kapcsolat_nyitas(db_utvonal)
+    conn = migracio.conn_nyitas(db_utvonal)
     try:
         korlat.wait()
         kezdet = time.perf_counter()
         try:
-            eredmeny = foglalas_repo.foglalas_letrehoz(
+            eredmeny = foglalas_repo.booking_create(
                 conn, slot_id, "a" * 64, _uuid(), f"session-{i}"
             )
             telt_ms = (time.perf_counter() - kezdet) * 1000
@@ -126,7 +124,7 @@ def fut(szalszam: int) -> dict:
     print(f"{len(slot_id_k)} slot előkészítve.")
 
     korlat = threading.Barrier(szalszam)
-    eredmenyek: list[tuple[float, foglalas_repo.Eredmeny]] = []
+    eredmenyek: list[tuple[float, foglalas_repo.Result]] = []
     hibak: list[Exception] = []
     szalak = [
         threading.Thread(
@@ -152,7 +150,7 @@ def fut(szalszam: int) -> dict:
             print(f"  {hiba!r}")
 
     idok_ms = sorted(t for t, _ in eredmenyek)
-    sikeresek = sum(1 for _, e in eredmenyek if e is foglalas_repo.Eredmeny.SIKERES)
+    sikeresek = sum(1 for _, e in eredmenyek if e is foglalas_repo.Result.SUCCESS)
 
     print(
         f"\n{len(eredmenyek)}/{szalszam} írás lefutott, {sikeresek} SIKERES, "

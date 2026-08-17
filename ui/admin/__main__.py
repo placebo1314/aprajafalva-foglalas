@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from felulet.admin.app import main
+from ui.admin.app import main
 
 if __name__ == "__main__":
     sys.exit(main())

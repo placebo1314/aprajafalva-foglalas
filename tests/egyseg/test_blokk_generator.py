@@ -11,282 +11,276 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from mag.modell.muszak import Muszak
-from mag.slot import generator
-from mag.slot._idomatek import perc_kulonbseg
-from mag.slot.blokk import FixBlokk
+from core.modell.shift import Shift
+from core.slot import generator
+from core.slot._idomatek import minute_difference
+from core.slot.blokk import FixedBlock
 
-_STRATEGIA = FixBlokk()
+_STRATEGIA = FixedBlock()
 
 
-def _muszak(
-    idotartam_perc: int,
-    puffer_utana_perc: int,
-    min_racs_perc: int,
-    blokk_szabaly: dict,
-    foglalhato_arany: float = 1.0,
-    kezdet: str = "2026-08-18T08:00:00Z",
-    veg: str = "2026-08-18T09:00:00Z",
-) -> Muszak:
-    return Muszak(
+def _shift(
+    duration_minute: int,
+    buffer_after_minute: int,
+    min_grid_minute: int,
+    block_rule: dict,
+    bookable_ratio: float = 1.0,
+    start: str = "2026-08-18T08:00:00Z",
+    end: str = "2026-08-18T09:00:00Z",
+) -> Shift:
+    return Shift(
         id="m",
-        szervezet_id="sz",
-        kezdet=kezdet,
-        veg=veg,
-        idotartam_perc=idotartam_perc,
-        puffer_utana_perc=puffer_utana_perc,
-        min_racs_perc=min_racs_perc,
-        foglalhato_arany=foglalhato_arany,
-        blokk_szabaly=blokk_szabaly,
+        org_id="sz",
+        start=start,
+        end=end,
+        duration_minute=duration_minute,
+        buffer_after_minute=buffer_after_minute,
+        min_grid_minute=min_grid_minute,
+        bookable_ratio=bookable_ratio,
+        block_rule=block_rule,
     )
 
 
 # --- Törpilla-pultok, egy óra ------------------------------------------
 
 
-def test_gipszjakab_harom_slot_harom_szunetblokk():
+def test_gipszjakab_three_slot_three_break_block():
     """GipszJakab: 10 perc vásárlás, 10 perc szünet minden vásárlás után —
     egy órába pontosan 3 ciklus fér (10+10)×3 = 60 perc."""
-    muszak = _muszak(
-        idotartam_perc=10,
-        puffer_utana_perc=0,
-        min_racs_perc=10,
-        blokk_szabaly={
+    shift = _shift(
+        duration_minute=10,
+        buffer_after_minute=0,
+        min_grid_minute=10,
+        block_rule={
             "szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "minden_slot_utan"}]
         },
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA)
+    result = generator.generate(shift, _STRATEGIA)
 
-    assert len(eredmeny.slotok) == 3
-    assert all(s.hossz_perc() == 10 for s in eredmeny.slotok)
-    assert len(eredmeny.blokkok) == 3
-    assert all(b.tipus == "szunet" and b.hossz_perc() == 10 for b in eredmeny.blokkok)
-    _nincs_atfedes(eredmeny)
-    _osszperc_egyezik_a_muszakkal(muszak, eredmeny)
+    assert len(result.slots) == 3
+    assert all(s.length_minute() == 10 for s in result.slots)
+    assert len(result.blocks) == 3
+    assert all(b.tipus == "szunet" and b.length_minute() == 10 for b in result.blocks)
+    _no_overlap(result)
+    _total_minutes_matches_with_shift(shift, result)
 
 
-def test_torpilla_ket_slot_15_perc_szunet():
+def test_torpilla_two_slot_15_minute_break():
     """Törpilla: legfeljebb 2 vásárló óránként (20 perces szolgáltatás),
     15 perces szünet óránként egyszer."""
-    muszak = _muszak(
-        idotartam_perc=20,
-        puffer_utana_perc=0,
-        min_racs_perc=20,
-        blokk_szabaly={"szunetek": [{"tipus": "szunet", "hossz_perc": 15, "mintazat": "oranta"}]},
+    shift = _shift(
+        duration_minute=20,
+        buffer_after_minute=0,
+        min_grid_minute=20,
+        block_rule={"szunetek": [{"tipus": "szunet", "hossz_perc": 15, "mintazat": "oranta"}]},
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA)
+    result = generator.generate(shift, _STRATEGIA)
 
-    assert len(eredmeny.slotok) == 2
-    assert all(s.hossz_perc() == 20 for s in eredmeny.slotok)
-    assert len(eredmeny.blokkok) == 1
-    assert eredmeny.blokkok[0].tipus == "szunet"
-    assert eredmeny.blokkok[0].hossz_perc() == 15
-    _nincs_atfedes(eredmeny)
+    assert len(result.slots) == 2
+    assert all(s.length_minute() == 20 for s in result.slots)
+    assert len(result.blocks) == 1
+    assert result.blocks[0].tipus == "szunet"
+    assert result.blocks[0].length_minute() == 15
+    _no_overlap(result)
 
 
-def test_hulk_hugan_negy_slot_szunet_nelkul():
+def test_hulk_hugan_four_slot_break_without():
     """Hulk Hugan: 15 percenként foglalható, szünet nélkül — egy órába
     pontosan 4 slot fér."""
-    muszak = _muszak(
-        idotartam_perc=15,
-        puffer_utana_perc=0,
-        min_racs_perc=15,
-        blokk_szabaly={"szunetek": []},
+    shift = _shift(
+        duration_minute=15,
+        buffer_after_minute=0,
+        min_grid_minute=15,
+        block_rule={"szunetek": []},
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA)
+    result = generator.generate(shift, _STRATEGIA)
 
-    assert len(eredmeny.slotok) == 4
-    assert all(s.hossz_perc() == 15 for s in eredmeny.slotok)
-    assert eredmeny.blokkok == []
-    _osszperc_egyezik_a_muszakkal(muszak, eredmeny)
+    assert len(result.slots) == 4
+    assert all(s.length_minute() == 15 for s in result.slots)
+    assert result.blocks == []
+    _total_minutes_matches_with_shift(shift, result)
 
 
 # --- Szabad sáv és kivétel nap ------------------------------------------
 
 
-def test_szabad_sav_a_muszak_vegehez_illesztve():
-    muszak = _muszak(
-        idotartam_perc=15,
-        puffer_utana_perc=0,
-        min_racs_perc=15,
-        blokk_szabaly={"szunetek": []},
-        foglalhato_arany=0.75,
+def test_free_band_shift_to_end_aligned():
+    shift = _shift(
+        duration_minute=15,
+        buffer_after_minute=0,
+        min_grid_minute=15,
+        block_rule={"szunetek": []},
+        bookable_ratio=0.75,
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA)
+    result = generator.generate(shift, _STRATEGIA)
 
-    assert len(eredmeny.blokkok) == 1
-    szabad_sav = eredmeny.blokkok[0]
-    assert szabad_sav.tipus == "szabad_sav"
-    assert szabad_sav.veg == muszak.veg
-    assert szabad_sav.hossz_perc() == 15  # 60 perc 25%-a
-    assert len(eredmeny.slotok) == 3  # a maradék 45 percbe 3×15 perc fér
-    _nincs_atfedes(eredmeny)
+    assert len(result.blocks) == 1
+    free_band = result.blocks[0]
+    assert free_band.tipus == "szabad_sav"
+    assert free_band.end == shift.end
+    assert free_band.length_minute() == 15  # 60 perc 25%-a
+    assert len(result.slots) == 3  # a maradék 45 percbe 3×15 perc fér
+    _no_overlap(result)
 
 
-def test_szabad_sav_es_szunetmintazat_nem_fedi_egymast():
+def test_free_band_and_break_pattern_not_fedi_egymast():
     """Regresszióteszt: ha egyszerre van szünetmintázat ÉS foglalhato_arany
     < 1.0, a szünetciklusok nem lóghatnak bele a szabad sávba — a szünet
     elsőbbrendű, a szabad sáv az adott órában lerövidül vagy elmarad
     (lásd mag/slot/blokk.py, FixBlokk._szabad_sav)."""
-    muszak = _muszak(
-        idotartam_perc=10,
-        puffer_utana_perc=0,
-        min_racs_perc=10,
-        blokk_szabaly={
+    shift = _shift(
+        duration_minute=10,
+        buffer_after_minute=0,
+        min_grid_minute=10,
+        block_rule={
             "szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "minden_slot_utan"}]
         },
-        foglalhato_arany=0.8,
-        kezdet="2026-08-18T08:00:00Z",
-        veg="2026-08-18T16:00:00Z",
+        bookable_ratio=0.8,
+        start="2026-08-18T08:00:00Z",
+        end="2026-08-18T16:00:00Z",
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA)
+    result = generator.generate(shift, _STRATEGIA)
 
-    szabad_sav = [b for b in eredmeny.blokkok if b.tipus == "szabad_sav"]
-    assert len(szabad_sav) > 0
-    szunet_blokkok = [b for b in eredmeny.blokkok if b.tipus == "szunet"]
-    for szunet in szunet_blokkok:
-        for sav in szabad_sav:
-            atfed = szunet.kezdet < sav.veg and szunet.veg > sav.kezdet
-            assert not atfed, f"szünet és szabad sáv átfedésben: {szunet} / {sav}"
-    _nincs_atfedes(eredmeny)
+    free_band = [b for b in result.blocks if b.tipus == "szabad_sav"]
+    assert len(free_band) > 0
+    break_blocks = [b for b in result.blocks if b.tipus == "szunet"]
+    for szunet in break_blocks:
+        for band in free_band:
+            overlaps = szunet.start < band.end and szunet.end > band.start
+            assert not overlaps, f"szünet és szabad sáv átfedésben: {szunet} / {band}"
+    _no_overlap(result)
 
 
-def test_szabad_sav_oranta_elosztva_nyolcoras_muszakban():
+def test_free_band_hourly_elosztva_eight_hour_in_shift():
     """8 órás műszak, szünet nélkül, foglalhato_arany=0.8 -> legalább 4
     szabad sáv blokk, óránként egyenletesen elosztva — nem egyetlen blokk
     a műszak végén (ADR-011: "elnyeli a csúszást", ami csak akkor igaz,
     ha a szabad idő a nap egészében jelen van)."""
-    muszak = _muszak(
-        idotartam_perc=15,
-        puffer_utana_perc=0,
-        min_racs_perc=15,
-        blokk_szabaly={"szunetek": []},
-        foglalhato_arany=0.8,
-        kezdet="2026-08-18T08:00:00Z",
-        veg="2026-08-18T16:00:00Z",
+    shift = _shift(
+        duration_minute=15,
+        buffer_after_minute=0,
+        min_grid_minute=15,
+        block_rule={"szunetek": []},
+        bookable_ratio=0.8,
+        start="2026-08-18T08:00:00Z",
+        end="2026-08-18T16:00:00Z",
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA)
+    result = generator.generate(shift, _STRATEGIA)
 
-    szabad_sav = sorted(
-        (b for b in eredmeny.blokkok if b.tipus == "szabad_sav"), key=lambda b: b.kezdet
-    )
-    assert len(szabad_sav) >= 4
+    free_band = sorted((b for b in result.blocks if b.tipus == "szabad_sav"), key=lambda b: b.start)
+    assert len(free_band) >= 4
 
     # "Egyenletesen elosztva": a blokkok között nincs 2 óránál nagyobb rés,
     # tehát nem torlódnak egyetlen szakaszba.
-    hatarpontok = [muszak.kezdet, *[b.kezdet for b in szabad_sav], muszak.veg]
-    resek = [
-        perc_kulonbseg(hatarpontok[i], hatarpontok[i + 1]) for i in range(len(hatarpontok) - 1)
-    ]
-    assert all(res <= 120 for res in resek), f"nem egyenletes eloszlás: {resek}"
-    _nincs_atfedes(eredmeny)
+    boundaries = [shift.start, *[b.start for b in free_band], shift.end]
+    gaps = [minute_difference(boundaries[i], boundaries[i + 1]) for i in range(len(boundaries) - 1)]
+    assert all(gap <= 120 for gap in gaps), f"nem egyenletes eloszlás: {gaps}"
+    _no_overlap(result)
 
 
-def test_foglalhato_arany_egy_eseten_nincs_szabad_sav():
-    muszak = _muszak(15, 0, 15, {"szunetek": []}, foglalhato_arany=1.0)
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert not any(b.tipus == "szabad_sav" for b in eredmeny.blokkok)
+def test_bookable_ratio_one_eseten_no_free_band():
+    shift = _shift(15, 0, 15, {"szunetek": []}, bookable_ratio=1.0)
+    result = generator.generate(shift, _STRATEGIA)
+    assert not any(b.tipus == "szabad_sav" for b in result.blocks)
 
 
-def test_kivetel_napon_nem_general_semmit():
-    muszak = _muszak(
+def test_exception_on_day_not_generate_nothing():
+    shift = _shift(
         15,
         0,
         15,
         {"szunetek": []},
-        kezdet="2026-12-25T08:00:00Z",
-        veg="2026-12-25T09:00:00Z",
+        start="2026-12-25T08:00:00Z",
+        end="2026-12-25T09:00:00Z",
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA, kivetel_napok=frozenset({"2026-12-25"}))
+    result = generator.generate(shift, _STRATEGIA, exception_days=frozenset({"2026-12-25"}))
 
-    assert eredmeny.kihagyva is True
-    assert eredmeny.kihagyas_oka == "2026-12-25"
-    assert eredmeny.slotok == []
-    assert eredmeny.blokkok == []
+    assert result.skipped is True
+    assert result.skip_oka == "2026-12-25"
+    assert result.slots == []
+    assert result.blocks == []
 
 
-def test_nem_kivetel_napon_generall():
-    muszak = _muszak(
+def test_not_exception_on_day_generates():
+    shift = _shift(
         15,
         0,
         15,
         {"szunetek": []},
-        kezdet="2026-12-26T08:00:00Z",
-        veg="2026-12-26T09:00:00Z",
+        start="2026-12-26T08:00:00Z",
+        end="2026-12-26T09:00:00Z",
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA, kivetel_napok=frozenset({"2026-12-25"}))
+    result = generator.generate(shift, _STRATEGIA, exception_days=frozenset({"2026-12-25"}))
 
-    assert eredmeny.kihagyva is False
-    assert len(eredmeny.slotok) == 4
+    assert result.skipped is False
+    assert len(result.slots) == 4
 
 
 # --- DST: 2027-03-28 (óraátállítás tavasszal) és 2027-10-31 (ősszel) ----
 
 
-def test_dst_tavaszi_atallas_osszperc_egyezik():
-    _dst_teszt("2027-03-28")
+def test_dst_tavaszi_transition_total_minutes_matches():
+    _dst_test("2027-03-28")
 
 
-def test_dst_oszi_atallas_osszperc_egyezik():
-    _dst_teszt("2027-10-31")
+def test_dst_oszi_transition_total_minutes_matches():
+    _dst_test("2027-10-31")
 
 
-def _dst_teszt(datum: str) -> None:
+def _dst_test(date: str) -> None:
     """Egy 08:00–16:00 helyi idejű (Europe/Budapest) 8 órás műszak — a
     generált slotok összperce pontosan egyezzen a műszak tényleges UTC
     hosszával, ne legyen duplikált vagy hiányzó slot, függetlenül attól,
     hogy a nap CET-ben vagy CEST-ben van."""
-    zona = ZoneInfo("Europe/Budapest")
-    ev, honap, nap = (int(resz) for resz in datum.split("-"))
-    kezdet_helyi = datetime(ev, honap, nap, 8, 0, tzinfo=zona)
-    veg_helyi = datetime(ev, honap, nap, 16, 0, tzinfo=zona)
-    kezdet_utc = kezdet_helyi.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    veg_utc = veg_helyi.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    zone = ZoneInfo("Europe/Budapest")
+    year, month, day = (int(part) for part in date.split("-"))
+    start_local = datetime(year, month, day, 8, 0, tzinfo=zone)
+    end_local = datetime(year, month, day, 16, 0, tzinfo=zone)
+    start_utc = start_local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_utc = end_local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    muszak = _muszak(
-        idotartam_perc=15,
-        puffer_utana_perc=0,
-        min_racs_perc=15,
-        blokk_szabaly={"szunetek": []},
-        kezdet=kezdet_utc,
-        veg=veg_utc,
+    shift = _shift(
+        duration_minute=15,
+        buffer_after_minute=0,
+        min_grid_minute=15,
+        block_rule={"szunetek": []},
+        start=start_utc,
+        end=end_utc,
     )
 
-    eredmeny = generator.general(muszak, _STRATEGIA)
+    result = generator.generate(shift, _STRATEGIA)
 
-    tenyleges_hossz = perc_kulonbseg(kezdet_utc, veg_utc)
-    assert tenyleges_hossz == 480  # 8 óra, DST-től függetlenül (UTC-ben mérve)
+    actual_length = minute_difference(start_utc, end_utc)
+    assert actual_length == 480  # 8 óra, DST-től függetlenül (UTC-ben mérve)
 
-    osszperc = sum(s.hossz_perc() for s in eredmeny.slotok)
-    assert osszperc == tenyleges_hossz
+    total_minutes = sum(s.length_minute() for s in result.slots)
+    assert total_minutes == actual_length
 
-    kezdetek = [s.kezdet for s in eredmeny.slotok]
-    assert len(kezdetek) == len(set(kezdetek)), "duplikált slot"
-    assert len(eredmeny.slotok) == 32  # 480 / 15
+    starts = [s.start for s in result.slots]
+    assert len(starts) == len(set(starts)), "duplikált slot"
+    assert len(result.slots) == 32  # 480 / 15
 
 
 # --- segédek --------------------------------------------------------------
 
 
-def _nincs_atfedes(eredmeny) -> None:
+def _no_overlap(result) -> None:
     """Sem a slotok, sem a slotok és a blokkok nem fedhetik egymást."""
-    idoszakok = [(s.kezdet, s.veg) for s in eredmeny.slotok] + [
-        (b.kezdet, b.veg) for b in eredmeny.blokkok
-    ]
-    idoszakok.sort()
-    for elozo, kovetkezo in zip(idoszakok, idoszakok[1:], strict=False):
-        assert elozo[1] <= kovetkezo[0], f"átfedés: {elozo} és {kovetkezo}"
+    periods = [(s.start, s.end) for s in result.slots] + [(b.start, b.end) for b in result.blocks]
+    periods.sort()
+    for previous, next in zip(periods, periods[1:], strict=False):
+        assert previous[1] <= next[0], f"átfedés: {previous} és {next}"
 
 
-def _osszperc_egyezik_a_muszakkal(muszak: Muszak, eredmeny) -> None:
-    slot_perc = sum(s.hossz_perc() for s in eredmeny.slotok)
-    blokk_perc = sum(b.hossz_perc() for b in eredmeny.blokkok)
-    assert slot_perc + blokk_perc == perc_kulonbseg(muszak.kezdet, muszak.veg)
+def _total_minutes_matches_with_shift(shift: Shift, result) -> None:
+    slot_minute = sum(s.length_minute() for s in result.slots)
+    block_minute = sum(b.length_minute() for b in result.blocks)
+    assert slot_minute + block_minute == minute_difference(shift.start, shift.end)

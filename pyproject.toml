@@ -5,13 +5,13 @@ description = "Magyar nyelvű, lokálisan futó időpontfoglaló Aprajafalva há
 requires-python = ">=3.11"
 dependencies = [
     # A zoneinfo (stdlib) Windows/macOS friss telepítésen nem talál
-    # rendszer-tzdatabázist — a DST-számításokhoz (mag/slot/generator.py,
+    # rendszer-tzdatabázist — a DST-számításokhoz (core/slot/generator.py,
     # seed/betolt.py) ez explicit futásidejű függőség, nem csak dev-eszköz.
     "tzdata>=2024.1",
 ]
 
 # A hun-date-parser és a huspacy tudatosan nincs itt — csak az M4
-# (Asszisztens) mérföldkőnél kellenek, addig a mag/ LLM és dátumparser
+# (Assistant) mérföldkőnél kellenek, addig a core/ LLM és dátumparser
 # nélkül, önmagában fut. Lásd docs/roadmap.md, M4.
 [project.optional-dependencies]
 dev = [
@@ -23,11 +23,11 @@ dev = [
 # Explicit lista kell (a setuptools flat-layout auto-discovery kettőnél több
 # gyökérkönyvtárnál hibát dob) — a CLAUDE.md "Modulhatárok" szakaszának
 # csomagjai, plusz a seed/ (importként hívva: `python -m seed.betolt`).
-# A tesztek/, spike/, eszkozok/, migraciok/, docs/ szándékosan kimarad:
-# ezek nem csomagolt könyvtári kód. Az asszisztens/, adatvedelem/, felulet/
+# A tests/, spike/, tools/, migrations/, docs/ szándékosan kimarad:
+# ezek nem csomagolt könyvtári kód. Az assistant/, privacy/, ui/
 # ma még __init__.py nélküli váz — a minta itt van előkészítve, hogy amint
 # valódi csomaggá válnak (M4/M5), automatikusan bekerüljenek.
-include = ["mag*", "seed*", "asszisztens*", "adatvedelem*", "felulet*"]
+include = ["core*", "seed*", "assistant*", "privacy*", "ui*"]
 
 [tool.ruff]
 line-length = 100
@@ -45,4 +45,4 @@ select = ["E", "F", "I", "UP", "B"]
 quote-style = "double"
 
 [tool.pytest.ini_options]
-testpaths = ["tesztek"]
+testpaths = ["tests"]

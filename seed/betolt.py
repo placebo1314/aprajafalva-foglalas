@@ -30,27 +30,27 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from mag.repo import migracio, muszak_repo, torzsadat_repo
-from mag.slot import generator
-from mag.slot.blokk import FixBlokk
+from core.repo import migracio, muszak_repo, torzsadat_repo
+from core.slot import generator
+from core.slot.blokk import FixedBlock
 
-GYOKER = Path(__file__).resolve().parents[1]
-ALAP_DB_UTVONAL = GYOKER / "aprajafalva.db"
+ROOT = Path(__file__).resolve().parents[1]
+ALAP_DB_PATH = ROOT / "aprajafalva.db"
 
 _NEVTER = uuid.UUID("a9f5d3b0-1234-4000-8000-000000000000")
-_ZONA = ZoneInfo("Europe/Budapest")
-_HET_KEZDETE = date(2026, 12, 21)  # hétfő
-_KIVETEL_DATUM = "2026-12-25"
+_ZONE = ZoneInfo("Europe/Budapest")
+_WEEK_START = date(2026, 12, 21)  # hétfő
+_EXCEPTION_DATE = "2026-12-25"
 
 
-def _id(nev: str) -> str:
+def _id(name: str) -> str:
     """Determinisztikus UUID egy olvasható névből."""
-    return uuid.uuid5(_NEVTER, nev).hex
+    return uuid.uuid5(_NEVTER, name).hex
 
 
 # Törpilla bolt három pultja — a rajtuk dolgozó alkalmazott ritmusa
 # határozza meg a snapshot-mezőket (docs/domain.md, "Snapshot").
-_TORPILLA_PULTOK = [
+_TORPILLA_COUNTERS = [
     {
         "nev": "Törpilla pult 1",
         "alkalmazott_nev": "GipszJakab",
@@ -99,192 +99,192 @@ _TORPILLA_PULTOK = [
 ]
 
 
-def betolt(db_utvonal: str | Path = ALAP_DB_UTVONAL) -> dict:
+def betolt(db_path: str | Path = ALAP_DB_PATH) -> dict:
     """Betölti a teljes demóadatot. Visszaadja a legfontosabb
     azonosítókat — tesztekben és a CLI-ben egyaránt hasznos."""
-    conn = migracio.kapcsolat_nyitas(str(db_utvonal))
+    conn = migracio.conn_nyitas(str(db_path))
     try:
         migracio.migral(conn)
-        adat = _torzsadat_betoltese(conn)
-        adat["muszakok"] = _het_beosztas_betoltese(conn, adat)
-        return adat
+        data = _master_data_load(conn)
+        data["muszakok"] = _week_schedule_load(conn, data)
+        return data
     finally:
         conn.close()
 
 
-def _torzsadat_betoltese(conn) -> dict:
-    szervezet_id = torzsadat_repo.szervezet_letrehoz(
+def _master_data_load(conn) -> dict:
+    org_id = torzsadat_repo.org_create(
         conn,
-        nev="Aprajafalva",
-        idozona="Europe/Budapest",
+        name="Aprajafalva",
+        timezone="Europe/Budapest",
         id_=_id("szervezet:aprajafalva"),
     )
 
-    szundi_id = torzsadat_repo.bolt_letrehoz(
-        conn, szervezet_id=szervezet_id, nev="Szundi", id_=_id("bolt:szundi")
+    szundi_id = torzsadat_repo.shop_create(
+        conn, org_id=org_id, name="Szundi", id_=_id("bolt:szundi")
     )
-    torzsadat_repo.pult_letrehoz(
+    torzsadat_repo.counter_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=szundi_id,
-        nev="Szundi pult 1",
+        org_id=org_id,
+        shop_id=szundi_id,
+        name="Szundi pult 1",
         id_=_id("pult:szundi:1"),
     )
-    torzsadat_repo.alkalmazott_letrehoz(
+    torzsadat_repo.employee_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=szundi_id,
-        nev="Csendes",
+        org_id=org_id,
+        shop_id=szundi_id,
+        name="Csendes",
         id_=_id("alkalmazott:csendes"),
     )
-    torzsadat_repo.szolgaltatas_letrehoz(
+    torzsadat_repo.service_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=szundi_id,
-        nev="altató",
-        alap_idotartam_perc=15,
+        org_id=org_id,
+        shop_id=szundi_id,
+        name="altató",
+        alap_duration_minute=15,
         id_=_id("szolgaltatas:altato"),
     )
 
-    ugyifogyi_id = torzsadat_repo.bolt_letrehoz(
-        conn, szervezet_id=szervezet_id, nev="Ügyifogyi", id_=_id("bolt:ugyifogyi")
+    ugyifogyi_id = torzsadat_repo.shop_create(
+        conn, org_id=org_id, name="Ügyifogyi", id_=_id("bolt:ugyifogyi")
     )
-    torzsadat_repo.pult_letrehoz(
+    torzsadat_repo.counter_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=ugyifogyi_id,
-        nev="Ügyifogyi pult 1",
+        org_id=org_id,
+        shop_id=ugyifogyi_id,
+        name="Ügyifogyi pult 1",
         id_=_id("pult:ugyifogyi:1"),
     )
-    torzsadat_repo.alkalmazott_letrehoz(
+    torzsadat_repo.employee_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=ugyifogyi_id,
-        nev="Durranó",
+        org_id=org_id,
+        shop_id=ugyifogyi_id,
+        name="Durranó",
         id_=_id("alkalmazott:durrano"),
     )
-    torzsadat_repo.szolgaltatas_letrehoz(
+    torzsadat_repo.service_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=ugyifogyi_id,
-        nev="petárda",
-        alap_idotartam_perc=5,
+        org_id=org_id,
+        shop_id=ugyifogyi_id,
+        name="petárda",
+        alap_duration_minute=5,
         id_=_id("szolgaltatas:petarda"),
     )
 
-    torpilla_id = torzsadat_repo.bolt_letrehoz(
-        conn, szervezet_id=szervezet_id, nev="Törpilla", id_=_id("bolt:torpilla")
+    torpilla_id = torzsadat_repo.shop_create(
+        conn, org_id=org_id, name="Törpilla", id_=_id("bolt:torpilla")
     )
-    torpilla_szolgaltatas_id = torzsadat_repo.szolgaltatas_letrehoz(
+    torpilla_service_id = torzsadat_repo.service_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=torpilla_id,
-        nev="boldogság",
-        alap_idotartam_perc=15,
+        org_id=org_id,
+        shop_id=torpilla_id,
+        name="boldogság",
+        alap_duration_minute=15,
         id_=_id("szolgaltatas:boldogsag"),
     )
 
-    torpilla_pultok = []
-    for i, konfig in enumerate(_TORPILLA_PULTOK, start=1):
-        pult_id = torzsadat_repo.pult_letrehoz(
+    torpilla_counters = []
+    for i, config in enumerate(_TORPILLA_COUNTERS, start=1):
+        counter_id = torzsadat_repo.counter_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=torpilla_id,
-            nev=konfig["nev"],
+            org_id=org_id,
+            shop_id=torpilla_id,
+            name=config["nev"],
             id_=_id(f"pult:torpilla:{i}"),
         )
-        alkalmazott_id = torzsadat_repo.alkalmazott_letrehoz(
+        employee_id = torzsadat_repo.employee_create(
             conn,
-            szervezet_id=szervezet_id,
-            bolt_id=torpilla_id,
-            nev=konfig["alkalmazott_nev"],
-            id_=_id(f"alkalmazott:{konfig['alkalmazott_nev']}"),
+            org_id=org_id,
+            shop_id=torpilla_id,
+            name=config["alkalmazott_nev"],
+            id_=_id(f"alkalmazott:{config['alkalmazott_nev']}"),
         )
-        torpilla_pultok.append(
-            {"pult_id": pult_id, "alkalmazott_id": alkalmazott_id, "konfig": konfig}
+        torpilla_counters.append(
+            {"pult_id": counter_id, "alkalmazott_id": employee_id, "konfig": config}
         )
 
-    torzsadat_repo.kivetel_nap_letrehoz(
+    torzsadat_repo.exception_day_create(
         conn,
-        szervezet_id=szervezet_id,
-        bolt_id=None,
-        datum=_KIVETEL_DATUM,
-        indok="ünnep — karácsony, minden bolt zárva",
+        org_id=org_id,
+        shop_id=None,
+        date=_EXCEPTION_DATE,
+        reason="ünnep — karácsony, minden bolt zárva",
         id_=_id("kivetel:karacsony-2026"),
     )
 
     return {
-        "szervezet_id": szervezet_id,
+        "szervezet_id": org_id,
         "boltok": {"szundi": szundi_id, "ugyifogyi": ugyifogyi_id, "torpilla": torpilla_id},
-        "torpilla_szolgaltatas_id": torpilla_szolgaltatas_id,
-        "torpilla_pultok": torpilla_pultok,
-        "kivetel_datum": _KIVETEL_DATUM,
+        "torpilla_szolgaltatas_id": torpilla_service_id,
+        "torpilla_pultok": torpilla_counters,
+        "kivetel_datum": _EXCEPTION_DATE,
     }
 
 
-def _het_beosztas_betoltese(conn, adat: dict) -> list[dict]:
+def _week_schedule_load(conn, data: dict) -> list[dict]:
     """A Törpilla bolt három pultjára egy hét műszakot hoz létre, és
     minden műszakra lefuttatja a slotgenerátort. A kivetel_nap napon
     (karácsony) a műszak sor LÉTREJÖN, de a generátor nem tesz bele
     slotot/blokkot — ez mutatja meg ténylegesen a kihagyást, nem csak
     egy hiányzó sor a beosztásban."""
-    kivetel_napok = frozenset({adat["kivetel_datum"]})
-    strategia = FixBlokk()
-    letrehozott_muszakok = []
+    exception_days = frozenset({data["kivetel_datum"]})
+    strategia = FixedBlock()
+    created_shifts = []
 
-    for pult in adat["torpilla_pultok"]:
-        konfig = pult["konfig"]
-        for nap_index in range(7):
-            nap = _HET_KEZDETE + timedelta(days=nap_index)
-            datum_str = nap.isoformat()
+    for counter in data["torpilla_pultok"]:
+        config = counter["konfig"]
+        for day_index in range(7):
+            day = _WEEK_START + timedelta(days=day_index)
+            date_str = day.isoformat()
 
-            kezdet_helyi = datetime(
-                nap.year, nap.month, nap.day, konfig["kezdet_ora"], 0, tzinfo=_ZONA
+            start_local = datetime(
+                day.year, day.month, day.day, config["kezdet_ora"], 0, tzinfo=_ZONE
             )
-            veg_helyi = datetime(nap.year, nap.month, nap.day, konfig["veg_ora"], 0, tzinfo=_ZONA)
-            kezdet_utc = kezdet_helyi.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            veg_utc = veg_helyi.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            end_local = datetime(day.year, day.month, day.day, config["veg_ora"], 0, tzinfo=_ZONE)
+            start_utc = start_local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            end_utc = end_local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            muszak_id = muszak_repo.muszak_letrehoz(
+            shift_id = muszak_repo.shift_create(
                 conn,
-                szervezet_id=adat["szervezet_id"],
-                bolt_id=adat["boltok"]["torpilla"],
-                pult_id=pult["pult_id"],
-                alkalmazott_id=pult["alkalmazott_id"],
-                szolgaltatas_id=adat["torpilla_szolgaltatas_id"],
-                kezdet=kezdet_utc,
-                veg=veg_utc,
-                idotartam_perc=konfig["idotartam_perc"],
-                puffer_utana_perc=konfig["puffer_utana_perc"],
-                min_racs_perc=konfig["min_racs_perc"],
-                foglalhato_arany=konfig["foglalhato_arany"],
-                blokk_szabaly=konfig["blokk_szabaly"],
-                id_=_id(f"muszak:{konfig['alkalmazott_nev']}:{datum_str}"),
+                org_id=data["szervezet_id"],
+                shop_id=data["boltok"]["torpilla"],
+                counter_id=counter["pult_id"],
+                employee_id=counter["alkalmazott_id"],
+                service_id=data["torpilla_szolgaltatas_id"],
+                start=start_utc,
+                end=end_utc,
+                duration_minute=config["idotartam_perc"],
+                buffer_after_minute=config["puffer_utana_perc"],
+                min_grid_minute=config["min_racs_perc"],
+                bookable_ratio=config["foglalhato_arany"],
+                block_rule=config["blokk_szabaly"],
+                id_=_id(f"muszak:{config['alkalmazott_nev']}:{date_str}"),
             )
 
-            muszak = muszak_repo.muszak_betoltese(conn, muszak_id)
-            eredmeny = generator.general(muszak, strategia, kivetel_napok=kivetel_napok)
-            if not eredmeny.kihagyva:
-                muszak_repo.blokkok_slotok_mentese(
+            shift = muszak_repo.shift_load(conn, shift_id)
+            result = generator.generate(shift, strategia, exception_days=exception_days)
+            if not result.skipped:
+                muszak_repo.blocks_slots_save(
                     conn,
-                    muszak_id=muszak_id,
-                    szervezet_id=adat["szervezet_id"],
-                    blokkok=eredmeny.blokkok,
-                    slotok=eredmeny.slotok,
+                    shift_id=shift_id,
+                    org_id=data["szervezet_id"],
+                    blocks=result.blocks,
+                    slots=result.slots,
                 )
 
-            letrehozott_muszakok.append(
+            created_shifts.append(
                 {
-                    "muszak_id": muszak_id,
-                    "alkalmazott": konfig["alkalmazott_nev"],
-                    "datum": datum_str,
-                    "kihagyva": eredmeny.kihagyva,
-                    "slot_szam": len(eredmeny.slotok),
-                    "blokk_szam": len(eredmeny.blokkok),
+                    "muszak_id": shift_id,
+                    "alkalmazott": config["alkalmazott_nev"],
+                    "datum": date_str,
+                    "kihagyva": result.skipped,
+                    "slot_szam": len(result.slots),
+                    "blokk_szam": len(result.blocks),
                 }
             )
 
-    return letrehozott_muszakok
+    return created_shifts
 
 
 def _fo() -> None:
@@ -295,15 +295,15 @@ def _fo() -> None:
     # kell maradjon).
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-    db_utvonal = sys.argv[1] if len(sys.argv) > 1 else str(ALAP_DB_UTVONAL)
-    adat = betolt(db_utvonal)
-    print(f"Betöltve: {db_utvonal}")
-    print(f"  szervezet: {adat['szervezet_id']}")
-    print(f"  boltok: {list(adat['boltok'].keys())}")
-    generalt = [m for m in adat["muszakok"] if not m["kihagyva"]]
-    kihagyott = [m for m in adat["muszakok"] if m["kihagyva"]]
-    print(f"  műszakok: {len(adat['muszakok'])} (ebből {len(kihagyott)} kihagyva: kivetel_nap)")
-    print(f"  generált slotok összesen: {sum(m['slot_szam'] for m in generalt)}")
+    db_path = sys.argv[1] if len(sys.argv) > 1 else str(ALAP_DB_PATH)
+    data = betolt(db_path)
+    print(f"Betöltve: {db_path}")
+    print(f"  szervezet: {data['szervezet_id']}")
+    print(f"  boltok: {list(data['boltok'].keys())}")
+    generated = [m for m in data["muszakok"] if not m["kihagyva"]]
+    skipped = [m for m in data["muszakok"] if m["kihagyva"]]
+    print(f"  műszakok: {len(data['muszakok'])} (ebből {len(skipped)} kihagyva: kivetel_nap)")
+    print(f"  generált slotok összesen: {sum(m['slot_szam'] for m in generated)}")
 
 
 if __name__ == "__main__":

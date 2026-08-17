@@ -12,33 +12,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mag.modell.muszak import Blokk, Muszak
-from mag.slot._idomatek import perc_kulonbseg
+from core.modell.shift import Block, Shift
+from core.slot._idomatek import minute_difference
 
 # Munkajogi minimum: 6 óra fölötti műszakban legalább egy 20 perces (vagy
 # hosszabb) szünet/ebéd kötelező. Védett kategória — nincs paraméter, ami
 # kikapcsolná (blueprint 4. szakasz, CLAUDE.md szellemében). A pontos érték
 # a roadmap.md "Nyitott kérdések" szerint még nem végleges, de amíg nincs
 # felülvizsgálva ADR-rel, ez a kötelező érték.
-MUNKAJOGI_KUSZOB_PERC = 6 * 60
-MUNKAJOGI_MIN_SZUNET_PERC = 20
+LABOR_LAW_THRESHOLD_MINUTE = 6 * 60
+LABOR_LAW_MIN_BREAK_MINUTE = 20
 
-_SZUNETSZERU_TIPUSOK = ("szunet", "ebed")
+_BREAK_LIKE_TYPES = ("szunet", "ebed")
 
 
 @dataclass(frozen=True)
-class KenyszerSertes:
-    szabaly: str
-    uzenet: str
+class ConstraintViolation:
+    rule: str
+    message: str
 
 
-def ellenoriz(
-    muszak: Muszak,
-    blokkok: list[Blokk],
+def check(
+    shift: Shift,
+    blocks: list[Block],
     *,
-    min_osszes_szunet_perc: int,
-    max_folyamatos_munka_perc: int,
-) -> list[KenyszerSertes]:
+    min_all_break_minute: int,
+    max_continuous_work_minute: int,
+) -> list[ConstraintViolation]:
     """A négy kemény kényszert ellenőrzi, a sértéseket listaként adja
     vissza — sosem dob kivételt, a hívó (pl. a generátor vagy egy
     admin-felület) dönti el, mit kezd velük (elutasítás, magyarázó motor
@@ -50,81 +50,81 @@ def ellenoriz(
     védett kategória.
     """
     return [
-        *_blokk_a_muszakon_belul(muszak, blokkok),
-        *_osszes_szunet(blokkok, min_osszes_szunet_perc),
-        *_max_folyamatos_munka(muszak, blokkok, max_folyamatos_munka_perc),
-        *_munkajogi_minimum(muszak, blokkok),
+        *_block_on_shift_within(shift, blocks),
+        *_all_break(blocks, min_all_break_minute),
+        *_max_continuous_work(shift, blocks, max_continuous_work_minute),
+        *_labor_law_min(shift, blocks),
     ]
 
 
-def _blokk_a_muszakon_belul(muszak: Muszak, blokkok: list[Blokk]) -> list[KenyszerSertes]:
+def _block_on_shift_within(shift: Shift, blocks: list[Block]) -> list[ConstraintViolation]:
     return [
-        KenyszerSertes(
+        ConstraintViolation(
             "blokk_muszakon_belul",
-            f"A blokk ({b.tipus}, {b.kezdet}–{b.veg}) kilóg a műszak "
-            f"({muszak.kezdet}–{muszak.veg}) időablakából.",
+            f"A blokk ({b.tipus}, {b.start}–{b.end}) kilóg a műszak "
+            f"({shift.start}–{shift.end}) időablakából.",
         )
-        for b in blokkok
-        if b.kezdet < muszak.kezdet or b.veg > muszak.veg
+        for b in blocks
+        if b.start < shift.start or b.end > shift.end
     ]
 
 
-def _osszes_szunet(blokkok: list[Blokk], kuszob: int) -> list[KenyszerSertes]:
-    osszesen = sum(b.hossz_perc() for b in blokkok if b.tipus in _SZUNETSZERU_TIPUSOK)
-    if osszesen < kuszob:
+def _all_break(blocks: list[Block], threshold: int) -> list[ConstraintViolation]:
+    total = sum(b.length_minute() for b in blocks if b.tipus in _BREAK_LIKE_TYPES)
+    if total < threshold:
         return [
-            KenyszerSertes(
+            ConstraintViolation(
                 "minimum_osszes_szunet",
-                f"A műszak összes szünetideje {osszesen} perc, a minimum {kuszob} perc lenne.",
+                f"A műszak összes szünetideje {total} perc, a minimum {threshold} perc lenne.",
             )
         ]
     return []
 
 
-def _max_folyamatos_munka(
-    muszak: Muszak, blokkok: list[Blokk], kuszob: int
-) -> list[KenyszerSertes]:
+def _max_continuous_work(
+    shift: Shift, blocks: list[Block], threshold: int
+) -> list[ConstraintViolation]:
     """A leghosszabb megszakítás nélküli munkaszakaszt nézi: a műszak
     eleje/vége és a szünet-jellegű blokkok közötti réseket. A szabad sáv
     NEM munkamegszakítás — az alkalmazott ott is szolgálatban van, csak
     nincs előre beosztva rá foglalás (blueprint 4. szakasz)."""
-    hatarpontok = [muszak.kezdet]
-    for b in sorted(blokkok, key=lambda b: b.kezdet):
-        if b.tipus in _SZUNETSZERU_TIPUSOK:
-            hatarpontok.append(b.kezdet)
-            hatarpontok.append(b.veg)
-    hatarpontok.append(muszak.veg)
+    boundaries = [shift.start]
+    for b in sorted(blocks, key=lambda b: b.start):
+        if b.tipus in _BREAK_LIKE_TYPES:
+            boundaries.append(b.start)
+            boundaries.append(b.end)
+    boundaries.append(shift.end)
 
-    sertesek = []
-    for i in range(0, len(hatarpontok), 2):
-        szakasz_hossz = perc_kulonbseg(hatarpontok[i], hatarpontok[i + 1])
-        if szakasz_hossz > kuszob:
-            sertesek.append(
-                KenyszerSertes(
+    violations = []
+    for i in range(0, len(boundaries), 2):
+        segment_length = minute_difference(boundaries[i], boundaries[i + 1])
+        if segment_length > threshold:
+            violations.append(
+                ConstraintViolation(
                     "maximum_folyamatos_munka",
-                    f"{szakasz_hossz} perces megszakítás nélküli szakasz "
-                    f"({hatarpontok[i]}–{hatarpontok[i + 1]}), a maximum "
-                    f"{kuszob} perc lenne.",
+                    f"{segment_length} perces megszakítás nélküli szakasz "
+                    f"({boundaries[i]}–{boundaries[i + 1]}), a maximum "
+                    f"{threshold} perc lenne.",
                 )
             )
-    return sertesek
+    return violations
 
 
-def _munkajogi_minimum(muszak: Muszak, blokkok: list[Blokk]) -> list[KenyszerSertes]:
-    muszak_hossz = perc_kulonbseg(muszak.kezdet, muszak.veg)
-    if muszak_hossz <= MUNKAJOGI_KUSZOB_PERC:
+def _labor_law_min(shift: Shift, blocks: list[Block]) -> list[ConstraintViolation]:
+    shift_length = minute_difference(shift.start, shift.end)
+    if shift_length <= LABOR_LAW_THRESHOLD_MINUTE:
         return []
-    van_eleg_hosszu = any(
-        b.tipus in _SZUNETSZERU_TIPUSOK and b.hossz_perc() >= MUNKAJOGI_MIN_SZUNET_PERC
-        for b in blokkok
+    has_enough_long = any(
+        b.tipus in _BREAK_LIKE_TYPES and b.length_minute() >= LABOR_LAW_MIN_BREAK_MINUTE
+        for b in blocks
     )
-    if van_eleg_hosszu:
+    if has_enough_long:
         return []
     return [
-        KenyszerSertes(
+        ConstraintViolation(
             "munkajogi_minimum",
-            f"{muszak_hossz} perces műszakhoz ({MUNKAJOGI_KUSZOB_PERC} perc fölött) "
-            f"legalább egy {MUNKAJOGI_MIN_SZUNET_PERC} perces szünet kötelező, "
+            f"{shift_length} perces műszakhoz ({LABOR_LAW_THRESHOLD_MINUTE} perc fölött) "
+            f"legalább egy {LABOR_LAW_MIN_BREAK_MINUTE} perces szünet kötelező, "
             "de egyik blokk sem éri el ezt a hosszt.",
         )
     ]

@@ -12,121 +12,121 @@ nélkül).
 
 from __future__ import annotations
 
-from mag.modell.muszak import Muszak
-from mag.slot import generator
-from mag.slot.blokk import FixBlokk
+from core.modell.shift import Shift
+from core.slot import generator
+from core.slot.blokk import FixedBlock
 
-_STRATEGIA = FixBlokk()
+_STRATEGIA = FixedBlock()
 
 
-def _muszak(
-    kezdet: str,
-    veg: str,
-    idotartam_perc: int = 10,
-    puffer_utana_perc: int = 0,
-    min_racs_perc: int = 10,
-    foglalhato_arany: float = 1.0,
-    blokk_szabaly: dict | None = None,
-) -> Muszak:
-    return Muszak(
+def _shift(
+    start: str,
+    end: str,
+    duration_minute: int = 10,
+    buffer_after_minute: int = 0,
+    min_grid_minute: int = 10,
+    bookable_ratio: float = 1.0,
+    block_rule: dict | None = None,
+) -> Shift:
+    return Shift(
         id="m",
-        szervezet_id="sz",
-        kezdet=kezdet,
-        veg=veg,
-        idotartam_perc=idotartam_perc,
-        puffer_utana_perc=puffer_utana_perc,
-        min_racs_perc=min_racs_perc,
-        foglalhato_arany=foglalhato_arany,
-        blokk_szabaly=blokk_szabaly or {"szunetek": []},
+        org_id="sz",
+        start=start,
+        end=end,
+        duration_minute=duration_minute,
+        buffer_after_minute=buffer_after_minute,
+        min_grid_minute=min_grid_minute,
+        bookable_ratio=bookable_ratio,
+        block_rule=block_rule or {"szunetek": []},
     )
 
 
 # --- első és utolsó slot -------------------------------------------------
 
 
-def test_elso_slot_pontosan_a_muszak_kezdeten_kezdodik():
-    muszak = _muszak("2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert eredmeny.slotok[0].kezdet == muszak.kezdet
+def test_first_slot_pontosan_shift_at_start_kezdodik():
+    shift = _shift("2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    result = generator.generate(shift, _STRATEGIA)
+    assert result.slots[0].start == shift.start
 
 
-def test_utolso_slot_nem_nyulik_tul_a_muszak_vegen():
-    muszak = _muszak("2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert eredmeny.slotok[-1].veg <= muszak.veg
+def test_last_slot_not_nyulik_tul_shift_at_end():
+    shift = _shift("2026-08-18T08:00:00Z", "2026-08-18T09:00:00Z")
+    result = generator.generate(shift, _STRATEGIA)
+    assert result.slots[-1].end <= shift.end
 
 
-def test_utolso_slot_nem_general_ha_nem_ferne_ki_pontosan():
+def test_last_slot_not_generate_if_not_ferne_ki_pontosan():
     """55 perces műszak, 10 perces slot, 0 puffer → 5 slot fér ki
     (50 perc), az 55. percig nincs hatodik — nem csonka slotot generál."""
-    muszak = _muszak("2026-08-18T08:00:00Z", "2026-08-18T08:55:00Z")
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert len(eredmeny.slotok) == 5
-    assert eredmeny.slotok[-1].veg == "2026-08-18T08:50:00Z"
+    shift = _shift("2026-08-18T08:00:00Z", "2026-08-18T08:55:00Z")
+    result = generator.generate(shift, _STRATEGIA)
+    assert len(result.slots) == 5
+    assert result.slots[-1].end == "2026-08-18T08:50:00Z"
 
 
 # --- éjfélen átnyúló műszak ------------------------------------------------
 
 
-def test_ejfelen_atnyulo_muszak_helyes_slotszam():
+def test_ejfelen_spanning_shift_correct_slot_count():
     """22:00–02:00 (+1 nap), 10 perces slot → 4 óra = 24 slot. A kezdet/
     veg teljes ISO-8601 időbélyeg, nem csak óra:perc, ezért az éjfél
     átlépése a generátornak nem külön eset — normál dátumaritmetika."""
-    muszak = _muszak("2026-08-18T22:00:00Z", "2026-08-19T02:00:00Z")
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert len(eredmeny.slotok) == 24
-    assert eredmeny.slotok[0].kezdet == "2026-08-18T22:00:00Z"
-    assert eredmeny.slotok[-1].veg == "2026-08-19T02:00:00Z"
+    shift = _shift("2026-08-18T22:00:00Z", "2026-08-19T02:00:00Z")
+    result = generator.generate(shift, _STRATEGIA)
+    assert len(result.slots) == 24
+    assert result.slots[0].start == "2026-08-18T22:00:00Z"
+    assert result.slots[-1].end == "2026-08-19T02:00:00Z"
 
 
-def test_ejfelen_atnyulo_muszak_szunettel_nem_lognak_at_a_hataron():
-    muszak = _muszak(
+def test_ejfelen_spanning_shift_with_break_not_lognak_across_at_boundary():
+    shift = _shift(
         "2026-08-18T23:30:00Z",
         "2026-08-19T01:00:00Z",
-        blokk_szabaly={"szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "oranta"}]},
+        block_rule={"szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "oranta"}]},
     )
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    for blokk in eredmeny.blokkok:
-        assert muszak.kezdet <= blokk.kezdet
-        assert blokk.veg <= muszak.veg
+    result = generator.generate(shift, _STRATEGIA)
+    for blokk in result.blocks:
+        assert shift.start <= blokk.start
+        assert blokk.end <= shift.end
 
 
 # --- nulla hosszú / fordított időablak ------------------------------------
 
 
-def test_nulla_hosszu_idoablak_ures_eredmeny_nem_kivetel():
-    muszak = _muszak("2026-08-18T08:00:00Z", "2026-08-18T08:00:00Z")
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert eredmeny.kihagyva is False
-    assert eredmeny.slotok == []
-    assert eredmeny.blokkok == []
+def test_zero_long_time_window_empty_result_not_exception():
+    shift = _shift("2026-08-18T08:00:00Z", "2026-08-18T08:00:00Z")
+    result = generator.generate(shift, _STRATEGIA)
+    assert result.skipped is False
+    assert result.slots == []
+    assert result.blocks == []
 
 
-def test_forditott_idoablak_ures_eredmeny_nem_kivetel():
-    muszak = _muszak("2026-08-18T09:00:00Z", "2026-08-18T08:00:00Z")
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert eredmeny.kihagyva is False
-    assert eredmeny.slotok == []
-    assert eredmeny.blokkok == []
+def test_reversed_time_window_empty_result_not_exception():
+    shift = _shift("2026-08-18T09:00:00Z", "2026-08-18T08:00:00Z")
+    result = generator.generate(shift, _STRATEGIA)
+    assert result.skipped is False
+    assert result.slots == []
+    assert result.blocks == []
 
 
-def test_forditott_idoablak_szunettel_is_ures_nem_kivetel():
+def test_reversed_time_window_with_break_is_empty_not_exception():
     """A szünet-generálás is ciklikus (while True: ... break) — fordított
     ablakon az első iterációban ki kell lépnie, nem szabad végtelen
     ciklusba futnia."""
-    muszak = _muszak(
+    shift = _shift(
         "2026-08-18T09:00:00Z",
         "2026-08-18T08:00:00Z",
-        blokk_szabaly={"szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "oranta"}]},
+        block_rule={"szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "oranta"}]},
     )
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert eredmeny.slotok == []
-    assert eredmeny.blokkok == []
+    result = generator.generate(shift, _STRATEGIA)
+    assert result.slots == []
+    assert result.blocks == []
 
 
-def test_nagyon_rovid_idoablak_ha_egy_slotnyi_sem_fer_ki():
+def test_very_short_time_window_if_one_slot_worth_nor_fer_ki():
     """5 perces ablak, 10 perces slot — nem fér ki egy slot sem, de ez
     nem kivétel, csak üres eredmény."""
-    muszak = _muszak("2026-08-18T08:00:00Z", "2026-08-18T08:05:00Z")
-    eredmeny = generator.general(muszak, _STRATEGIA)
-    assert eredmeny.slotok == []
+    shift = _shift("2026-08-18T08:00:00Z", "2026-08-18T08:05:00Z")
+    result = generator.generate(shift, _STRATEGIA)
+    assert result.slots == []

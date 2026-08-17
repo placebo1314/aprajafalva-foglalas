@@ -12,29 +12,29 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from mag.azonosito import uj_uuid
-from mag.ido import most_iso
+from core.azonosito import new_uuid
+from core.ido import most_iso
 
 
-def sablon_letrehoz(
+def template_create(
     conn: sqlite3.Connection,
     *,
-    szervezet_id: str,
-    nev: str,
-    bolt_id: str,
-    pult_id: str,
-    alkalmazott_id: str,
-    szolgaltatas_id: str,
-    kezdet_ora: int,
-    veg_ora: int,
-    idotartam_perc: int,
-    puffer_utana_perc: int,
-    min_racs_perc: int,
-    foglalhato_arany: float,
-    blokk_szabaly: dict,
+    org_id: str,
+    name: str,
+    shop_id: str,
+    counter_id: str,
+    employee_id: str,
+    service_id: str,
+    start_hour: int,
+    end_hour: int,
+    duration_minute: int,
+    buffer_after_minute: int,
+    min_grid_minute: int,
+    bookable_ratio: float,
+    block_rule: dict,
     id_: str | None = None,
 ) -> str:
-    sablon_id = id_ or uj_uuid()
+    template_id = id_ or new_uuid()
     conn.execute(
         "INSERT INTO muszak_sablon "
         "(id, szervezet_id, nev, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, "
@@ -42,83 +42,83 @@ def sablon_letrehoz(
         "foglalhato_arany, blokk_szabaly, letrehozva) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
-            sablon_id,
-            szervezet_id,
-            nev,
-            bolt_id,
-            pult_id,
-            alkalmazott_id,
-            szolgaltatas_id,
-            kezdet_ora,
-            veg_ora,
-            idotartam_perc,
-            puffer_utana_perc,
-            min_racs_perc,
-            foglalhato_arany,
-            json.dumps(blokk_szabaly, ensure_ascii=False),
+            template_id,
+            org_id,
+            name,
+            shop_id,
+            counter_id,
+            employee_id,
+            service_id,
+            start_hour,
+            end_hour,
+            duration_minute,
+            buffer_after_minute,
+            min_grid_minute,
+            bookable_ratio,
+            json.dumps(block_rule, ensure_ascii=False),
             most_iso(),
         ),
     )
-    return sablon_id
+    return template_id
 
 
-def sablon_betoltese(conn: sqlite3.Connection, *, sablon_id: str) -> dict | None:
-    sor = conn.execute(
+def template_load(conn: sqlite3.Connection, *, template_id: str) -> dict | None:
+    row = conn.execute(
         "SELECT id, szervezet_id, nev, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, "
         "kezdet_ora, veg_ora, idotartam_perc, puffer_utana_perc, min_racs_perc, "
         "foglalhato_arany, blokk_szabaly "
         "FROM muszak_sablon WHERE id = ?",
-        (sablon_id,),
+        (template_id,),
     ).fetchone()
-    if sor is None:
+    if row is None:
         return None
-    return _sorbol_dict(sor)
+    return _from_row_dict(row)
 
 
-def sablonok_lekerdezese(
-    conn: sqlite3.Connection, *, szervezet_id: str, bolt_id: str | None = None
+def templates_list(
+    conn: sqlite3.Connection, *, org_id: str, shop_id: str | None = None
 ) -> list[dict]:
     """Sablonok listája (admin felület, sablon-választó), névre rendezve."""
-    sorok = conn.execute(
+    rows = conn.execute(
         "SELECT id, szervezet_id, nev, bolt_id, pult_id, alkalmazott_id, szolgaltatas_id, "
         "kezdet_ora, veg_ora, idotartam_perc, puffer_utana_perc, min_racs_perc, "
         "foglalhato_arany, blokk_szabaly "
         "FROM muszak_sablon WHERE szervezet_id = ? AND (? IS NULL OR bolt_id = ?) ORDER BY nev",
-        (szervezet_id, bolt_id, bolt_id),
+        (org_id, shop_id, shop_id),
     ).fetchall()
-    return [_sorbol_dict(sor) for sor in sorok]
+    return [_from_row_dict(row) for row in rows]
 
 
-def _sorbol_dict(sor) -> dict:
+def _from_row_dict(row) -> dict:
     (
-        sablon_id,
-        szervezet_id,
-        nev,
-        bolt_id,
-        pult_id,
-        alkalmazott_id,
-        szolgaltatas_id,
-        kezdet_ora,
-        veg_ora,
-        idotartam_perc,
-        puffer_utana_perc,
-        min_racs_perc,
-        foglalhato_arany,
-        blokk_szabaly_json,
-    ) = sor
+        template_id,
+        org_id,
+        name,
+        shop_id,
+        counter_id,
+        employee_id,
+        service_id,
+        start_hour,
+        end_hour,
+        duration_minute,
+        buffer_after_minute,
+        min_grid_minute,
+        bookable_ratio,
+        block_rule_json,
+    ) = row
     return {
-        "id": sablon_id,
-        "szervezet_id": szervezet_id,
-        "nev": nev,
-        "bolt_id": bolt_id,
-        "pult_id": pult_id,
-        "alkalmazott_id": alkalmazott_id,
-        "szolgaltatas_id": szolgaltatas_id,
-        "kezdet_ora": kezdet_ora,
-        "veg_ora": veg_ora,
-        "idotartam_perc": idotartam_perc,
-        "puffer_utana_perc": puffer_utana_perc,
-        "min_racs_perc": min_racs_perc,
-        "foglalhato_arany": foglalhato_arany,
-        "blokk_szabaly": json.loads(blokk_szabaly_json),
+        "id": template_id,
+        "szervezet_id": org_id,
+        "nev": name,
+        "bolt_id": shop_id,
+        "pult_id": counter_id,
+        "alkalmazott_id": employee_id,
+        "szolgaltatas_id": service_id,
+        "kezdet_ora": start_hour,
+        "veg_ora": end_hour,
+        "idotartam_perc": duration_minute,
+        "puffer_utana_perc": buffer_after_minute,
+        "min_racs_perc": min_grid_minute,
+        "foglalhato_arany": bookable_ratio,
+        "blokk_szabaly": json.loads(block_rule_json),
     }
