@@ -113,3 +113,39 @@ A kiváltó feltétel teljesülését emberi esemény jelzi (új fejlesztő
 csatlakozása, piaci/nyelvi bővítési döntés), nem folyamatos mérés — ez a
 tábla-oszloknevek státuszát alapvetően megváltoztató, ritka esemény, nem
 küszöbérték-alapú metrika.
+
+## Folyamati tanulság (a kód-átnevezés végrehajtásából)
+
+A döntés végrehajtása — a `mag/`, `felulet/`, `tesztek/` alatti azonosítók
+tényleges lefordítása — egy menetben történt: a modulátnevezés (`git mv`)
+és az azonosító-átírás ugyanabba a nagy commitba keveredett, száraz futás
+és térképfájl nélkül. Ennek ára utólag derült ki: a `.rename_dict.py` és
+az alkalmazó szkript törlődött, mielőtt bármilyen ellenőrizhető nyoma
+maradt volna annak, mi pontosan mire fordult — a `docs/atnevezes_terkep.md`
+csak utólag, a commit-diffekből lett visszafejtve (lásd az adott commit
+üzenetét), ami működött, de nem lett volna szabad, hogy szükség legyen rá.
+
+Legközelebb hasonló, gépi (script-alapú) tömeges átnevezésnél a sorrend:
+
+1. **Száraz futás + térképfájl elsőként, saját commitban.** Az összes
+   tervezett régi→új NAME-token pár, előfordulásszámmal, gyakoriság
+   szerint rendezve, mielőtt egyetlen fájl is módosulna. Ez ad utólagos
+   ellenőrizhetőséget, és a felülvizsgálat (pl. tiltólista, ütközések)
+   ezen a fájlon történik, nem a kódon találgatva.
+2. **Modulátnevezés `git mv`-vel, tartalmi változtatás nélkül, önálló
+   commitban.** A git így rename-ként ismeri fel, nem törlés+létrehozásként
+   — ez önmagában dokumentálja a mozgatást, térkép nélkül is.
+3. **Importok javítása a mozgatás után, külön commitban, teljes teszttel.**
+   A könyvtárátnevezés önmagában törné az importokat; ezt a lépést a
+   térkép nem érinti, mert nem azonosító-átírás, hanem útvonal-követés.
+4. **Azonosító-átírás csomagonként, külön commitban, mindegyik után teljes
+   teszttel.** Ha egy csomag után a tesztek elbuknak, azt ott kell
+   javítani, mielőtt a következő csomag elkezdődne — nem szabad több
+   csomagnyi kockázatot egy commitba halmozni.
+
+Ez a sorrend nem stílus kérdése: egy nagy, egybefüggő rename-commit esetén
+a hiba (pl. `mag`/`core` mint RNG-seed és mint modulnév ütközése, vagy egy
+`list` beépített elnevezés árnyékolása) csak utólagos, teljes körű kézi
+teszteléssel derül ki, és a javítás nyoma összemosódik magával az
+átnevezéssel. Lépésenkénti commitolással a hiba pontosan abban a
+commitban jelenik meg, ahol keletkezett.
