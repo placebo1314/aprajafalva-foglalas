@@ -29,7 +29,7 @@ szolgáltatás ── variáns (kereskedelmi attribútum, nulla ütemezési hat�
 
 Ütemezési egység: van saját alapértelmezett **időtartama** (pl. „kis
 petárda" — 5 perc). Egy szolgáltatás pontosan egy bolthoz tartozik. A
-szolgáltatás jelenik meg a magban (`mag/`) — ez az, amit a slotgenerátor és
+szolgáltatás jelenik meg a magban (`core/`) — ez az, amit a slotgenerátor és
 az ütemező ténylegesen lát.
 
 ### Variáns
@@ -214,6 +214,42 @@ paraméterek (30 perc, szünetszabály) a visszavonásig érvényben maradtak,
 tehát a történet visszakereshető.
 
 ---
+
+## Magyar fogalom ↔ angol kódnév
+
+A séma (tábla-/oszlopnevek) és ez a szótár magyar marad — a domain nyelve
+(ADR-014). A Python-kód viszont angolra fordult. Ez a táblázat a híd a
+kettő között: mit hívnak a táblák és mezők, és mire fordul ugyanaz a
+fogalom a `core/` kódban.
+
+| Magyar fogalom (séma) | Angol kódnév (`core/`) |
+|---|---|
+| szervezet / `szervezet_id` | org / `org_id` |
+| bolt / `bolt_id` | shop / `shop_id` |
+| pult / `pult_id` | counter / `counter_id` |
+| alkalmazott / `alkalmazott_id` | employee / `employee_id` |
+| szolgáltatás / `szolgaltatas_id` | service / `service_id` |
+| variáns | variant *(még nincs repo-kód hozzá)* |
+| műszak / `muszak_id` | shift / `shift_id` (`Shift` osztály, `core/modell/shift.py`) |
+| műszakblokk (`muszak_blokk`) | `Block` osztály |
+| — típusok: szünet / ebéd / szabad_sáv | `tipus` mezőérték marad magyar (séma) |
+| slot / `slot_id` | `Slot` osztály |
+| hold / `hold_id` | hold / `hold_id` (véletlen egyezés, nem fordítás) |
+| foglalás / `foglalas_id` | booking (`booking_create`, `booking_lemond`, `Result`) |
+| foglalási kód (`foglalasi_kod`) | booking code |
+| vásárló kulcs (`vasarlo_kulcs`) | customer key |
+| idempotencia kulcs (`idempotencia_kulcs`) | idempotency key |
+| kivétel nap (`kivetel_nap`) | exception day (`exception_day_create`) |
+| foglalható arány (`foglalhato_arany`) | `bookable_ratio` mező |
+| puffer utáni perc (`puffer_utan_perc`) | `buffer_after_minute` mező |
+| rács-minimum perc | `min_grid_minute` mező |
+| blokk-szabály | `block_rule` mező |
+| kényszer(sértés) | constraint (`ConstraintViolation`, `core/szabalyok/kenyszerek.py`) |
+| eredmény (visszatérési érték) | `Result` enum (`SUCCESS`, `PREEMPTED`, `NO_ILYEN`) |
+
+A CLI-parancsok (`foglal`, `lemond`, `keres`, `slotok`) és a konzol-/
+UI-szövegek magyarok maradnak — ez a felhasználói felület nyelve, nem
+érinti sem a sémát, sem a kódot.
 
 ## Kapcsolat a sémához
 
