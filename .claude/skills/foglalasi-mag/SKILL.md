@@ -1,6 +1,6 @@
 ---
 name: foglalasi-mag
-description: A foglalási domain szabályai — műszak, slot, hold, szünetblokk, paraméter-öröklődés és snapshot, ajánlatpontozás, konkurenciakezelés. Használd, amikor a mag/ könyvtárban dolgozol, foglalási vagy beosztási logikát írsz vagy módosítasz, ütemezéssel, kapacitással, szünetekkel foglalkozol, vagy el kell dönteni, hogy egy időpont felajánlható-e.
+description: A foglalási domain szabályai — műszak, slot, hold, szünetblokk, paraméter-öröklődés és snapshot, ajánlatpontozás, konkurenciakezelés. Használd, amikor a core/ könyvtárban dolgozol, foglalási vagy beosztási logikát írsz vagy módosítasz, ütemezéssel, kapacitással, szünetekkel foglalkozol, vagy el kell dönteni, hogy egy időpont felajánlható-e.
 ---
 
 # Foglalási mag
@@ -191,6 +191,6 @@ fut be.
 - LLM-hívás bármilyen formában
 - Helyi idő tárolása (minden UTC)
 - Autoincrement kulcs
-- SQL a `mag/repo/`-n kívül
+- SQL a `core/repo/`-n kívül
 - Csendes elutasítás — az elutasításnak mindig van gépi olvasható oka, amit a
   magyarázó motor fel tud oldani

@@ -7,7 +7,7 @@ Részletes terv: `docs/blueprint.md`. Ütemterv: `docs/roadmap.md`.
 
 **Az LLM nem foglal, hanem fordít.**
 
-A foglalási logika a `mag/`-ban van, determinisztikusan. Az `asszisztens/`
+A foglalási logika a `core/`-ban van, determinisztikusan. Az `assistant/`
 dolga kizárólag: magyar mondat → strukturált eszközhívás → magyar mondat.
 Az orchestrator állapotgép, nem LLM.
 
@@ -23,10 +23,10 @@ rossz — akkor is, ha működik.
    UNIQUE index + konkurencia-teszt. Nem számláló, nem alkalmazásszintű zár.
 2. **Nyers vásárlóazonosító soha nem kerül lemezre, logba vagy trace-be.**
    Csak HMAC-hash. A pepper nem az adatbázisban van.
-3. **A `mag/` nem importál az `asszisztens/`-ből.** Egyirányú függés.
+3. **A `core/` nem importál az `assistant/`-ből.** Egyirányú függés.
 4. **Minden idő UTC-ben tárolódik**, ISO-8601 szövegként. Helyi idő csak a
    megjelenítésnél keletkezik.
-5. **Minden SQL a `mag/repo/`-ban van.** Máshol nincs nyers lekérdezés.
+5. **Minden SQL a `core/repo/`-ban van.** Máshol nincs nyers lekérdezés.
 6. **Csak olyan időpontot mutatunk, amit tartani is tudunk.** Ajánlott
    jelölt = van rá hold.
 
@@ -46,8 +46,15 @@ bash-függőség: minden eszköz Python.
 
 ## Konvenciók
 
-- **Domain-nevek magyarul** (`muszak`, `slot`, `foglalas`, `szunetblokk`),
-  technikai nevek angolul (`repository`, `session`, `handler`).
+- **A kód angolul, a séma és a domain szótár magyarul** (ADR-014).
+  Python-azonosítók (függvény, változó, osztály, top-szintű modulnév)
+  angolul (`create_booking`, `org_id`, `Shift`, `core/`). A séma
+  (tábla-/oszlopnevek SQL-stringekben) és a repo-függvények visszaadott
+  dict-jeinek **string-literál kulcsai** magyarul maradnak — ez a séma
+  nyelve, nem a kódé, lásd `docs/domain.md` a magyar↔angol szótárért.
+  A CLI-parancsok (`python feladat.py teszt`, `foglal`, `lemond`) és a
+  konzol-/UI-szövegek is magyarok maradnak — ez a felhasználói felület
+  nyelve, nem a kódé.
 - **Minden elsődleges kulcs UUID**, szövegként tárolva. Soha nem
   autoincrement.
 - **Migrációk sorszámozva**, up és down iránnyal. Kézi sémamódosítás soha.
@@ -57,11 +64,16 @@ bash-függőség: minden eszköz Python.
 ## Modulhatárok
 
 ```
-mag/          önálló, LLM nélkül működik      → nem importál semmi mást
-asszisztens/  importálhat mag/-ból             → csak eszközhívásokat állít elő
-adatvedelem/  önálló                          → mindkettő használhatja
-felulet/      importálhat mag/-ból             → nem hív LLM-et közvetlenül
+core/         önálló, LLM nélkül működik      → nem importál semmi mást
+assistant/    importálhat core/-ból            → csak eszközhívásokat állít elő
+privacy/      önálló                          → mindkettő használhatja
+ui/           importálhat core/-ból            → nem hív LLM-et közvetlenül
 ```
+
+Az almodulok (`core/repo/`, `core/slot/`, `core/modell/`, `core/szabalyok/`,
+`core/api/`) és a legtöbb fájlnév (pl. `torzsadat_repo.py`, `migracio.py`)
+egyelőre magyar maradt — csak a fenti top-szintű csomagnevek mozogtak
+(ADR-014, "Amit feladunk" szakasz).
 
 ## Ha elakadsz
 

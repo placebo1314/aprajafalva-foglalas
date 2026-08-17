@@ -80,7 +80,7 @@ def talalatok(tartalom: str, minta: str) -> list[str]:
 
 
 def modul_hatar() -> None:
-    """A mag/ nem függhet az asszisztens/-től. Ez a modularitás valódi tesztje."""
+    """A core/ nem függhet az assistant/-től. Ez a modularitás valódi tesztje."""
     fajl = erintett_fajl(bemenet())
     if not fajl:
         return

@@ -1,6 +1,6 @@
 ---
 name: eszkoz-szerzodes
-description: Az asszisztens és a foglalási mag közti eszközfelület — JSON-sémák, kötött dekódolás, verziózás, hibaágak, bizalmi jelzés. Használd, amikor eszközt adsz hozzá vagy módosítasz, JSON-sémát írsz, az asszisztens/ertelmezo modulon dolgozol, constrained decodingot konfigurálsz, vagy azt tervezed, hogyan kérdezzen vissza az asszisztens.
+description: Az asszisztens és a foglalási mag közti eszközfelület — JSON-sémák, kötött dekódolás, verziózás, hibaágak, bizalmi jelzés. Használd, amikor eszközt adsz hozzá vagy módosítasz, JSON-sémát írsz, az assistant/ertelmezo modulon dolgozol, constrained decodingot konfigurálsz, vagy azt tervezed, hogyan kérdezzen vissza az asszisztens.
 ---
 
 # Eszközszerződés
@@ -66,7 +66,7 @@ hibás formátumot.
 - Ha később vLLM-re váltunk, XGrammar a beépített háttér, ugyanezzel a sémával.
 
 A séma tehát nem dokumentáció, hanem futásidejű kényszer. Ezért kell egy
-helyen tartani: `asszisztens/ertelmezo/semak/`.
+helyen tartani: `assistant/ertelmezo/semak/`.
 
 ## Bizalmi jelzés
 

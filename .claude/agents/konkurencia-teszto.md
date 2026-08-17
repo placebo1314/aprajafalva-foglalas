@@ -40,7 +40,7 @@ elférnének a szünet arrébb tolásával, de együtt nem.
 ## Hogyan dolgozol
 
 1. Előbb olvasd el a meglévő teszteket — ne duplikálj.
-2. A tesztek `tesztek/konkurencia/` alá kerülnek.
+2. A tesztek `tests/konkurencia/` alá kerülnek.
 3. **Minden tesztnek SQLite-on és Postgresen is futnia kell.** Ha egy teszt
    csak az egyiken megy át, az önmagában hiba.
 4. Futtasd is, amit írtál. Egy nem futtatott teszt nem bizonyíték.

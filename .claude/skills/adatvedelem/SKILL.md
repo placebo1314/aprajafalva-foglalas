@@ -15,7 +15,7 @@ adatvédelmi incidens.
 ## Az azonosító sosem kerül lemezre nyersen
 
 ```python
-# adatvedelem/hash.py
+# privacy/hash.py
 import hmac, hashlib
 
 def hash_azonosito(nyers: str, pepper: bytes) -> str:
@@ -28,8 +28,8 @@ def hash_azonosito(nyers: str, pepper: bytes) -> str:
 - A `vasarlo` tábla `vasarlo_kulcs` oszlopa ez a hash. Nyers azonosítót tároló
   oszlop nincs, és nem is kerül bele.
 
-Egy hook blokkolja a `nyers_azonosito` szimbólum használatát az
-`adatvedelem/` modulon kívül.
+Egy hook blokkolja a `nyers_azonosito` szimbólum használatát a
+`privacy/` modulon kívül.
 
 ## Redaktálás — tárolás ELŐTT
 

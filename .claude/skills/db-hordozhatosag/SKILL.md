@@ -1,6 +1,6 @@
 ---
 name: db-hordozhatosag
-description: Adatbázis-hordozhatósági szabályok SQLite és PostgreSQL között — tiltott és kötelező minták, migrációs sablon, repository réteg, tranzakciókezelés, konkurencia. Használd, amikor sémát tervezel, migrációt írsz, SQL-t fogalmazol, a mag/repo/ könyvtárban dolgozol, vagy adatbázis-kapcsolatot konfigurálsz.
+description: Adatbázis-hordozhatósági szabályok SQLite és PostgreSQL között — tiltott és kötelező minták, migrációs sablon, repository réteg, tranzakciókezelés, konkurencia. Használd, amikor sémát tervezel, migrációt írsz, SQL-t fogalmazol, a core/repo/ könyvtárban dolgozol, vagy adatbázis-kapcsolatot konfigurálsz.
 ---
 
 # Adatbázis-hordozhatóság
@@ -23,7 +23,7 @@ Ha egy teszt csak az egyiken megy át, az hiba — akkor is, ha a funkció műk�
 | `WITHOUT ROWID` | semmi, felesleges |
 | `GLOB` | `LIKE` |
 | típusrugalmasságra hagyatkozás | explicit `CHECK` kényszer |
-| SQL a repository rétegen kívül | minden lekérdezés a `mag/repo/`-ba |
+| SQL a repository rétegen kívül | minden lekérdezés a `core/repo/`-ba |
 
 A migrációs linter hook ezeket automatikusan elkapja, de jobb eleve nem
 leírni őket.
@@ -75,7 +75,7 @@ elvisz.
 
 ## Migrációs sablon
 
-`migraciok/0007_hold_tabla.sql`:
+`migrations/0007_hold_tabla.sql`:
 
 ```sql
 -- up
@@ -126,13 +126,13 @@ if cur.rowcount == 0:
 
 ## Repository réteg
 
-Minden SQL a `mag/repo/`-ban van, függvények mögé rejtve:
+Minden SQL a `core/repo/`-ban van, függvények mögé rejtve:
 
 ```python
-# mag/repo/foglalas_repo.py
-def letrehoz(conn, slot_id, vasarlo_kulcs, idempotencia_kulcs) -> Eredmeny: ...
-def lemond(conn, foglalas_id, indok) -> Eredmeny: ...
-def slot_szabad(conn, slot_id) -> bool: ...
+# core/repo/foglalas_repo.py
+def booking_create(conn, slot_id, customer_key, idempotency_key) -> Result: ...
+def booking_lemond(conn, booking_id, reason) -> Result: ...
+def slot_free(conn, slot_id) -> bool: ...
 ```
 
 A hívó kód sosem lát SQL-t. Ez teszi lehetővé, hogy a Postgres-váltás egyetlen
