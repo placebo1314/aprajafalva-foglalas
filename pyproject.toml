@@ -20,6 +20,10 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    # A golden set (tests/golden/nyelvi_alap.yaml) betöltéséhez kell —
+    # eddig csak a spike/golden_futtato.py-ban volt (dokumentálatlan)
+    # függőség, most a tests/ is használja.
+    "pyyaml>=6.0",
 ]
 
 [tool.setuptools.packages.find]
