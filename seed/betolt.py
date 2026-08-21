@@ -123,6 +123,14 @@ def _master_data_load(conn) -> dict:
     szundi_id = torzsadat_repo.shop_create(
         conn, org_id=org_id, name="Szundi", id_=_id("bolt:szundi")
     )
+    torzsadat_repo.shop_description_update(
+        conn,
+        shop_id=szundi_id,
+        megjelenes=(
+            "Kék, csillagos homlokzat, az ajtó fölött álmos hold formájú tábla. "
+            "Esténként halk zene szűrődik ki az ablakokon."
+        ),
+    )
     torzsadat_repo.counter_create(
         conn,
         org_id=org_id,
@@ -137,7 +145,7 @@ def _master_data_load(conn) -> dict:
         name="Csendes",
         id_=_id("alkalmazott:csendes"),
     )
-    torzsadat_repo.service_create(
+    szundi_service_id = torzsadat_repo.service_create(
         conn,
         org_id=org_id,
         shop_id=szundi_id,
@@ -145,9 +153,26 @@ def _master_data_load(conn) -> dict:
         alap_duration_minute=15,
         id_=_id("szolgaltatas:altato"),
     )
+    torzsadat_repo.service_description_update(
+        conn,
+        service_id=szundi_service_id,
+        termekleiras=(
+            "Gyógynövényes altatófőzet, egyénre szabott recept szerint — egy csésze, "
+            "és garantáltan mély álom reggelig."
+        ),
+        ar="40 arany",
+    )
 
     ugyifogyi_id = torzsadat_repo.shop_create(
         conn, org_id=org_id, name="Ügyifogyi", id_=_id("bolt:ugyifogyi")
+    )
+    torzsadat_repo.shop_description_update(
+        conn,
+        shop_id=ugyifogyi_id,
+        megjelenes=(
+            "Élénkpiros-sárga cégér, az ablakok mögül időnként pattogó hangok "
+            "hallatszanak — ne ijedj meg, ez itt megszokott."
+        ),
     )
     torzsadat_repo.counter_create(
         conn,
@@ -163,7 +188,7 @@ def _master_data_load(conn) -> dict:
         name="Durranó",
         id_=_id("alkalmazott:durrano"),
     )
-    torzsadat_repo.service_create(
+    ugyifogyi_service_id = torzsadat_repo.service_create(
         conn,
         org_id=org_id,
         shop_id=ugyifogyi_id,
@@ -171,9 +196,25 @@ def _master_data_load(conn) -> dict:
         alap_duration_minute=5,
         id_=_id("szolgaltatas:petarda"),
     )
+    torzsadat_repo.service_description_update(
+        conn,
+        service_id=ugyifogyi_service_id,
+        termekleiras=(
+            "Kézzel készített ünnepi petárda, biztonságos gyújtózsinórral — "
+            "kis és nagy méretben egyaránt kapható."
+        ),
+        ar="kis petárda 20 arany, nagy petárda 55 arany",
+    )
 
     torpilla_id = torzsadat_repo.shop_create(
         conn, org_id=org_id, name="Törpilla", id_=_id("bolt:torpilla")
+    )
+    torzsadat_repo.shop_description_update(
+        conn,
+        shop_id=torpilla_id,
+        megjelenes=(
+            "Barátságos, virágos kirakat — az ajtóban mindig várja valaki mosollyal a betérőket."
+        ),
     )
     torpilla_service_id = torzsadat_repo.service_create(
         conn,
@@ -182,6 +223,15 @@ def _master_data_load(conn) -> dict:
         name="boldogság",
         alap_duration_minute=15,
         id_=_id("szolgaltatas:boldogsag"),
+    )
+    torzsadat_repo.service_description_update(
+        conn,
+        service_id=torpilla_service_id,
+        termekleiras=(
+            "Egy őszinte beszélgetés, egy forró tea és annyi figyelem, "
+            "amennyi aznap éppen elfér a szívben."
+        ),
+        ar="adomány alapú",
     )
 
     torpilla_counters = []
