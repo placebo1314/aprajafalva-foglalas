@@ -261,6 +261,19 @@ class AdminApp(tk.Tk):
             add_fn=self._shop_add_ui,
             update_fn=self._shop_update_ui,
         )
+        self.shop_list.bind("<<ListboxSelect>>", self._shop_list_selected)
+
+        # "Bolti tudás" (docs/blueprint.md 10. szakasz): a bolt_info
+        # eszköz ezt olvassa vissza — a modell sosem generálja. Kiválasztás
+        # betölti a mezőt, hogy szerkesztéskor ne a semmiből kelljen újra
+        # megírni egy már meglévő leírást.
+        ttk.Label(bal, text="Megjelenés (a kiválasztott bolté)").pack(anchor="w", pady=(6, 0))
+        self.shop_appearance_field = tk.Text(bal, height=3, wrap="word")
+        self.shop_appearance_field.pack(fill="x", pady=(2, 2))
+        ttk.Button(bal, text="Megjelenés mentése", command=self._shop_description_update_ui).pack(
+            anchor="w", pady=(0, 10)
+        )
+
         self.counter_list = self._master_data_block_build(
             bal,
             cim="Pultok (a kiválasztott boltban)",
@@ -281,6 +294,7 @@ class AdminApp(tk.Tk):
         ).pack(anchor="w")
         self.service_list = tk.Listbox(jobb, height=6)
         self.service_list.pack(fill="x", pady=(2, 4))
+        self.service_list.bind("<<ListboxSelect>>", self._service_list_selected)
         service_form = ttk.Frame(jobb)
         service_form.pack(fill="x")
         ttk.Label(service_form, text="Név:").grid(row=0, column=0, sticky="w")
@@ -289,6 +303,14 @@ class AdminApp(tk.Tk):
         ttk.Label(service_form, text="Időtartam (perc):").grid(row=1, column=0, sticky="w")
         self.service_duration_field = ttk.Entry(service_form)
         self.service_duration_field.grid(row=1, column=1, sticky="ew")
+        # "Bolti tudás" (docs/blueprint.md 10. szakasz) — a bolt_info
+        # "termek"/"ar" ága ezt olvassa vissza, a modell sosem generálja.
+        ttk.Label(service_form, text="Termékleírás:").grid(row=2, column=0, sticky="nw")
+        self.service_description_field = tk.Text(service_form, height=3, wrap="word")
+        self.service_description_field.grid(row=2, column=1, sticky="ew")
+        ttk.Label(service_form, text="Ár:").grid(row=3, column=0, sticky="w")
+        self.service_price_field = ttk.Entry(service_form)
+        self.service_price_field.grid(row=3, column=1, sticky="ew")
         service_form.columnconfigure(1, weight=1)
         service_buttons = ttk.Frame(jobb)
         service_buttons.pack(fill="x", pady=(2, 10))
@@ -734,11 +756,13 @@ class AdminApp(tk.Tk):
         for employee in api.employees(self.conn, shop_id=self.shop_id):
             self.employee_list.insert("end", employee["nev"])
             self._employee_id_list.append(employee["id"])
+        self._service_details = {}
         for service in api.services(self.conn, shop_id=self.shop_id):
             self.service_list.insert(
                 "end", f"{service['nev']} ({service['alap_idotartam_perc']} perc)"
             )
             self._service_id_list.append(service["id"])
+            self._service_details[service["id"]] = service
         exception_shop = self.shop_id if self.exception_only_shop_valtozo.get() else None
         for exception in api.exception_days(self.conn, org_id=self.org_id, shop_id=exception_shop):
             level_indicator = "bolt" if exception["bolt_id"] else "szervezet"
@@ -774,6 +798,27 @@ class AdminApp(tk.Tk):
         self._master_data_message_write("Bolt átnevezve.")
         self._shop_list_refresh()
         self._master_data_refresh()
+
+    def _shop_list_selected(self, _event=None) -> None:
+        """A Törzsadat fülön kiválasztott bolt megjelenés-mezőjét tölti
+        be — hogy szerkesztéskor ne a semmiből kelljen újraírni egy már
+        meglévő leírást (docs/blueprint.md 10. szakasz, "Bolti tudás")."""
+        shop_id = self._selected_id(self.shop_list, self._shop_id_list)
+        self.shop_appearance_field.delete("1.0", "end")
+        if shop_id is None:
+            return
+        shop = api.shop_load(self.conn, shop_id=shop_id)
+        if shop:
+            self.shop_appearance_field.insert("1.0", shop["megjelenes"])
+
+    def _shop_description_update_ui(self) -> None:
+        shop_id = self._selected_id(self.shop_list, self._shop_id_list)
+        if shop_id is None:
+            self._master_data_message_write("Előbb válassz ki egy boltot a listából.")
+            return
+        megjelenes = self.shop_appearance_field.get("1.0", "end")
+        result = api.shop_description_update(self.conn, shop_id=shop_id, megjelenes=megjelenes)
+        self._master_data_message_write(result["hiba"] or "Megjelenés mentve.")
 
     def _counter_add_ui(self, field: ttk.Entry) -> None:
         if not self.shop_id:
@@ -832,6 +877,19 @@ class AdminApp(tk.Tk):
         self._master_data_message_write(result["hiba"] or "Szolgáltatás felvéve.")
         self._shop_selected()
 
+    def _service_list_selected(self, _event=None) -> None:
+        """A kiválasztott szolgáltatás termékleírását/árát tölti be —
+        ugyanaz az indoklás, mint `_shop_list_selected`-nél."""
+        service_id = self._selected_id(self.service_list, self._service_id_list)
+        self.service_description_field.delete("1.0", "end")
+        self.service_price_field.delete(0, "end")
+        if service_id is None:
+            return
+        service = self._service_details.get(service_id)
+        if service:
+            self.service_description_field.insert("1.0", service["termekleiras"])
+            self.service_price_field.insert(0, service["ar"])
+
     def _service_update_ui(self) -> None:
         service_id = self._selected_id(self.service_list, self._service_id_list)
         if service_id is None:
@@ -848,7 +906,19 @@ class AdminApp(tk.Tk):
             name=self.service_name_field.get(),
             alap_duration_minute=duration,
         )
-        self._master_data_message_write(result["hiba"] or "Szolgáltatás módosítva.")
+        if result["hiba"]:
+            self._master_data_message_write(f"Hiba: {result['hiba']}")
+            return
+        # A "Bolti tudás" mezőket (docs/blueprint.md 10. szakasz) ugyanaz
+        # a gomb menti, mint a nevet/időtartamot — az admin egy kattintással
+        # ment mindent, nem kell külön gomb a leírásnak.
+        api.service_description_update(
+            self.conn,
+            service_id=service_id,
+            termekleiras=self.service_description_field.get("1.0", "end"),
+            ar=self.service_price_field.get(),
+        )
+        self._master_data_message_write("Szolgáltatás módosítva.")
         self._shop_selected()
 
     def _exception_day_add_ui(self) -> None:

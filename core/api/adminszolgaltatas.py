@@ -88,6 +88,13 @@ def shops(conn: sqlite3.Connection, *, org_id: str) -> list[dict]:
     return torzsadat_repo.shops_list(conn, org_id=org_id)
 
 
+def shop_load(conn: sqlite3.Connection, *, shop_id: str) -> dict | None:
+    """A `shops()` listázáshoz elég `id`/`nev` — ez a `megjelenes`
+    mezővel együtt adja vissza, a Törzsadat fül szerkesztő űrlapjának
+    (`ui/admin/app.py`)."""
+    return torzsadat_repo.shop_load(conn, shop_id)
+
+
 def counters(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
     return torzsadat_repo.counters_list(conn, shop_id=shop_id)
 
