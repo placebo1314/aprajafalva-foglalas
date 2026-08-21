@@ -2,25 +2,38 @@
 
 Nem a mag/ vagy az asszisztens/ része, nem lesz belőle alap — csak a
 spike mérésére való (lásd docs/roadmap.md, M-1: "A spike kódja eldobható").
+A `--ertelmezo szabaly` mód KIVÉTEL ez alól annyiban, hogy ténylegesen
+importálja az `assistant/interpreter/rule_based.py`-t — ez a spike-fájl
+nem lesz belőle alap, de a mérési célra (M4 alapvonal) szándékosan a
+valódi, nem-eldobható kódot méri.
 
-Beolvassa a tests/golden/nyelvi_alap.yaml-t, minden esetre meghívja a
-megadott Ollama modellt structured output-tal (Ollama `format` paraméter
-JSON-sémával), az {eszkoz, parameterek} alakra kényszerítve. A `most`
-mezőt (meta.most_alapertelmezett) a promptban adja át.
+Két mód:
 
-Kiértékelés: pontos JSON-egyenlőség a `varhato`-val, `reszleges_elfogadas`
-részleges pontszámmal, `megorzott_parameterek` ellenőrzése visszakérdezés
-esetén, `tilos` minták tiltása. A kimenet címkénként (minden `cimkek`
-elem) ÉS rétegenként (a `meta.kuszobok` szerinti réteg-küszöbökkel
-összevetve) bontva jelent.
+- `--ertelmezo llm --modell <NÉV>` (alapértelmezett): minden esetre
+  meghívja a megadott Ollama modellt structured outputtal (Ollama
+  `format` paraméter JSON-sémával), az {eszkoz, parameterek} alakra
+  kényszerítve. A `most` mezőt (meta.most_alapertelmezett) a promptban
+  adja át.
+- `--ertelmezo szabaly`: nincs modellhívás — az `assistant/interpreter/
+  rule_based.py::SzabalyAlapuErtelmezo`-t hívja közvetlenül. Ez adja meg,
+  mit tud a rendszer LLM NÉLKÜL — ez az alapvonal, ami fölé egy jövőbeli
+  LLM-es értelmezőnek kerülnie kell (roadmap M4).
 
-A `--json`-nal mentett fájl minden esethez elmenti a nyers modellkimenetet
-is (`nyers_kimenet`), nem csak az `indoklas` szöveget — enélkül egy bukott
+Kiértékelés (mindkét módban azonos): pontos JSON-egyenlőség a
+`varhato`-val, `reszleges_elfogadas` részleges pontszámmal,
+`megorzott_parameterek` ellenőrzése visszakérdezés esetén, `tilos`
+minták tiltása. A kimenet címkénként (minden `cimkek` elem) ÉS
+rétegenként (a `meta.kuszobok` szerinti réteg-küszöbökkel összevetve)
+bontva jelent.
+
+A `--json`-nal mentett fájl minden esethez elmenti a nyers kimenetet is
+(`nyers_kimenet`), nem csak az `indoklas` szöveget — enélkül egy bukott
 eset utólag nem elemezhető (lásd korábbi eredmény-fájlok korlátját).
 
 Használat:
     python spike/golden_futtato.py --modell qwen3.5:9b
     python spike/golden_futtato.py --modell qwen3.5:4b --json eredmeny.json
+    python spike/golden_futtato.py --ertelmezo szabaly --json alapvonal.json
 """
 
 from __future__ import annotations
@@ -38,6 +51,14 @@ from pathlib import Path
 import yaml
 
 GYOKER = Path(__file__).resolve().parents[1]
+# `python spike/golden_futtato.py`-ként futtatva a script saját könyvtára
+# kerül a sys.path elejére, nem a projekt gyökere — a `--ertelmezo
+# szabaly` módhoz kellő `assistant.interpreter` importhoz ez kell (ugyanaz
+# a minta, mint `spike/hun_date_meres.py`-ban).
+sys.path.insert(0, str(GYOKER))
+
+from assistant.interpreter import ErtelmezesKontextus  # noqa: E402
+
 GOLDEN_UTVONAL = GYOKER / "tests" / "golden" / "nyelvi_alap.yaml"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 
@@ -215,6 +236,20 @@ def modell_hivas(
     return parsed, telt, tokenszam, None
 
 
+def szabaly_hivas(ertelmezo, bemenet: str, most: str) -> tuple[dict | None, float, int, str | None]:
+    """A determinisztikus értelmező (`assistant/interpreter/
+    rule_based.py::SzabalyAlapuErtelmezo`) hívása, ugyanolyan alakban,
+    mint a `modell_hivas()` — hogy a `fut()` és a `kiertekel()` a
+    forrástól függetlenül működjön. Tokenszám mindig 0 (nincs
+    tokenizáló, nem értelmezhető rá)."""
+    kezdet = time.monotonic()
+    try:
+        eredmeny = ertelmezo.ertelmez(bemenet, most=most, kontextus=ErtelmezesKontextus())
+    except Exception as exc:  # noqa: BLE001 - a mérés szempontjából a kivétel is bukás
+        return None, time.monotonic() - kezdet, 0, str(exc)
+    return eredmeny, time.monotonic() - kezdet, 0, None
+
+
 def _reszhalmaz(kicsi: dict, nagy: dict) -> bool:
     return all(nagy.get(k) == v for k, v in kicsi.items())
 
@@ -284,14 +319,30 @@ class EsetEredmeny:
 
 
 def fut(
-    modell: str, meta: dict, esetek: list[Eset], gondolkodas: bool = True
+    meta: dict,
+    esetek: list[Eset],
+    *,
+    ertelmezo_mod: str = "llm",
+    modell: str | None = None,
+    gondolkodas: bool = True,
 ) -> list[EsetEredmeny]:
+    """`ertelmezo_mod`: `"llm"` (Ollama-hívás, `modell` kötelező) vagy
+    `"szabaly"` (a determinisztikus értelmező, `assistant/interpreter/
+    rule_based.py` — nincs modellhívás, nincs `gondolkodas` kapcsoló)."""
     most = meta["most_alapertelmezett"]
+    if ertelmezo_mod == "szabaly":
+        from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
+
+        ertelmezo = SzabalyAlapuErtelmezo()
+
     eredmenyek = []
     for eset in esetek:
-        kimenet, telt, tokenszam, hiba = modell_hivas(
-            modell, eset.bemenet, most, gondolkodas=gondolkodas
-        )
+        if ertelmezo_mod == "szabaly":
+            kimenet, telt, tokenszam, hiba = szabaly_hivas(ertelmezo, eset.bemenet, most)
+        else:
+            kimenet, telt, tokenszam, hiba = modell_hivas(
+                modell, eset.bemenet, most, gondolkodas=gondolkodas
+            )
         pontszam, indoklas = kiertekel(eset, kimenet)
         if hiba:
             indoklas = f"{indoklas} [hívási hiba: {hiba}]"
@@ -377,21 +428,37 @@ def jelent(modell: str, meta: dict, eredmenyek: list[EsetEredmeny]) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--modell", required=True)
+    parser.add_argument("--ertelmezo", choices=["llm", "szabaly"], default="llm")
+    parser.add_argument(
+        "--modell", default=None, help="Kötelező --ertelmezo llm mellett (ez az alapértelmezett)"
+    )
     parser.add_argument("--json", type=Path, default=None, help="Eredmény mentése JSON-ba")
     parser.add_argument(
         "--nincs-gondolkodas",
         action="store_true",
-        help="Ollama think=false — gyors, de a mérésünk szerint sokkal pontatlanabb",
+        help="Ollama think=false — gyors, de sokkal pontatlanabb (csak --ertelmezo llm)",
     )
     args = parser.parse_args()
+    if args.ertelmezo == "llm" and not args.modell:
+        parser.error("--modell kötelező --ertelmezo llm mellett")
 
     meta, esetek = betolt()
     print(f"Betöltve: {len(esetek)} eset, meta.most = {meta['most_alapertelmezett']}")
-    print(f"Modell: {args.modell}  (gondolkodás: {'ki' if args.nincs_gondolkodas else 'be'})\n")
+    if args.ertelmezo == "szabaly":
+        print("Értelmező: szabaly (SzabalyAlapuErtelmezo, nincs modellhívás)\n")
+        cimke = "szabaly-alapu"
+    else:
+        print(f"Modell: {args.modell}  (gondolkodás: {'ki' if args.nincs_gondolkodas else 'be'})\n")
+        cimke = args.modell
 
-    eredmenyek = fut(args.modell, meta, esetek, gondolkodas=not args.nincs_gondolkodas)
-    osszefoglalo = jelent(args.modell, meta, eredmenyek)
+    eredmenyek = fut(
+        meta,
+        esetek,
+        ertelmezo_mod=args.ertelmezo,
+        modell=args.modell,
+        gondolkodas=not args.nincs_gondolkodas,
+    )
+    osszefoglalo = jelent(cimke, meta, eredmenyek)
 
     if args.json:
         args.json.write_text(

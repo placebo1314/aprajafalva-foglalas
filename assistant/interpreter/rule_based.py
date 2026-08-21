@@ -44,7 +44,7 @@ _KOD_MINTA = re.compile(r"\b[A-Z0-9]{6,10}\b")
 # docstringje: önmagában álló napszak-szó (pl. bare "délelőtt") nélküle
 # hamis pozitívot ad.
 _NAP_JELZO_MINTA = re.compile(
-    r"\bma\b|\bholnap\b|hétf[őo]|\bkedd|szerd[áa]|csütörtök|péntek|szombat|vasárnap"
+    r"\bma\b|\bholnap|hétf[őo]|\bkedd|szerd[áa]|csütörtök|péntek|szombat|vasárnap"
 )
 
 _BOLT_MINTAK: list[tuple[re.Pattern, str]] = [
