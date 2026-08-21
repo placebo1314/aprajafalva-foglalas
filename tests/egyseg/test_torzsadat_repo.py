@@ -111,6 +111,30 @@ def test_shop_load_nemletezo_none(conn):
     assert torzsadat_repo.shop_load(conn, "nemletezo") is None
 
 
+def test_shop_description_update(conn, shop):
+    torzsadat_repo.shop_description_update(conn, shop_id=shop, megjelenes="sárga tető")
+    assert torzsadat_repo.shop_load(conn, shop)["megjelenes"] == "sárga tető"
+
+
+def test_service_description_update(conn, org, shop):
+    service_id = torzsadat_repo.service_create(
+        conn, org_id=org, shop_id=shop, name="petárda", alap_duration_minute=5
+    )
+    torzsadat_repo.service_description_update(
+        conn, service_id=service_id, termekleiras="durranó", ar="100 arany"
+    )
+    result = torzsadat_repo.services_list(conn, shop_id=shop)
+    assert result == [
+        {
+            "id": service_id,
+            "nev": "petárda",
+            "alap_idotartam_perc": 5,
+            "termekleiras": "durranó",
+            "ar": "100 arany",
+        }
+    ]
+
+
 # --- pultok_lekerdezese --------------------------------------------------
 
 

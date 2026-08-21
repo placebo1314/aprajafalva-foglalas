@@ -207,6 +207,14 @@ def shop_update(conn: sqlite3.Connection, *, shop_id: str, name: str) -> None:
     conn.execute("UPDATE bolt SET nev = ? WHERE id = ?", (name, shop_id))
 
 
+def shop_description_update(conn: sqlite3.Connection, *, shop_id: str, megjelenes: str) -> None:
+    """A "Bolti tudás" mező (docs/blueprint.md 10. szakasz) — külön
+    függvény a névátnevezéstől (`shop_update`), mert az admin felületen
+    is külön mező, külön mentés-gomb: a leírás szerkesztése nem igényel
+    egyidejű névváltoztatást."""
+    conn.execute("UPDATE bolt SET megjelenes = ? WHERE id = ?", (megjelenes, shop_id))
+
+
 def counter_update(conn: sqlite3.Connection, *, counter_id: str, name: str) -> None:
     conn.execute("UPDATE pult SET nev = ? WHERE id = ?", (name, counter_id))
 
@@ -221,4 +229,17 @@ def service_update(
     conn.execute(
         "UPDATE szolgaltatas SET nev = ?, alap_idotartam_perc = ? WHERE id = ?",
         (name, alap_duration_minute, service_id),
+    )
+
+
+def service_description_update(
+    conn: sqlite3.Connection, *, service_id: str, termekleiras: str, ar: str
+) -> None:
+    """A "Bolti tudás" mezők (docs/blueprint.md 10. szakasz) — külön
+    függvény a `service_update`-től, ugyanazért, mint a bolt leírásánál:
+    a leírás/ár szerkesztése nem igényel egyidejű név-/időtartam-
+    változtatást."""
+    conn.execute(
+        "UPDATE szolgaltatas SET termekleiras = ?, ar = ? WHERE id = ?",
+        (termekleiras, ar, service_id),
     )

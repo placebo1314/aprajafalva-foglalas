@@ -329,6 +329,22 @@ def test_shop_update_empty_name_sensible_rejection(conn, master):
     assert names == ["Ügyifogyi"]  # változatlan
 
 
+def test_shop_description_update_success(conn, master):
+    result = api.shop_description_update(
+        conn, shop_id=master["bolt_id"], megjelenes="Piros cégér, a sarki házban."
+    )
+    assert result["hiba"] is None
+    bolt = torzsadat_repo.shop_load(conn, master["bolt_id"])
+    assert bolt["megjelenes"] == "Piros cégér, a sarki házban."
+
+
+def test_shop_description_update_ures_ertek_ervenyes(conn, master):
+    result = api.shop_description_update(conn, shop_id=master["bolt_id"], megjelenes="  ")
+    assert result["hiba"] is None
+    bolt = torzsadat_repo.shop_load(conn, master["bolt_id"])
+    assert bolt["megjelenes"] == ""
+
+
 def test_counter_add_and_update(conn, master):
     add = api.counter_add(
         conn, org_id=master["szervezet_id"], shop_id=master["bolt_id"], name="Pult A"
@@ -382,6 +398,43 @@ def test_service_add_and_update(conn, master):
     result = {s["nev"]: s for s in api.services(conn, shop_id=master["bolt_id"])}
     assert "Régi" not in result
     assert result["Új"]["alap_idotartam_perc"] == 30
+
+
+def test_service_description_update_success(conn, master):
+    add = api.service_add(
+        conn,
+        org_id=master["szervezet_id"],
+        shop_id=master["bolt_id"],
+        name="petárda",
+        alap_duration_minute=5,
+    )
+    result = api.service_description_update(
+        conn,
+        service_id=add["szolgaltatas_id"],
+        termekleiras="durranó, fényes",
+        ar="150 arany",
+    )
+    assert result["hiba"] is None
+    szolgaltatas = {s["nev"]: s for s in api.services(conn, shop_id=master["bolt_id"])}["petárda"]
+    assert szolgaltatas["termekleiras"] == "durranó, fényes"
+    assert szolgaltatas["ar"] == "150 arany"
+
+
+def test_service_description_update_ures_ertek_ervenyes(conn, master):
+    add = api.service_add(
+        conn,
+        org_id=master["szervezet_id"],
+        shop_id=master["bolt_id"],
+        name="petárda",
+        alap_duration_minute=5,
+    )
+    result = api.service_description_update(
+        conn, service_id=add["szolgaltatas_id"], termekleiras="  ", ar="  "
+    )
+    assert result["hiba"] is None
+    szolgaltatas = {s["nev"]: s for s in api.services(conn, shop_id=master["bolt_id"])}["petárda"]
+    assert szolgaltatas["termekleiras"] == ""
+    assert szolgaltatas["ar"] == ""
 
 
 def test_service_add_not_positive_for_duration_sensible_rejection(conn, master):

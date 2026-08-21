@@ -127,6 +127,15 @@ def shop_update(conn: sqlite3.Connection, *, shop_id: str, name: str) -> dict:
     return {"hiba": None}
 
 
+def shop_description_update(conn: sqlite3.Connection, *, shop_id: str, megjelenes: str) -> dict:
+    """A "Bolti tudás" mező (docs/blueprint.md 10. szakasz) — ezt a
+    `bolt_info` eszköz olvassa vissza, a modell sosem generálja. Üres
+    string érvényes érték ("nincs még megadva"), nincs rajta
+    `nem lehet üres` ellenőrzés, ellentétben a névvel."""
+    torzsadat_repo.shop_description_update(conn, shop_id=shop_id, megjelenes=megjelenes.strip())
+    return {"hiba": None}
+
+
 def counter_add(conn: sqlite3.Connection, *, org_id: str, shop_id: str, name: str) -> dict:
     name = name.strip()
     if not name:
@@ -198,6 +207,23 @@ def service_update(
         service_id=service_id,
         name=name,
         alap_duration_minute=alap_duration_minute,
+    )
+    return {"hiba": None}
+
+
+def service_description_update(
+    conn: sqlite3.Connection, *, service_id: str, termekleiras: str, ar: str
+) -> dict:
+    """A "Bolti tudás" mezők (docs/blueprint.md 10. szakasz) — a
+    `bolt_info` eszköz `termek`/`ar` ága ezt olvassa vissza. Az `ar`
+    mezőt a kapuőr ma is elutasítja szabad kérdésben (golden set
+    `kapuor-02`) — ez a szerkesztés attól függetlenül lehetséges, a
+    tárolás és a kiadás két külön döntés."""
+    torzsadat_repo.service_description_update(
+        conn,
+        service_id=service_id,
+        termekleiras=termekleiras.strip(),
+        ar=ar.strip(),
     )
     return {"hiba": None}
 
