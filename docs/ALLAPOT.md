@@ -1,4 +1,4 @@
-# Állapot — 2026-08-21
+# Állapot — 2026-08-21 (frissítve: M2 + M4 determinisztikus fele)
 
 Egy oldalas pillanatkép: hol tartunk. A terv és a "miért" a
 `docs/blueprint.md`-ben és a `docs/roadmap.md`-ben van, ez itt nem
@@ -11,23 +11,31 @@ ismétli meg őket, csak rájuk mutat és számol.
 | M-1 — Spike | **kész** | Lezárva 2026-08-16. A négy szám megvan, egyik sem hozta a tervezett SLO-t — lásd lent, "Ismert korlátok". |
 | M0 — Foglalási mag | **kész** | Séma, migrációk, slotgenerátor, hold, foglalás, áthelyezés, lemondás, mentés+helyreállítás, CLI, konkurencia-tesztek — mind megvan és tesztelt. |
 | M1 — Admin beosztásszerkesztő | **részben kész** | Naptárnézet, műszak felvitele, sablon-műszakok, hét másolása, törzsadat-szerkesztés, ütközéslista megvan. Ami hiányzik: lásd lent. |
-| M2 — Eszközszerződés | **nem kezdődött el** | A hat eszköz (`szabad_idopontok`, `foglalas_letrehozas` stb.) JSON-sémája még nincs megírva. |
-| M3 — Golden set és értékelő | **részben kész** | A nyelvi golden set megvan (22 eset, öt réteg, `tests/golden/nyelvi_alap.yaml`), de a roadmap 150-200 esetet ír elő kilépési feltételként — ez messze nincs meg. A szituációs esetek (naptárállapot → ajánlás) egyáltalán nincsenek felvéve. **A `python feladat.py golden` parancs ma hibával áll le** — a `tests/golden/futtato.py` értékelő script még nincs megírva, csak az esetfájl létezik. Az M-1 mérésekhez a `spike/golden_futtato.py` (eldobható spike-kód) futott, nem ez. |
-| M4 — Asszisztens | **nem kezdődött el** | A modellválasztás méréssel (M-1) megtörtént, de maga az asszisztens-réteg (normalizáló, dátumparser-integráció, orchestrator) nincs megírva. |
+| M2 — Eszközszerződés | **kész** | A hat eszköz (`assistant/tools/`) megvan: JSON-séma v1-gyel, `additionalProperties: false`, egységes hiba-formátummal, LLM nélkül hívható és tesztelt (23 teszt). |
+| M3 — Golden set és értékelő | **részben kész** | A nyelvi golden set megvan (22 eset, öt réteg, `tests/golden/nyelvi_alap.yaml`), de a roadmap 150-200 esetet ír elő kilépési feltételként — ez messze nincs meg. A szituációs esetek (naptárállapot → ajánlás) egyáltalán nincsenek felvéve. **A `python feladat.py golden` parancs ma hibával áll le** — a `tests/golden/futtato.py` értékelő script még nincs megírva, csak az esetfájl létezik. A 22 esetet most két másik út futtatja: `spike/golden_futtato.py --ertelmezo szabaly` (eldobható spike-kód, méréshez) és `tests/egyseg/test_rule_based_golden_set.py` (tartós regressziós védőháló, ez fut minden `python feladat.py teszt`-nél). |
+| M4 — Asszisztens | **részben kész** | A **determinisztikus fele kész**: `assistant/orchestrator.py` (ADR-007 állapotgép), `assistant/interpreter/` (`Ertelmezo` protokoll + `rule_based.py`, hun-date-parser-rel), `assistant/tools/katalogus.py` (szándékindex is: `core/api/szandekindex.py`). Ez a golden set látható 22 esetén **100%-ot** ad — ez egy erre a fixtúrára épített szabályrendszer eredménye, NEM általánosítási mutató (lásd lent). A koppintós út (M4 terv 7. pontja) is megvan: `ui/vasarlo.py`, két egyenrangú úttal (koppintós + szöveges) egy ablakban. **Hiányzik**: tényleges LLM-integráció, kötött dekódolás (GBNF/XGrammar), önkonzisztencia-ellenőrzés, bizalmi jelzés logprobokból, a `valasz` modul (magyar mondatgenerálás — ma egy ideiglenes szótár, `ui/vasarlo.py::_UZENET_KULCS_SZOVEG`). |
 | M5 — Dolgozói nézet | **nem kezdődött el** | — |
 | M6 — Dev mód és finomhangolás | **nem kezdődött el** | — |
 
 ## Konkrét számok
 
-- **Tesztek:** 182 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
+- **Tesztek:** 258 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
 - **Migrációk:** 3 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`).
 - **ADR-ek:** 14 elfogadva (001–014) + 1 sablon.
-- **Golden set:** 22 nyelvi eset, öt rétegben. Jelenlegi legjobb mért eredmény —
-  qwen3.5:9b, gondolkodással, javított séma-kényszerrel: **47,7%**
-  összesített, legrosszabb réteg a szleng (16,7%). **Egyik réteg sem éri el
-  a saját küszöbét** — a kapuőr réteg (nem valós foglalási kérés
-  felismerése) az egyetlen, ami 100%-on áll. Részletek és módszertan:
-  `spike/EREDMENY.md`.
+- **Golden set — LLM-mel (M-1 mérés):** 22 nyelvi eset, öt rétegben.
+  Legjobb mért eredmény — qwen3.5:9b, gondolkodással, javított
+  séma-kényszerrel: **47,7%** összesített, legrosszabb réteg a szleng
+  (16,7%). **Egyik réteg sem éri el a saját küszöbét** — a kapuőr réteg
+  (nem valós foglalási kérés felismerése) az egyetlen, ami 100%-on áll.
+  Részletek és módszertan: `spike/EREDMENY.md`.
+- **Golden set — determinisztikus alapvonallal:** ugyanaz a 22 eset,
+  `assistant/interpreter/rule_based.py`-vel: **100,0%**, minden réteg
+  tartja a küszöbét (`spike/eredmeny_szabaly_alapu.json`,
+  `tests/egyseg/test_rule_based_golden_set.py`). **Ez nem
+  általánosítási mutató** — ezt a szabályrendszert erre a pontos 22
+  esetre építettük, kézzel egyeztetve mindegyikkel, szemben az
+  LLM-mel, ami sosem látta őket tanításkor. A valódi próba egy jövőbeli,
+  bővebb (150-200 eses) golden seten dől el (M3 kilépési feltétel).
 
 ## Mi hiányzik az M1 lezárásához (konkrétan)
 
@@ -81,3 +89,19 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   `strict=True`): a séma önmagában nem szűri ki a kereszt-szervezeti
   hivatkozást, ezt az író rétegnek kell majd kikényszerítenie — amíg ez
   nincs megírva, a teszt szándékosan bukik, dokumentáltan.
+- **A vásárlóazonosító hash-elése ideiglenes** (`privacy/
+  hash_ideiglenes.py`, sima SHA-256, nincs pepper, nincs
+  kulcsverzió-rotáció) — a végleges HMAC+pepper megoldás (CLAUDE.md
+  2. invariáns, `adatvedelem` skill) M5 előtt nem készül el.
+- **`bolt_info` cím/nyitvatartás adata statikus, kódba írt** (`assistant/
+  tools/katalogus.py::BOLT_INFO_STATIKUS`) — a `bolt` táblának nincs
+  ilyen oszlopa, nincs hozzá migráció vagy admin-szerkesztő felület.
+- **`foglalas_lemondas` és `foglalas_athelyezes` nem kap külön
+  "biztosan?" megerősítést** — csak az új foglalás (`assistant/
+  orchestrator.py` dokumentált hatókör-korlátja). Az áthelyezés a v1-ben
+  mindig visszakérdez (nincs automatikus új-időpont-keresés egy
+  mondatból).
+- **A koppintós UI "Nap" választója a valódi rendszerórától számol**,
+  a demóadat viszont egy fix, 2026-12-21-gyel kezdődő hétre generál
+  beosztást — kézi kipróbáláskor ezért más dátumot kell választani,
+  mint a mai nap (`ui/vasarlo.py` dokumentálja).

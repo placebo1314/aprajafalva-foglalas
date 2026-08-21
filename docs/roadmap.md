@@ -106,6 +106,17 @@ nem órákban.
 
 ## M2 — Eszközszerződés
 
+**Állapot: KÉSZ (2026-08-21).** `assistant/tools/` — a hat eszköz,
+JSON-sémával (v1, `additionalProperties: false`), egységes
+hiba-formátummal (`sikeres`/`ok`/`uzenet_kulcs`/`alternativak`), zárt
+katalógussal a bolt-/szolgáltatás-azonosításhoz
+(`assistant/tools/katalogus.py`). Az ajánlatpontozó (ADR-006,
+`core/api/ajanlatpontozo.py`) és a szándékindex
+(`core/api/szandekindex.py`) ezzel együtt készült el, mert a
+`szabad_idopontok` eszköz nélkülük nem adhatna pontozott jelöltet.
+Mind a hat eszköz LLM nélkül hívható és tesztelt (23 teszt,
+`tests/egyseg/test_tools.py`).
+
 Hat eszköz JSON-sémával és verziózással:
 
 | Eszköz | Azonosítás |
@@ -139,13 +150,25 @@ hurkából jön — ezért kell a trace-rögzítés az első naptól.
 
 ## M4 — Asszisztens
 
+**Állapot: RÉSZBEN KÉSZ — a determinisztikus fele elkészült
+(2026-08-21).** `assistant/orchestrator.py` (ADR-007 állapotgép),
+`assistant/interpreter/` (`Ertelmezo` protokoll + a szabály-alapú
+`rule_based.py`, `hun-date-parser`-integrációval), `core/api/
+szandekindex.py`, `ui/vasarlo.py` (koppintós út). Ez a golden set
+látható 22 esetén 100%-ot ad — ez az **alapvonal**, ami fölé egy
+tényleges LLM-es értelmezőnek kell kerülnie, NEM maga a kilépési
+feltétel teljesülése (lásd lent — ehhez valódi modell és bővebb
+golden set kell). **Hiányzik**: maga a modellválasztás/LLM-integráció,
+kötött dekódolás, önkonzisztencia-ellenőrzés, bizalmi jelzés, a
+`valasz` modul (ma egy ideiglenes szótár).
+
 - modellválasztás **méréssel** (Apache-2.0 jelölt + Racka ellenőrzőként)
-- normalizáló réteg (tájszólás, szleng, elgépelés)
-- dátumparser (`hun-date-parser` + saját kiegészítés)
-- kapuőr, kötött dekódolás, válaszsablonok
-- szándékindex, orchestrator állapotgép
-- **zárt kérdésre váltás**, visszaolvasásos megerősítés
-- koppintós út párhuzamos felületként
+- ~~normalizáló réteg (tájszólás, szleng, elgépelés)~~ — kész, szabály-alapú
+- ~~dátumparser (`hun-date-parser` + saját kiegészítés)~~ — kész
+- kapuőr (kész, szabály-alapú), kötött dekódolás (LLM-specifikus, hiányzik), válaszsablonok (hiányzik, `valasz` modul)
+- ~~szándékindex~~ — kész (`core/api/szandekindex.py`), ~~orchestrator állapotgép~~ — kész (`assistant/orchestrator.py`)
+- ~~**zárt kérdésre váltás**~~ — kész; visszaolvasásos megerősítés (részben — "biztosan lefoglaljam?" megvan, teljes visszaolvasás nincs)
+- ~~koppintós út párhuzamos felületként~~ — kész (`ui/vasarlo.py`)
 
 **Kilépési feltétel:** a golden seten a szolgáltatás-azonosítás > 98%, és a
 **leggyengébb nyelvi rétegen is > 90%**.
