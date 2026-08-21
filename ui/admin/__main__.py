@@ -1,4 +1,4 @@
-"""`python -m felulet.admin` belépési pont."""
+"""`python -m ui.admin` belépési pont."""
 
 from __future__ import annotations
 

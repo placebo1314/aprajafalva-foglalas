@@ -6,11 +6,19 @@ a foglalást determinisztikus mag végzi.
 
 ## Dokumentáció
 
+Ha most találkozol először a projekttel: **`docs/KISOKOS.md`** — telepítés,
+első futtatás, mit próbálj ki, gyakori hibák. Ha ellenőrizni akarod, hogy
+működik: **`docs/TESZTELES.md`**. Ha azt akarod tudni, hol tartunk: **`docs/ALLAPOT.md`**.
+
 | Fájl | Mit tartalmaz |
 |---|---|
 | `CLAUDE.md` | alapelv, invariánsok, konvenciók — minden munkamenet ezzel indul |
+| `docs/KISOKOS.md` | belépő laikusoknak — telepítés, első futtatás, gyakori hibák |
+| `docs/ALLAPOT.md` | egy oldalas állapotjelentés: mérföldkövek, számok, nyitott döntések |
+| `docs/TESZTELES.md` | hogyan ellenőrizd, hogy a rendszer működik — automata és kézi próbák |
 | `docs/blueprint.md` | a teljes műszaki terv |
 | `docs/roadmap.md` | mérföldkövek és az első lépések |
+| `docs/domain.md` | a domain-fogalmak szótára (magyar), és a magyar↔angol kódnév-táblázat |
 | `docs/KOMPONENSEK.md` | újrahasznosítható komponensek, licencekkel |
 | `docs/adr/` | döntési feljegyzések kiváltó feltétellel |
 
@@ -38,8 +46,8 @@ A repó Claude Code-hoz készült. A `.claude/` alatt:
 - **agentek** — `sema-orzo`, `konkurencia-teszto`, `eval-futtato`
 - **hookok** — `hooks/hookok.py`, tiszta Python
 
-A hookok kikényszerítik: modulhatár (a `mag/` nem importál az
-`asszisztens/`-ből), SQL csak a `mag/repo/`-ban, migrációk hordozhatósága,
+A hookok kikényszerítik: modulhatár (a `core/` nem importál az
+`assistant/`-ből), SQL csak a `core/repo/`-ban, migrációk hordozhatósága,
 tiltott minták (nyers azonosító, beégetett titok).
 
 ### Ha `python` helyett `python3` a parancs
