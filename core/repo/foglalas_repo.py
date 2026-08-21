@@ -546,6 +546,33 @@ def bookings_list(
     ]
 
 
+def bookings_list_by_customer(conn: sqlite3.Connection, *, customer_key: str) -> list[dict]:
+    """Egy vásárló saját foglalásai — a `foglalas_lekerdezes` eszköznek
+    ("mik a foglalásaim", eszkoz-szerzodes skill). A `vasarlo_kulcs` MÁR
+    HMAC-hash (CLAUDE.md 2. invariáns), és mivel globálisan egyedi (nem
+    szervezetenként), nincs szükség `org_id` szűrőre. Enumerációvédelem
+    (adatvedelem skill: azonos válasz létező/nem létező azonosítóra) a
+    hívó (orchestrator/eszköz) dolga — ez a függvény önmagában csak
+    listáz, üres listát ad, ha nincs találat."""
+    rows = conn.execute(
+        "SELECT f.id, f.foglalasi_kod, f.allapot, f.letrehozva, s.kezdet, s.veg "
+        "FROM foglalas f JOIN slot s ON s.id = f.slot_id "
+        "WHERE f.vasarlo_kulcs = ? ORDER BY s.kezdet",
+        (customer_key,),
+    ).fetchall()
+    return [
+        {
+            "foglalas_id": row[0],
+            "foglalasi_kod": row[1],
+            "allapot": row[2],
+            "letrehozva": row[3],
+            "slot_kezdet": row[4],
+            "slot_veg": row[5],
+        }
+        for row in rows
+    ]
+
+
 def booking_query_idempotency_by(conn: sqlite3.Connection, idempotency_key: str) -> dict | None:
     """Egy korábban létrehozott foglalás alapadatai — pl. a CLI `foglal`
     parancsának, hogy a `foglalasi_kod`-ot vissza tudja adni idempotens

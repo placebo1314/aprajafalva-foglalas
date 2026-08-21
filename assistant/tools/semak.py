@@ -1,0 +1,127 @@
+"""A hat eszköz JSON-sémája, verziózva (eszkoz-szerzodes skill).
+
+**A séma itt a WIRE-kontraktus** — ami ténylegesen az `assistant/tools/*.py`
+`hivas()` függvényeibe befut, `session_id`-vel együtt. Ez NEM ugyanaz, mint
+amit egy értelmező (LLM vagy `assistant/interpreter/rule_based.py`) a
+mondatból előállít: az értelmező kimenete `session_id` NÉLKÜLI
+`{eszkoz, parameterek}` — a `session_id`-t az orchestrator fűzi hozzá,
+mert az a beszélgetés állapotát ismeri, nem az értelmező (ADR-002: "Az
+LLM nem foglal, hanem fordít" — a session-kezelés sem az ő dolga).
+
+`additionalProperties: false` mindenhol — ha egy hívó kitalál egy mezőt,
+az hiba legyen, ne csendes elnyelés.
+
+Verziózás: minden eszközhöz `SEMAK[eszkoz]["v1"]` — ha egy séma változik,
+`"v2"` jön létre MELLÉ, a régi verzió marad (eszkoz-szerzodes skill,
+"Verziózás"). A régi verzió eltávolítása külön lépés, ADR-rel.
+"""
+
+from __future__ import annotations
+
+from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
+
+_NAPSZAKOK = ["delelott", "delutan", "este", "barmikor"]
+_BOLT_INFO_MEZOK = ["nyitvatartas", "cim", "idotartam"]
+
+SEMAK: dict[str, dict[str, dict]] = {
+    "szabad_idopontok": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
+                "szolgaltatas_id": {"type": "string", "enum": sorted(SZOLGALTATAS_SLUGOK)},
+                "datum_tol": {"type": "string", "format": "date-time"},
+                "datum_ig": {"type": "string", "format": "date-time"},
+                "napszak": {"type": "string", "enum": _NAPSZAKOK},
+                "preferalt_ora": {"type": "integer"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["bolt_id", "datum_tol", "datum_ig", "session_id"],
+            "additionalProperties": False,
+        }
+    },
+    "foglalas_letrehozas": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                "slot_id": {"type": "string"},
+                # A nyers vásárlóazonosító sosem jut el a core/-ig
+                # (CLAUDE.md 2. invariáns) — ez MÁR HMAC-hashelt érték,
+                # 64 hex karakter. A hashelést a privacy/ modul végzi
+                # majd; amíg az nincs megírva, a hívó felelőssége előre
+                # kiszámítani (ugyanaz a mintát követi, mint a CLI
+                # `foglal` parancsa, core/api/cli.py).
+                "vasarlo_kulcs_hash": {"type": "string"},
+                "idempotencia_kulcs": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["slot_id", "vasarlo_kulcs_hash", "idempotencia_kulcs", "session_id"],
+            "additionalProperties": False,
+        }
+    },
+    "foglalas_athelyezes": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                "foglalasi_kod": {"type": "string"},
+                "uj_slot_id": {"type": "string"},
+                "idempotencia_kulcs": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": [
+                "foglalasi_kod",
+                "uj_slot_id",
+                "idempotencia_kulcs",
+                "session_id",
+            ],
+            "additionalProperties": False,
+        }
+    },
+    "foglalas_lekerdezes": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                # "Mik a foglalásaim" — azonosítás kell hozzá (a
+                # skill táblázata szerint: "igen, rate limit"), a
+                # rate limitet az orchestrator/session réteg végzi,
+                # nem ez az eszköz.
+                "vasarlo_kulcs_hash": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["vasarlo_kulcs_hash", "session_id"],
+            "additionalProperties": False,
+        }
+    },
+    "foglalas_lemondas": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                "foglalasi_kod": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["foglalasi_kod", "session_id"],
+            "additionalProperties": False,
+        }
+    },
+    "bolt_info": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
+                "mit": {"type": "string", "enum": _BOLT_INFO_MEZOK},
+                "datum": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["bolt_id", "mit", "session_id"],
+            "additionalProperties": False,
+        }
+    },
+}
+
+
+def legutobbi_verzio(eszkoz: str) -> str:
+    """A legfrissebb séma-verzió neve egy eszközhöz — ma mindig `"v1"`,
+    de a hívóknak ezen a függvényen keresztül kell kérniük, nem
+    beégetett `"v1"` szó-szerinti stringgel, hogy egy jövőbeli v2
+    bevezetése ne igényeljen keresés-cserét minden hívóban."""
+    return sorted(SEMAK[eszkoz])[-1]
