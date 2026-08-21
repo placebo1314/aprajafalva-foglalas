@@ -205,6 +205,34 @@ def test_teljes_ut_kereses_valasztas_megerosites_foglalas(tmp_path):
     assert foglalas_repo.slot_free(conn, valasztott) is False
 
 
+def test_kereses_strukturaltan_koppintos_ut_ugyanoda_vezet(tmp_path):
+    """A koppintós út (`ui/vasarlo.py`) nem az Ertelmezo-n megy át —
+    ugyanahhoz az állapothoz és eszközhöz kell vezetnie, hogy a
+    választás/megerősítés onnantól azonos legyen a szöveges úttal."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([])  # nem hívódik — a strukturált út megkerüli
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    ajanlat = orch.kereses_strukturaltan(
+        "session-1",
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+        },
+    )
+    assert ajanlat["tipus"] == "ajanlat"
+    assert ajanlat["jeloltek"]
+    assert ertelmezo.hivasok == []
+
+    valasztott = ajanlat["jeloltek"][0]["slot_id"]
+    megerosites_kerve = orch.valaszt("session-1", valasztott)
+    assert megerosites_kerve == {"tipus": "megerositest_ker", "slot_id": valasztott}
+    vegleges = orch.megerosit("session-1", "a" * 64)
+    assert vegleges["tipus"] == "visszaigazolas"
+
+
 def test_valaszt_felszabaditja_a_nem_valasztott_jeloltek_holdjait(tmp_path):
     conn = _conn(tmp_path)
     ctx = _seed(conn)

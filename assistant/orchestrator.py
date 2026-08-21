@@ -155,6 +155,17 @@ class Orchestrator:
         allapot.megorzott_parameterek = {}
         return {"tipus": "ajanlat", "jeloltek": eredmeny["jeloltek"]}
 
+    def kereses_strukturaltan(self, session_id: str, parameterek: dict) -> dict:
+        """A koppintós út belépési pontja (blueprint 10. szakasz,
+        "Koppintós út") — a vásárló már strukturált formában adta meg a
+        keresési feltételt (gombokkal, legördülőkkel), nincs szükség az
+        `Ertelmezo`-re. Ugyanazt az állapotot és ugyanazt az eszközt
+        (`szabad_idopontok`) hívja, mint a szöveges út, hogy a
+        választás/megerősítés folytatása (`valaszt`, `megerosit`)
+        onnantól azonos legyen, függetlenül attól, melyik úton indult."""
+        allapot = self._allapot(session_id)
+        return self._szabad_idopontok(allapot, parameterek)
+
     # -- jelölt-választás (koppintós ÉS szöveges út, blueprint 10.) --
 
     def valaszt(self, session_id: str, slot_id: str) -> dict:
