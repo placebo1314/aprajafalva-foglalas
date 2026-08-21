@@ -349,6 +349,98 @@ def booking_lemond(conn: sqlite3.Connection, booking_code: str) -> Result:
         return Result.SUCCESS
 
 
+def booking_move(
+    conn: sqlite3.Connection,
+    booking_code: str,
+    new_slot_id: str,
+    idempotency_key: str,
+) -> Result:
+    """Egy foglalás áthelyezése egy másik slotra — atomi: a régi lemondása
+    és az új slot lefoglalása EGYETLEN tranzakcióban történik, ugyanazzal a
+    `vasarlo_kulcs`/`kulcs_verzio` párral, amivel az eredeti foglalás
+    készült (nem kell újra hitelesíteni). Vagy mindkettő sikerül, vagy
+    egyik sem — nincs olyan köztes állapot, ahol a régi már lemondva van,
+    de az új még nem jött létre.
+
+    Az `idempotency_key` az ÁTHELYEZÉS kérését védi, nem az eredeti
+    foglalásét — ha ugyanazzal a kulccsal ismétlődik a hívás (hálózati
+    hiba, dupla kattintás), a már létrejött új foglalást adja vissza,
+    második sor beszúrása nélkül. Az `ix_foglalas_idempotencia` UNIQUE
+    index globális (nem csak aktív sorokra), ezért a hívónak ehhez a
+    híváshoz FRISS kulcsot kell adnia, nem az eredeti foglalásét.
+
+    Ha az új slotra időközben más nyert (a parciális UNIQUE index
+    ütközik), a régi foglalás VÁLTOZATLAN marad — a vesztes ág nem
+    részleges állapot, hanem teljes visszagördülés."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        repeated = conn.execute(
+            "SELECT 1 FROM foglalas WHERE idempotencia_kulcs = ? AND allapot <> 'lemondva'",
+            (idempotency_key,),
+        ).fetchone()
+        if repeated is not None:
+            conn.execute("ROLLBACK")
+            return Result.SUCCESS
+
+        row = conn.execute(
+            "SELECT id, szervezet_id, slot_id, vasarlo_kulcs, kulcs_verzio, allapot "
+            "FROM foglalas WHERE foglalasi_kod = ?",
+            (booking_code,),
+        ).fetchone()
+        if row is None:
+            conn.execute("ROLLBACK")
+            return Result.NO_ILYEN
+        old_booking_id, org_id, old_slot_id, customer_key, key_version, status = row
+        if status == "lemondva":
+            conn.execute("ROLLBACK")
+            return Result.ALREADY_CANCELLED
+
+        new_booking_id = new_uuid()
+        new_booking_code = _new_booking_code()
+        cur = conn.execute(
+            "INSERT INTO foglalas "
+            "(id, szervezet_id, slot_id, vasarlo_kulcs, kulcs_verzio, "
+            "idempotencia_kulcs, foglalasi_kod, allapot, letrehozva) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'aktiv', ?) "
+            "ON CONFLICT DO NOTHING",
+            (
+                new_booking_id,
+                org_id,
+                new_slot_id,
+                customer_key,
+                key_version,
+                idempotency_key,
+                new_booking_code,
+                most_iso(),
+            ),
+        )
+        if cur.rowcount == 0:
+            conn.execute("ROLLBACK")
+            return Result.PREEMPTED
+
+        conn.execute("UPDATE foglalas SET allapot = 'lemondva' WHERE id = ?", (old_booking_id,))
+        conn.execute("DELETE FROM hold WHERE slot_id = ?", (new_slot_id,))
+        _event_write(
+            conn,
+            org_id,
+            "foglalas_athelyezve",
+            "foglalas",
+            new_booking_id,
+            {
+                "regi_foglalas_id": old_booking_id,
+                "regi_slot_id": old_slot_id,
+                "uj_slot_id": new_slot_id,
+                "uj_foglalasi_kod": new_booking_code,
+            },
+        )
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    else:
+        conn.execute("COMMIT")
+        return Result.SUCCESS
+
+
 def free_slots_search(
     conn: sqlite3.Connection,
     *,

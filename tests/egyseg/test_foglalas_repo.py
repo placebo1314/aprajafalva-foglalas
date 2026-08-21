@@ -380,6 +380,146 @@ def test_booking_lemond_events_write(conn, slot):
     assert set(types) == {"foglalas_lemondva", "slot_felszabadult"}
 
 
+# --- booking_move ---------------------------------------------------
+
+
+def test_booking_move_success_old_cancelled_new_active(conn):
+    master = _master_data_insert(conn)
+    shift_id = _shift_insert(conn, master)
+    old_slot = _slot_insert(conn, master, shift_id)
+    new_slot = _slot_insert(
+        conn, master, shift_id, start="2026-08-18T09:00:00Z", end="2026-08-18T09:30:00Z"
+    )
+    foglalas_repo.booking_create(conn, old_slot, "a" * 64, _uuid(), "session-1")
+    code = conn.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+
+    result = foglalas_repo.booking_move(conn, code, new_slot, _uuid())
+
+    assert result is Result.SUCCESS
+    old_status = conn.execute(
+        "SELECT allapot FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+    assert old_status == "lemondva"
+    new_row = conn.execute(
+        "SELECT allapot, foglalasi_kod FROM foglalas WHERE slot_id = ?", (new_slot,)
+    ).fetchone()
+    assert new_row[0] == "aktiv"
+    assert new_row[1] != code
+
+
+def test_booking_move_no_ilyen_for_code(conn, slot):
+    result = foglalas_repo.booking_move(conn, "NEMLETEZO", slot, _uuid())
+    assert result is Result.NO_ILYEN
+
+
+def test_booking_move_already_cancelled(conn):
+    master = _master_data_insert(conn)
+    shift_id = _shift_insert(conn, master)
+    old_slot = _slot_insert(conn, master, shift_id)
+    new_slot = _slot_insert(
+        conn, master, shift_id, start="2026-08-18T09:00:00Z", end="2026-08-18T09:30:00Z"
+    )
+    foglalas_repo.booking_create(conn, old_slot, "a" * 64, _uuid(), "session-1")
+    code = conn.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+    foglalas_repo.booking_lemond(conn, code)
+
+    result = foglalas_repo.booking_move(conn, code, new_slot, _uuid())
+    assert result is Result.ALREADY_CANCELLED
+
+
+def test_booking_move_preempted_old_unchanged(conn):
+    """Ha az új slotra időközben más nyert, a régi foglalás VÁLTOZATLAN
+    marad — az áthelyezés teljes egészében visszagördül, nem félkész."""
+    master = _master_data_insert(conn)
+    shift_id = _shift_insert(conn, master)
+    old_slot = _slot_insert(conn, master, shift_id)
+    new_slot = _slot_insert(
+        conn, master, shift_id, start="2026-08-18T09:00:00Z", end="2026-08-18T09:30:00Z"
+    )
+    foglalas_repo.booking_create(conn, old_slot, "a" * 64, _uuid(), "session-1")
+    code = conn.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+    # Valaki más már ül az új sloton.
+    foglalas_repo.booking_create(conn, new_slot, "b" * 64, _uuid(), "session-2")
+
+    result = foglalas_repo.booking_move(conn, code, new_slot, _uuid())
+
+    assert result is Result.PREEMPTED
+    old_status = conn.execute(
+        "SELECT allapot FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+    assert old_status == "aktiv"
+
+
+def test_booking_move_idempotent_repetition_not_hoz_create_new_sort(conn):
+    master = _master_data_insert(conn)
+    shift_id = _shift_insert(conn, master)
+    old_slot = _slot_insert(conn, master, shift_id)
+    new_slot = _slot_insert(
+        conn, master, shift_id, start="2026-08-18T09:00:00Z", end="2026-08-18T09:30:00Z"
+    )
+    foglalas_repo.booking_create(conn, old_slot, "a" * 64, _uuid(), "session-1")
+    code = conn.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+    move_idempotency_key = _uuid()
+
+    first = foglalas_repo.booking_move(conn, code, new_slot, move_idempotency_key)
+    second = foglalas_repo.booking_move(conn, code, new_slot, move_idempotency_key)
+
+    assert first is Result.SUCCESS
+    assert second is Result.SUCCESS
+    count = conn.execute(
+        "SELECT COUNT(*) FROM foglalas WHERE slot_id = ? AND allapot = 'aktiv'", (new_slot,)
+    ).fetchone()[0]
+    assert count == 1
+
+
+def test_booking_move_deletes_hold_on_new_slot(conn):
+    master = _master_data_insert(conn)
+    shift_id = _shift_insert(conn, master)
+    old_slot = _slot_insert(conn, master, shift_id)
+    new_slot = _slot_insert(
+        conn, master, shift_id, start="2026-08-18T09:00:00Z", end="2026-08-18T09:30:00Z"
+    )
+    foglalas_repo.booking_create(conn, old_slot, "a" * 64, _uuid(), "session-1")
+    code = conn.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+    foglalas_repo.hold_create(conn, new_slot, "session-1", _jovoben())
+
+    foglalas_repo.booking_move(conn, code, new_slot, _uuid())
+
+    remaining_hold = conn.execute("SELECT 1 FROM hold WHERE slot_id = ?", (new_slot,)).fetchone()
+    assert remaining_hold is None
+
+
+def test_booking_move_events_write(conn):
+    master = _master_data_insert(conn)
+    shift_id = _shift_insert(conn, master)
+    old_slot = _slot_insert(conn, master, shift_id)
+    new_slot = _slot_insert(
+        conn, master, shift_id, start="2026-08-18T09:00:00Z", end="2026-08-18T09:30:00Z"
+    )
+    foglalas_repo.booking_create(conn, old_slot, "a" * 64, _uuid(), "session-1")
+    code = conn.execute(
+        "SELECT foglalasi_kod FROM foglalas WHERE slot_id = ?", (old_slot,)
+    ).fetchone()[0]
+
+    foglalas_repo.booking_move(conn, code, new_slot, _uuid())
+
+    types = [
+        row[0]
+        for row in conn.execute("SELECT tipus FROM esemenyek WHERE tipus = 'foglalas_athelyezve'")
+    ]
+    assert types == ["foglalas_athelyezve"]
+
+
 # --- szabad_slotok_keresese -------------------------------------------
 
 
