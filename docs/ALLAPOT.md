@@ -13,14 +13,14 @@ ismétli meg őket, csak rájuk mutat és számol.
 | M1 — Admin beosztásszerkesztő | **részben kész** | Naptárnézet, műszak felvitele, sablon-műszakok, hét másolása, törzsadat-szerkesztés, ütközéslista megvan. Ami hiányzik: lásd lent. |
 | M2 — Eszközszerződés | **kész** | A hat eszköz (`assistant/tools/`) megvan: JSON-séma v1-gyel, `additionalProperties: false`, egységes hiba-formátummal, LLM nélkül hívható és tesztelt (23 teszt). |
 | M3 — Golden set és értékelő | **részben kész** | A nyelvi golden set megvan (22 eset, öt réteg, `tests/golden/nyelvi_alap.yaml`), de a roadmap 150-200 esetet ír elő kilépési feltételként — ez messze nincs meg. A szituációs esetek (naptárállapot → ajánlás) egyáltalán nincsenek felvéve. **A `python feladat.py golden` parancs ma hibával áll le** — a `tests/golden/futtato.py` értékelő script még nincs megírva, csak az esetfájl létezik. A 22 esetet most két másik út futtatja: `spike/golden_futtato.py --ertelmezo szabaly` (eldobható spike-kód, méréshez) és `tests/egyseg/test_rule_based_golden_set.py` (tartós regressziós védőháló, ez fut minden `python feladat.py teszt`-nél). |
-| M4 — Asszisztens | **részben kész** | A **determinisztikus fele kész**: `assistant/orchestrator.py` (ADR-007 állapotgép), `assistant/interpreter/` (`Ertelmezo` protokoll + `rule_based.py`, hun-date-parser-rel), `assistant/tools/katalogus.py` (szándékindex is: `core/api/szandekindex.py`). Ez a golden set látható 22 esetén **100%-ot** ad — ez egy erre a fixtúrára épített szabályrendszer eredménye, NEM általánosítási mutató (lásd lent). A koppintós út (M4 terv 7. pontja) is megvan: `ui/vasarlo.py`, két egyenrangú úttal (koppintós + szöveges) egy ablakban. **Hiányzik**: tényleges LLM-integráció, kötött dekódolás (GBNF/XGrammar), önkonzisztencia-ellenőrzés, bizalmi jelzés logprobokból, a `valasz` modul (magyar mondatgenerálás — ma egy ideiglenes szótár, `ui/vasarlo.py::_UZENET_KULCS_SZOVEG`). |
+| M4 — Asszisztens | **részben kész** | A **determinisztikus fele kész**: `assistant/orchestrator.py` (ADR-007 állapotgép), `assistant/interpreter/` (`Ertelmezo` protokoll + `rule_based.py`, hun-date-parser-rel), `assistant/tools/katalogus.py` (szándékindex is: `core/api/szandekindex.py`). Ez a golden set látható 22 esetén **100%-ot** ad — ez egy erre a fixtúrára épített szabályrendszer eredménye, NEM általánosítási mutató (lásd lent). A koppintós út (M4 terv 7. pontja) is megvan: `ui/vasarlo.py`, két egyenrangú úttal (koppintós + szöveges) egy ablakban. A blueprint most explicit rögzíti a "Bolti tudás" elvet (10. szakasz): a bolt-szintű tény szerkesztett adat, a modell sosem generálja — a `bolt_info` eszköz `v2` sémát kapott (`megjelenes`/`termek`/`ar`, `migrations/0004_bolt_szolgaltatas_tudas.sql`). **Hiányzik**: tényleges LLM-integráció, kötött dekódolás (GBNF/XGrammar), önkonzisztencia-ellenőrzés, bizalmi jelzés logprobokból, a `valasz` modul (magyar mondatgenerálás — ma egy ideiglenes szótár, `ui/vasarlo.py::_UZENET_KULCS_SZOVEG`). |
 | M5 — Dolgozói nézet | **nem kezdődött el** | — |
 | M6 — Dev mód és finomhangolás | **nem kezdődött el** | — |
 
 ## Konkrét számok
 
-- **Tesztek:** 258 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
-- **Migrációk:** 3 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`).
+- **Tesztek:** 266 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
+- **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent).
 - **ADR-ek:** 14 elfogadva (001–014) + 1 sablon.
 - **Golden set — LLM-mel (M-1 mérés):** 22 nyelvi eset, öt rétegben.
   Legjobb mért eredmény — qwen3.5:9b, gondolkodással, javított
@@ -93,9 +93,13 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   hash_ideiglenes.py`, sima SHA-256, nincs pepper, nincs
   kulcsverzió-rotáció) — a végleges HMAC+pepper megoldás (CLAUDE.md
   2. invariáns, `adatvedelem` skill) M5 előtt nem készül el.
-- **`bolt_info` cím/nyitvatartás adata statikus, kódba írt** (`assistant/
-  tools/katalogus.py::BOLT_INFO_STATIKUS`) — a `bolt` táblának nincs
-  ilyen oszlopa, nincs hozzá migráció vagy admin-szerkesztő felület.
+- **`bolt_info` cím/nyitvatartás adata még mindig statikus, kódba írt**
+  (`assistant/tools/katalogus.py::BOLT_INFO_STATIKUS`) — ehhez a
+  kettőhöz nincs `bolt`-oszlop. A `megjelenes`/`termek`/`ar` viszont már
+  valódi DB-mező (`migrations/0004_bolt_szolgaltatas_tudas.sql`), csak
+  admin-szerkesztő felület nincs még hozzá — üres string az
+  alapértékük, amíg valaki nem tölti ki (jelenleg csak SQL-lel
+  tölthető, ami rendben van tesztben, de nem éles használatra).
 - **`foglalas_lemondas` és `foglalas_athelyezes` nem kap külön
   "biztosan?" megerősítést** — csak az új foglalás (`assistant/
   orchestrator.py` dokumentált hatókör-korlátja). Az áthelyezés a v1-ben

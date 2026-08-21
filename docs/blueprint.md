@@ -337,10 +337,24 @@ modell felgyorsítása, hanem a válasz kettéosztása:
 2. **Tartalmi válasz.** Ez már a ténylegesen lekérdezett/kinyert adatot
    tartalmazza, a szokásos módon (visszaolvasásos megerősítéssel stb.).
 
-A nyugtázó mondat **sosem tartalmaz tényt** — sem időpontot, sem szabad
-helyet, sem kapacitást. Kizárólag azt jelzi, hogy a rendszer dolgozik a
-kérésen. Ez nem stíluskérdés: a nyugtázás sablon, nincs mögötte ellenőrzött
-adat, tehát nem is állíthat semmit, aminek igaznak kell lennie.
+A szabály **nem az, hogy „a nyugtázó mondat nem tartalmazhat tényt"** —
+hanem hogy csak **igazolt, determinisztikus forrásból származó** tényt
+mondhat vissza. Van, amit a rendszer a nyugtázás pillanatában már
+ellenőrizhetően tud (a felismert keresési ablak, a beazonosított bolt) —
+ezt vissza lehet mondani. Amit még nem tud (mert az még nem futott le,
+vagy nem determinisztikus komponensből jön), azt nem.
+
+| Mondható | Forrás | Nem mondható |
+|---|---|---|
+| A felismert keresési ablak („kedden délelőttre nézem") | dátumparser | Konkrét szabad időpont, **mielőtt** a keresés ténylegesen lefutott és eredményt adott |
+| Zárt halmazból biztosan azonosított bolt/szolgáltatás („az Ügyifogyiban nézem") | katalógus-egyezés | Kapacitás-szám (hány hely maradt, hány foglalás van) |
+| A folyamat állapota („keresem", „egy pillanat") | orchestrator állapotgép | A modell bármilyen ellenőrizetlen generálása — akkor is, ha valószínűnek tűnik |
+
+A közös vonás: minden **mondható** tétel egy determinisztikus komponensből
+jön, amit a nyugtázás pillanatában már lekérdeztünk, nem generáltunk. A
+**nem mondható** oszlop nem azért tilos, mert „még nincs kész a válasz" —
+azért, mert nincs mögötte ellenőrzött forrás, tehát nem is állítható róla,
+hogy igaz.
 
 Szöveges csatornán **nincs** töltelékmondat — ott a natív gépelés-jelzés
 ("...ír") tölti be ugyanezt a szerepet, plusz üzenet nélkül.
@@ -472,7 +486,7 @@ egy naptár, egy igazság.
 
 | Alrendszer | Feladat | LLM? |
 |---|---|---|
-| Kapuőr | foglalás-e egyáltalán | kis osztályozó |
+| Kapuőr | témán belül van-e a kérés | **nem**, determinisztikus, a modell előtt fut |
 | Normalizáló | tájszólás, szleng → köznyelv | nem, szótár |
 | Dátumértelmező | „jövő hét péntek" → dátum | nem, szabályok |
 | Szándékértelmező | mondat → eszközhívás JSON | igen, kötött dekódolással |
@@ -491,6 +505,55 @@ egyenlőségvizsgálatával. Szűkösségben és hangon ez elesik.
 
 **Kerülendő:** szabad szöveg súlyozott keverése, LLM-ek egymással beszélgetése.
 Maximum két aktív modell a válaszútvonalon.
+
+### Kapuőr — témán belül tartás, determinisztikus réteg
+
+A témán belül tartás **nem a modell prompt-fegyelmén múlik.** Ez egy
+determinisztikus réteg, ami a modell **előtt** fut, nem egy utólagos
+javítás vagy rendszerprompt-utasítás ("csak foglalással kapcsolatos
+kérdésre válaszolj"). Három zárt kategória, ebben a sorrendben eldöntve:
+
+1. **Foglalási szándék** — időpont keresése, foglalás, áthelyezés,
+   lemondás, lekérdezés. Ez megy tovább az értelmezőhöz
+   (szándékértelmező, kötött dekódolással).
+2. **Engedélyezett tényválasz, zárt listából** — a `bolt_info` mezői
+   (lásd lent, "Bolti tudás"). Ez nem hívja az értelmezőt tartalmi
+   kérdésben, egyenesen a szerkesztett adathoz megy.
+3. **Egyik sem** — a rendszer **visszaterel**, nem improvizál. Nincs
+   "megpróbálom kitalálni, mit akarhat" ág; a válasz jelzi, hogy erre
+   nem tud segíteni, és felkínálja, mire tud (kiút, blueprint 7. szakasz).
+
+A kapuőr tehát nem *kéri meg* a modellt, hogy maradjon témán belül —
+eldönti helyette, mielőtt a modell egyáltalán szóhoz jutna a tartalmi
+válaszban. Ha ez a döntés a modellre lenne bízva, a téma-tartás annyira
+lenne megbízható, amennyire a modell aznap fegyelmezett — ez a kockázat
+technikailag kizárt, nem csak csökkentett.
+
+### Bolti tudás — szerkesztett adat, nem modell-tudás
+
+A bolt-szintű tényadat — nyitvatartás, cím, termékleírás, személyes
+megjelenés, árak (ahol az ártájékoztatás egyáltalán engedélyezett) —
+**szerkesztett adat a boltnál**, nem a modell paramétereiben él. A
+`bolt_info` eszköz ezt kikeresi egy zárt, admin-szerkeszthető mezőkészletből,
+a válaszgeneráló felolvassa — **a modell sosem generálja ezt a
+tartalmat**, csak egy mondatba fogalmazza a már kikeresett tényt.
+
+Következmény:
+
+- A tudás frissítése **admin-szerkesztés**, nem újratanítás és nem
+  prompt-módosítás. Ha megváltozik a nyitvatartás, az admin felületen
+  írják át — a modell változatlan marad, nem kell újra mérni a golden
+  seten.
+- A modell **sosem hallucinálhat tényt** erről a rétegről — nincs is
+  honnan: a tény nem az ő súlyaiban van, csak megfogalmazza, amit a
+  `bolt_info` visszaadott.
+- Amire nincs szerkesztett adat, arra a válasz "ezt nem tudom" —
+  **nem kitalálás** (lásd fent, a kapuőr harmadik kategóriája, és a
+  golden set `kapuor-02` esete: az ár kitalálása kifejezetten tiltott
+  minta).
+- Ez a döntés közvetlenül kizárja a **tudás-finomhangolást** mint utat
+  (lásd 14. szakasz, "Modellstratégia") — a tárgyi tudás sosem kerül a
+  modellbe sütve, tehát nincs is mit finomhangolással frissíteni rajta.
 
 ### Koppintós út
 
@@ -639,6 +702,20 @@ konfigból jön.
 A tájszólás és a helyi nyelvhasználat egyik alapmodell tanítóanyagában sincs —
 **ezt csak saját adatból lehet megtanulni**. A „mi lett volna a helyes válasz"
 hurok tehát nem kényelmi funkció, hanem az egyetlen út a falu nyelvéhez.
+
+**A finomhangolás célja kizárólag a nyelvi megértés** — tájszólás,
+töredékes beszéd, szleng, elgépelés —, **nem a tárgyi tudás.** A bolti
+tényadat (nyitvatartás, cím, termék, ár) az adatbázisban van, a
+`bolt_info` eszközön keresztül kikeresve (10. szakasz, "Bolti tudás") —
+ezt sosem tanítjuk bele a modell súlyaiba. Ez tudatosan kizárja a
+legdrágább és legtörékenyebb utat, a **tudás-finomhangolást**: egy
+modellbe sütött tényanyag minden admin-szerkesztésnél újratanítást
+igényelne, és bármikor hallucinálhat, amit rosszul tanult meg. A „mi
+lett volna a helyes válasz" hurok emiatt kizárólag ÉRTELMEZÉSI hibákat
+gyűjt (rossz eszközválasztás, rossz paraméter-kinyerés, elveszett
+kontextus) — egy téves nyitvatartás-válasz adatbázis- vagy
+eszközhiba, nem finomhangolási feladat, és nem is javítható
+finomhangolással.
 
 `docs/LICENCEK.md`: komponensenként licenc, letöltés dátuma, link.
 A Whisper magyar finomhangolatai a leggyakoribb licenccsapda.

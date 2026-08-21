@@ -60,6 +60,9 @@ bash-függőség: minden eszköz Python.
 - **Migrációk sorszámozva**, up és down iránnyal. Kézi sémamódosítás soha.
 - **Egyszerűsítés csak ADR-rel**, konkrét kiváltó feltétellel. Lásd
   `docs/adr/` és a `adr` skillt.
+- **Többlépéses, egyértelmű feladatnál ne kérj checkpointot lépések
+  között** — csak akkor állj meg, ha valódi, eldöntendő kérdés merül fel.
+  A commitok és a tesztek adják a biztonságot, nem a közbenső jóváhagyás.
 
 ## Modulhatárok
 
