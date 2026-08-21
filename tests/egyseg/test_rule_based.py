@@ -1,0 +1,220 @@
+"""Egységtesztek a determinisztikus értelmezőre
+(`assistant/interpreter/rule_based.py`) — reprezentatív esetek a golden
+set (`tests/golden/nyelvi_alap.yaml`) mintájából, hogy a valódi, teljes
+körű mérés a golden runner `--ertelmezo szabaly` módja legyen
+(`spike/golden_futtato.py`), ne itt duplikálódjon esetenként.
+"""
+
+from __future__ import annotations
+
+from assistant.interpreter import ErtelmezesKontextus
+from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
+
+_MOST = "2026-08-17T09:00:00Z"  # hétfő
+
+
+def _ertelmez(mondat: str, kontextus: ErtelmezesKontextus | None = None) -> dict:
+    return SzabalyAlapuErtelmezo().ertelmez(
+        mondat, most=_MOST, kontextus=kontextus or ErtelmezesKontextus()
+    )
+
+
+# --- kapuőr ---------------------------------------------------------
+
+
+def test_kapuor_idojaras():
+    assert _ertelmez("Milyen idő lesz holnap?") == {"eszkoz": "nincs", "parameterek": {}}
+
+
+def test_kapuor_ar():
+    assert _ertelmez("Mennyibe kerül a nagy petárda?") == {"eszkoz": "nincs", "parameterek": {}}
+
+
+def test_kapuor_nem_akad_fenn_a_holnap_szon():
+    """A "holnap" a mondatban nem térítheti el a kapuőrt egy foglalási
+    ág felé — az időjárás-kérdés prioritást élvez."""
+    eredmeny = _ertelmez("Milyen idő lesz holnap?")
+    assert eredmeny["eszkoz"] == "nincs"
+
+
+# --- bolt_info -------------------------------------------------------
+
+
+def test_bolt_info_nyitvatartas_datummal():
+    eredmeny = _ertelmez("Meddig van nyitva a Szundi bolt szombaton?")
+    assert eredmeny == {
+        "eszkoz": "bolt_info",
+        "parameterek": {"bolt_id": "szundi", "mit": "nyitvatartas", "datum": "2026-08-22"},
+    }
+
+
+def test_bolt_info_cim_tajszolassal():
+    eredmeny = _ertelmez("Hun van az az üzlet, ahun a boldogságot árullyák?")
+    assert eredmeny == {"eszkoz": "bolt_info", "parameterek": {"bolt_id": "torpilla", "mit": "cim"}}
+
+
+def test_bolt_info_bolt_nelkul_visszakerdez():
+    eredmeny = _ertelmez("Hol van az üzlet?")
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["hianyzo_mezo"] == "bolt_id"
+
+
+# --- lemondás / áthelyezés -------------------------------------------
+
+
+def test_lemondas_koddal():
+    eredmeny = _ertelmez("Le szeretném mondani a foglalásomat, a kód X7K2M9QP.")
+    assert eredmeny == {
+        "eszkoz": "foglalas_lemondas",
+        "parameterek": {"foglalasi_kod": "X7K2M9QP"},
+    }
+
+
+def test_lemondas_kod_nelkul_visszakerdez():
+    eredmeny = _ertelmez("Le szeretném mondani a foglalásomat.")
+    assert eredmeny == {
+        "eszkoz": "visszakerdez",
+        "parameterek": {"hianyzo_mezo": "foglalasi_kod", "varhato_kerdes_tipusa": "nyitott"},
+    }
+
+
+def test_athelyezes_visszakerdez_foglalasi_kodra():
+    eredmeny = _ertelmez("Át tudnám tenni szerdára a péntek délelőtti időpontomat?")
+    assert eredmeny == {
+        "eszkoz": "visszakerdez",
+        "parameterek": {"hianyzo_mezo": "foglalasi_kod", "varhato_kerdes_tipusa": "nyitott"},
+    }
+
+
+# --- keresés: köznyelvi, teljes paraméterkészlet ----------------------
+
+
+def test_kereses_relativ_datum_es_szolgaltatas():
+    eredmeny = _ertelmez("Szeretnék időpontot foglalni jövő hét keddre nagy petárdához.")
+    assert eredmeny == {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+            "bolt_id": "ugyifogyi",
+            "szolgaltatas_id": "nagy_petarda",
+            "datum_tol": "2026-08-25T00:00:00Z",
+            "datum_ig": "2026-08-25T23:59:59Z",
+            "napszak": "barmikor",
+        },
+    }
+
+
+def test_kereses_nyitott_intervallum_egyertelmu_szolgaltatassal():
+    eredmeny = _ertelmez("Mikor tudok legkorábban menni Törpillához?")
+    assert eredmeny == {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+            "bolt_id": "torpilla",
+            "szolgaltatas_id": "nagy_orom",
+            "datum_tol": "2026-08-17T09:00:00Z",
+            "datum_ig": "2026-08-24T23:59:59Z",
+            "napszak": "barmikor",
+        },
+    }
+
+
+def test_kereses_ma_a_jelen_pillanattol_indul():
+    eredmeny = _ertelmez("yo, be lehet nézni ma Törpillához vagy tele van?")
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-17T09:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-17T23:59:59Z"
+
+
+def test_kereses_preferalt_ora():
+    eredmeny = _ertelmez("Van hely hónap délelőtt a petárdásnál? Kb 10 körül lenne jó")
+    assert eredmeny["parameterek"]["preferalt_ora"] == 10
+    assert eredmeny["parameterek"]["napszak"] == "delelott"
+
+
+def test_kereses_meret_nelkuli_petarda_szolgaltatas_nelkul():
+    """Méret-jelző (kis/nagy) nélkül a szolgáltatás nem egyértelmű —
+    ez NEM hiba, a keresés bolt-szinten is elindulhat (golden set,
+    toredekes-01 megjegyzése)."""
+    eredmeny = _ertelmez("kedden… petárda… lehet?")
+    assert "szolgaltatas_id" not in eredmeny["parameterek"]
+    assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi"
+
+
+# --- tájszólás normalizálás ------------------------------------------
+
+
+def test_tajszolas_honap_csapdaszo_holnapkent_oldodik():
+    eredmeny = _ertelmez("Möggyek-ë hónap délelőtt a petárdáshó?")
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
+    assert eredmeny["parameterek"]["napszak"] == "delelott"
+
+
+def test_tajszolas_bolt_hianyzik_zart_kerdes():
+    eredmeny = _ertelmez("Kéretnék egy időpontot szombat reggelre, ha lehetséges vóna.")
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["hianyzo_mezo"] == "bolt_id"
+    assert eredmeny["parameterek"]["varhato_kerdes_tipusa"] == "zart"
+    assert eredmeny["parameterek"]["valaszthato_ertekek"] == ["szundi", "torpilla", "ugyifogyi"]
+
+
+def test_szleng_roviditett_nap_jovo_het_ertelmezes():
+    eredmeny = _ertelmez("asszem jövő csüt jó lenne, addig ráérek")
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-27T00:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-27T23:59:59Z"
+
+
+# --- visszakérdezés: megőrzés és a "ne találj ki dátumot" szabály ----
+
+
+def test_visszakerdez_megorzi_a_datumot_es_napszakot():
+    eredmeny = _ertelmez("időpont. holnap. délelőtt.")
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-18T11:59:59Z"
+    assert eredmeny["parameterek"]["napszak"] == "delelott"
+
+
+def test_visszakerdez_a_heten_kifejezes():
+    eredmeny = _ertelmez("Szeretnék… izé… hogy is mondjam… bemenni a boltba valamikor a héten.")
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-17T09:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-23T23:59:59Z"
+
+
+def test_visszakerdez_nem_talal_ki_datumot_mult_idobol():
+    """A "tilos: kitalalt_datum" eset — a bare napszak-szó ("délelőtt")
+    múlt idejű mondatban nem alakulhat mai dátummá."""
+    eredmeny = _ertelmez("Múltkor is voltam. Ugyanakkor szeretnék megint. Az délelőtt volt.")
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert "datum_tol" not in eredmeny["parameterek"]
+    assert "datum_ig" not in eredmeny["parameterek"]
+    assert eredmeny["parameterek"]["napszak"] == "delelott"
+
+
+def test_visszakerdez_semmi_konkretum_nincs_extra_mezo_nelkul():
+    eredmeny = _ertelmez("hát én csak azt szeretném hogy hogy mikor lehet menni")
+    assert eredmeny == {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+            "hianyzo_mezo": "bolt_id",
+            "varhato_kerdes_tipusa": "zart",
+            "valaszthato_ertekek": ["szundi", "torpilla", "ugyifogyi"],
+        },
+    }
+
+
+def test_kontextus_megorzott_parameterek_atadodik_a_kovetkezo_hivasnak():
+    """Az orchestrator a kontextuson keresztül adja át a korábban
+    megőrzött mezőket — az értelmezőnek ezeket kell a most kinyerttel
+    egyesítenie, az új adat felülírja a régit ütközésnél."""
+    kontextus = ErtelmezesKontextus(
+        megorzott_parameterek={
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T11:59:59Z",
+            "napszak": "delelott",
+        }
+    )
+    eredmeny = _ertelmez("ugyifogyi", kontextus)
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi"
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
+    assert eredmeny["parameterek"]["napszak"] == "delelott"

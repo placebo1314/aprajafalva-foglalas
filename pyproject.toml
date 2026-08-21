@@ -8,11 +8,14 @@ dependencies = [
     # rendszer-tzdatabázist — a DST-számításokhoz (core/slot/generator.py,
     # seed/betolt.py) ez explicit futásidejű függőség, nem csak dev-eszköz.
     "tzdata>=2024.1",
+    # Az M4 determinisztikus fele (assistant/interpreter/rule_based.py)
+    # ezt használja a dátum-intervallumok feloldásához — a core/ ettől
+    # függetlenül LLM és dátumparser nélkül fut, ez kizárólag az
+    # assistant/ réteg függősége. A huspacy továbbra sincs itt: azt
+    # egyetlen jelenlegi modul sem importálja.
+    "hun-date-parser>=0.3.4",
 ]
 
-# A hun-date-parser és a huspacy tudatosan nincs itt — csak az M4
-# (Assistant) mérföldkőnél kellenek, addig a core/ LLM és dátumparser
-# nélkül, önmagában fut. Lásd docs/roadmap.md, M4.
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
