@@ -21,7 +21,13 @@ from __future__ import annotations
 from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
 
 _NAPSZAKOK = ["delelott", "delutan", "este", "barmikor"]
-_BOLT_INFO_MEZOK = ["nyitvatartas", "cim", "idotartam"]
+_BOLT_INFO_MEZOK_V1 = ["nyitvatartas", "cim", "idotartam"]
+# v2: bővítve a "Bolti tudás" mezőkkel (docs/blueprint.md 10. szakasz) —
+# megjelenes/termek/ar mind szerkesztett adatra mutat (migrations/
+# 0004_bolt_szolgaltatas_tudas.sql), nem a modell generálja. Az "ar" a
+# kapuőrnél MA is tiltott (golden set kapuor-02) — a séma csak a
+# lekérdezési KÉPESSÉGET rögzíti, nem a kapuőr-döntést.
+_BOLT_INFO_MEZOK_V2 = [*_BOLT_INFO_MEZOK_V1, "megjelenes", "termek", "ar"]
 
 SEMAK: dict[str, dict[str, dict]] = {
     "szabad_idopontok": {
@@ -108,20 +114,34 @@ SEMAK: dict[str, dict[str, dict]] = {
             "type": "object",
             "properties": {
                 "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
-                "mit": {"type": "string", "enum": _BOLT_INFO_MEZOK},
+                "mit": {"type": "string", "enum": _BOLT_INFO_MEZOK_V1},
                 "datum": {"type": "string"},
                 "session_id": {"type": "string"},
             },
             "required": ["bolt_id", "mit", "session_id"],
             "additionalProperties": False,
-        }
+        },
+        # v2: "Verziózás" (eszkoz-szerzodes skill) — a v1 VÁLTOZATLAN marad,
+        # ez egy új, bővebb séma mellé, nem helyette (docs/blueprint.md
+        # 10. szakasz, "Bolti tudás").
+        "v2": {
+            "type": "object",
+            "properties": {
+                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
+                "mit": {"type": "string", "enum": _BOLT_INFO_MEZOK_V2},
+                "datum": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["bolt_id", "mit", "session_id"],
+            "additionalProperties": False,
+        },
     },
 }
 
 
 def legutobbi_verzio(eszkoz: str) -> str:
-    """A legfrissebb séma-verzió neve egy eszközhöz — ma mindig `"v1"`,
-    de a hívóknak ezen a függvényen keresztül kell kérniük, nem
-    beégetett `"v1"` szó-szerinti stringgel, hogy egy jövőbeli v2
+    """A legfrissebb séma-verzió neve egy eszközhöz (pl. `bolt_info`-nál
+    ma `"v2"`) — a hívóknak ezen a függvényen keresztül kell kérniük, nem
+    beégetett verzió-szó-szerinti stringgel, hogy egy jövőbeli új verzió
     bevezetése ne igényeljen keresés-cserét minden hívóban."""
     return sorted(SEMAK[eszkoz])[-1]

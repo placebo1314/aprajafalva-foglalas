@@ -113,6 +113,18 @@ def shops_list(conn: sqlite3.Connection, *, org_id: str) -> list[dict]:
     return [{"id": row[0], "nev": row[1]} for row in rows]
 
 
+def shop_load(conn: sqlite3.Connection, shop_id: str) -> dict | None:
+    """Egy bolt részletei, a `megjelenes` mezővel együtt — a `bolt_info`
+    eszköznek kell (docs/blueprint.md 10. szakasz, "Bolti tudás"). A
+    `shops_list()` szándékosan nem tartalmazza ezt: az a legördülő-
+    listázásnak elég, ez a részletes lekérdezés (ugyanaz a minta, mint
+    `orgs_list()` vs. `org_load()`)."""
+    row = conn.execute("SELECT id, nev, megjelenes FROM bolt WHERE id = ?", (shop_id,)).fetchone()
+    if row is None:
+        return None
+    return {"id": row[0], "nev": row[1], "megjelenes": row[2]}
+
+
 def counters_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
     """Egy bolt pultjai, névre rendezve."""
     rows = conn.execute(
@@ -130,12 +142,25 @@ def employees_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
 
 
 def services_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
-    """Egy bolt szolgáltatásai, névre rendezve."""
+    """Egy bolt szolgáltatásai, névre rendezve. A `termekleiras`/`ar`
+    (docs/blueprint.md 10. szakasz, "Bolti tudás") üres string, ha nincs
+    megadva — ez a `bolt_info` eszköznek jelzi, hogy nincs tényleges
+    válasz, nem NULL-ellenőrzést igényel."""
     rows = conn.execute(
-        "SELECT id, nev, alap_idotartam_perc FROM szolgaltatas WHERE bolt_id = ? ORDER BY nev",
+        "SELECT id, nev, alap_idotartam_perc, termekleiras, ar "
+        "FROM szolgaltatas WHERE bolt_id = ? ORDER BY nev",
         (shop_id,),
     ).fetchall()
-    return [{"id": row[0], "nev": row[1], "alap_idotartam_perc": row[2]} for row in rows]
+    return [
+        {
+            "id": row[0],
+            "nev": row[1],
+            "alap_idotartam_perc": row[2],
+            "termekleiras": row[3],
+            "ar": row[4],
+        }
+        for row in rows
+    ]
 
 
 def exception_day_create(

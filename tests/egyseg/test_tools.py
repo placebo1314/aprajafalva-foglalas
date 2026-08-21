@@ -375,6 +375,66 @@ def test_bolt_info_idotartam_valodi_szolgaltatas_adatbol(tmp_path):
     assert eredmeny["szolgaltatasok"] == [{"nev": "petárda", "idotartam_perc": 5}]
 
 
+def test_bolt_info_megjelenes_ures_alapertelmezetten(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    eredmeny = bolt_info.hivas(
+        conn,
+        {"bolt_id": "ugyifogyi", "mit": "megjelenes", "session_id": "s"},
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny == hiba.sikeres_eredmeny(megjelenes="")
+
+
+def test_bolt_info_megjelenes_szerkesztett_ertek(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    conn.execute("UPDATE bolt SET megjelenes = ? WHERE id = ?", ("piros cégér", ctx["shop_id"]))
+    eredmeny = bolt_info.hivas(
+        conn,
+        {"bolt_id": "ugyifogyi", "mit": "megjelenes", "session_id": "s"},
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny == hiba.sikeres_eredmeny(megjelenes="piros cégér")
+
+
+def test_bolt_info_termek_ures_alapertelmezetten(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    eredmeny = bolt_info.hivas(
+        conn, {"bolt_id": "ugyifogyi", "mit": "termek", "session_id": "s"}, org_id=ctx["org_id"]
+    )
+    assert eredmeny["sikeres"] is True
+    assert eredmeny["szolgaltatasok"] == [{"nev": "petárda", "termekleiras": ""}]
+
+
+def test_bolt_info_ar_ures_alapertelmezetten(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    eredmeny = bolt_info.hivas(
+        conn, {"bolt_id": "ugyifogyi", "mit": "ar", "session_id": "s"}, org_id=ctx["org_id"]
+    )
+    assert eredmeny["sikeres"] is True
+    assert eredmeny["szolgaltatasok"] == [{"nev": "petárda", "ar": ""}]
+
+
+def test_bolt_info_termek_es_ar_szerkesztett_ertek(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    conn.execute(
+        "UPDATE szolgaltatas SET termekleiras = ?, ar = ? WHERE id = ?",
+        ("durranó, fényes", "150 arany", ctx["service_id"]),
+    )
+    termek = bolt_info.hivas(
+        conn, {"bolt_id": "ugyifogyi", "mit": "termek", "session_id": "s"}, org_id=ctx["org_id"]
+    )
+    ar = bolt_info.hivas(
+        conn, {"bolt_id": "ugyifogyi", "mit": "ar", "session_id": "s"}, org_id=ctx["org_id"]
+    )
+    assert termek["szolgaltatasok"] == [{"nev": "petárda", "termekleiras": "durranó, fényes"}]
+    assert ar["szolgaltatasok"] == [{"nev": "petárda", "ar": "150 arany"}]
+
+
 def test_bolt_info_ismeretlen_bolt(tmp_path):
     conn = _conn(tmp_path)
     ctx = _seed(conn)

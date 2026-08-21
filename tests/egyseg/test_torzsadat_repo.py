@@ -90,6 +90,27 @@ def test_shops_list_filter_org_by(conn, org, shop):
     assert result == [{"id": shop, "nev": "Ügyifogyi"}]
 
 
+def test_shop_load_ures_megjelenes_alapertelmezetten(conn, shop):
+    assert torzsadat_repo.shop_load(conn, shop) == {
+        "id": shop,
+        "nev": "Ügyifogyi",
+        "megjelenes": "",
+    }
+
+
+def test_shop_load_szerkesztett_megjelenes(conn, shop):
+    conn.execute("UPDATE bolt SET megjelenes = ? WHERE id = ?", ("kék tábla", shop))
+    assert torzsadat_repo.shop_load(conn, shop) == {
+        "id": shop,
+        "nev": "Ügyifogyi",
+        "megjelenes": "kék tábla",
+    }
+
+
+def test_shop_load_nemletezo_none(conn):
+    assert torzsadat_repo.shop_load(conn, "nemletezo") is None
+
+
 # --- pultok_lekerdezese --------------------------------------------------
 
 
@@ -135,7 +156,15 @@ def test_services_list_one_elem_alap_with_duration(conn, org, shop):
         conn, org_id=org, shop_id=shop, name="petárda", alap_duration_minute=5
     )
     result = torzsadat_repo.services_list(conn, shop_id=shop)
-    assert result == [{"id": sz_id, "nev": "petárda", "alap_idotartam_perc": 5}]
+    assert result == [
+        {
+            "id": sz_id,
+            "nev": "petárda",
+            "alap_idotartam_perc": 5,
+            "termekleiras": "",
+            "ar": "",
+        }
+    ]
 
 
 def test_services_list_filter_shop_by(conn, org, shop):
@@ -180,7 +209,15 @@ def test_service_update_renames_name_and_duration(conn, org, shop):
     )
     torzsadat_repo.service_update(conn, service_id=service_id, name="Új", alap_duration_minute=20)
     result = torzsadat_repo.services_list(conn, shop_id=shop)
-    assert result == [{"id": service_id, "nev": "Új", "alap_idotartam_perc": 20}]
+    assert result == [
+        {
+            "id": service_id,
+            "nev": "Új",
+            "alap_idotartam_perc": 20,
+            "termekleiras": "",
+            "ar": "",
+        }
+    ]
 
 
 # --- kivetel_napok_reszletesen_lekerdezese --------------------------------
