@@ -101,6 +101,26 @@ def slot_free(conn: sqlite3.Connection, slot_id: str) -> bool:
     return has_active_booking is None
 
 
+def slot_load(conn: sqlite3.Connection, slot_id: str) -> dict | None:
+    """Egy slot alapadatai, a hozzá tartozó `muszak_id`-vel együtt — az
+    ajánlatpontozónak (`core/api/ajanlatpontozo.py`) kell, hogy a
+    tényleges lefedettséget a slot testvér-slotjaihoz (ugyanaz a műszak)
+    tudja mérni. A `szabad_idopontok_keresese()` ezt nem adja vissza,
+    mert az a naptárnézetnek elég önmagában is."""
+    row = conn.execute(
+        "SELECT id, szervezet_id, muszak_id, kezdet, veg FROM slot WHERE id = ?", (slot_id,)
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row[0],
+        "szervezet_id": row[1],
+        "muszak_id": row[2],
+        "kezdet": row[3],
+        "veg": row[4],
+    }
+
+
 def hold_create(conn: sqlite3.Connection, slot_id: str, session_id: str, lejar: str) -> Result:
     """Puha zárat tesz egy slotra. Slotonként legfeljebb egy hold ülhet
     (`ix_hold_slot` UNIQUE index) — ha már van MÉG ÉRVÉNYES hold, vagy a

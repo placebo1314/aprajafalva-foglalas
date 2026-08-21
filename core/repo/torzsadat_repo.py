@@ -26,6 +26,16 @@ def org_create(
     return org_id
 
 
+def org_load(conn: sqlite3.Connection, org_id: str) -> dict | None:
+    """Egy szervezet alapadatai — az ajánlatpontozónak (`core/api/ajanlatpontozo.py`)
+    kell hozzá az `idozona`, hogy a `napszak` (délelőtt/délután/este) a
+    helyi óra szerint értelmezhető legyen."""
+    row = conn.execute("SELECT id, nev, idozona FROM szervezet WHERE id = ?", (org_id,)).fetchone()
+    if row is None:
+        return None
+    return {"id": row[0], "nev": row[1], "idozona": row[2]}
+
+
 def shop_create(conn: sqlite3.Connection, *, org_id: str, name: str, id_: str | None = None) -> str:
     shop_id = id_ or new_uuid()
     conn.execute(
