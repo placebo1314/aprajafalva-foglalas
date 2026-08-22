@@ -435,3 +435,44 @@ def idobeli_jelzes(mondat: str, most: str) -> bool:
     szoveg = normalizal(mondat)
     datum_tol, _ = _datum_ablak_explicit(szoveg, most)
     return bool(datum_tol) or _napszak_explicit(szoveg.lower()) is not None
+
+
+def datum_ablak_feloldas(kifejezes: str, most: str) -> tuple[str | None, str | None]:
+    """Egy SZÖVEGES dátumkifejezést ("jövő hét péntek", "holnap") old fel
+    `(datum_tol, datum_ig)` ISO-párra — ugyanazokkal a szabályokkal
+    (normalizálás + `hun-date-parser` + heti ablakok), mint a teljes
+    mondat feldolgozása.
+
+    Ez a fordított kaszkád (ADR-018) dátum-kapuja: a modell a
+    kifejezést IDÉZI a mondatból, a feloldás determinisztikus marad.
+    `(None, None)`, ha a kifejezés nem oldható fel — ilyenkor a hívó
+    dönt (tartalék ablak vagy visszakérdezés)."""
+    if not kifejezes:
+        return None, None
+    return _datum_ablak_explicit(normalizal(kifejezes), most)
+
+
+def napszak_feloldas(kifejezes: str) -> str | None:
+    """Napszak kinyerése szövegből — a modell `datum_kifejezes` mezője
+    tartalmazhatja ("holnap este"), és ilyenkor ne vesszen el."""
+    return _napszak_explicit(normalizal(kifejezes).lower())
+
+
+def napszak_ablak_vagas(datum_tol: str, datum_ig: str, napszak: str) -> str:
+    """A `_napszak_ig_clip` nyilvános alakja — egynapos ablaknál a
+    napszak felső határára vágja a `datum_ig`-et, hogy a fordított
+    kaszkád ugyanazt az ablakot adja, mint a determinisztikus út."""
+    return _napszak_ig_clip(datum_tol, datum_ig, napszak)
+
+
+def altalanos_ablak(most: str) -> tuple[str, str]:
+    """A tartalék dátumablak (most-tól +7 nap) nyilvános alakja."""
+    return _altalanos_ablak(most)
+
+
+def foglalasi_kod_kiolvas(eredeti_mondat: str) -> str | None:
+    """A foglalási kód kiolvasása a NYERS mondatból — nyilvános alak
+    (`_foglalasi_kod`), hogy a fordított kaszkád is innen vegye, ne a
+    modelltől: a kód karaktersorozat, ott egy elrontott betű néma hibát
+    okozna."""
+    return _foglalasi_kod(eredeti_mondat)

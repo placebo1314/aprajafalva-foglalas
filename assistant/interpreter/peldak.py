@@ -1,0 +1,94 @@
+"""Few-shot példák az LLM-értelmezőhöz — külön fájlban, adatként
+(ugyanaz a minta, mint `assistant/valasz/sablonok.py`: a szöveg nem a
+kódba ágyazva él).
+
+**Miért kellenek.** Az M-1 spike és a 2026-08-22-i mérés is few-shot
+példák NÉLKÜL futott — a modell csak a séma enumjait és egy rövid
+prózai leírást látott. A mért 27,4% ezért nem a modell képességének
+felső korlátja, hanem egy hiányos promptnak a mérése.
+
+**Rétegenként egy.** A golden set öt nyelvi rétegéből (köznyelvi,
+tájszólás, töredékes, szleng, kognitívan egyszerűsített) mindegyikből
+szerepel egy pár, plusz a két kapuőr-kategória és a visszakérdezés.
+Így a példakészlet nem egy stílusra tanít rá.
+
+**A példák NEM a golden set esetei.** Szándékosan más mondatok, más
+boltokkal és napokkal — ha a golden set eseteit másolnánk ide, a mérés
+önmagát mérné (golden-set skill: "Ne a modell kimenetéből írj
+tesztesetet" — ennek a párja: ne a tesztesetből írj promptot).
+
+**A dátum itt is szöveges** (`datum_kifejezes`): a példák azt tanítják
+meg, hogy a modell a dátumot IDÉZZE a mondatból, ne számolja ki — a
+feloldás a `hun-date-parser` dolga (ADR-018).
+"""
+
+from __future__ import annotations
+
+# (mondat, várt kimenet) párok. A `most` a példákban nincs feloldva —
+# épp ez a lényeg: a modell szöveges dátumkifejezést ad vissza.
+PELDAK: list[tuple[str, dict]] = [
+    # köznyelvi — teljes, egyértelmű kérés
+    (
+        "Szeretnék időpontot foglalni szerdára az Ügyifogyiba.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "ugyifogyi", "datum_kifejezes": "szerda"},
+        },
+    ),
+    # köznyelvi — tényválasz (nem foglalás!)
+    (
+        "Hány órakor nyit a Törpilla?",
+        {"eszkoz": "bolt_info", "parameterek": {"bolt_id": "torpilla", "mit": "nyitvatartas"}},
+    ),
+    # tájszólás / régies — a bolt körülírva, nem néven nevezve
+    (
+        "Az altatósho szeretnék bemenni szombaton dílelőtt.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "datum_kifejezes": "szombat",
+                "napszak": "delelott",
+            },
+        },
+    ),
+    # töredékes — táviratstílus, hiányos mondat
+    (
+        "csütörtök… boldogság… lehetne?",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "torpilla", "datum_kifejezes": "csütörtök"},
+        },
+    ),
+    # szleng — rövidítés, laza regiszter
+    (
+        "hali, van hely holnap este a petárdásnál?",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "ugyifogyi",
+                "datum_kifejezes": "holnap",
+                "napszak": "este",
+            },
+        },
+    ),
+    # kognitívan egyszerűsített — udvariassági bevezetés, körülírás,
+    # és NINCS bolt: a helyes válasz a visszakérdezés, nem a találgatás
+    (
+        "Jó napot. Én a Ferike vagyok. Szeretnék menni valamikor. Lehet?",
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        },
+    ),
+    # lemondás — a kód a mondatban van
+    (
+        "A foglalásomat törölném, a kódja B4T7R2WQ.",
+        {"eszkoz": "foglalas_lemondas", "parameterek": {"foglalasi_kod": "B4T7R2WQ"}},
+    ),
+    # kapuőr — nem foglalási kérdés
+    (
+        "Hány fok van odakint?",
+        {"eszkoz": "nincs", "parameterek": {}},
+    ),
+]

@@ -295,9 +295,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Golden set kiértékelő.")
     parser.add_argument(
         "--ertelmezo",
-        choices=["szabaly", "llm", "kaszkad"],
+        choices=["szabaly", "llm", "kaszkad", "forditott"],
         default="szabaly",
-        help="szabaly: nincs Ollama-hívás (alapértelmezett). llm/kaszkad: Ollamát hív.",
+        help=(
+            "szabaly: nincs Ollama-hívás (alapértelmezett). llm/kaszkad/forditott: "
+            "Ollamát hív. A 'forditott' az ADR-018 mért, ELVETETT kísérlete — "
+            "reprodukálhatóságért maradt."
+        ),
     )
     parser.add_argument(
         "--modell",

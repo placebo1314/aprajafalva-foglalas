@@ -45,6 +45,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from assistant.interpreter import ErtelmezesKontextus
+from assistant.interpreter.peldak import PELDAK
 from assistant.tools import semak
 from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
 
@@ -73,6 +74,17 @@ FORMAT_SEMA = {
             "properties": {
                 "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
                 "szolgaltatas_id": {"type": "string", "enum": sorted(SZOLGALTATAS_SLUGOK)},
+                # A dátum ELSŐDLEGESEN szöveges kifejezés — a modell
+                # IDÉZI a mondatból, nem számolja ki (ADR-018). A
+                # feloldás a `hun-date-parser` dolga; a `datum_tol`/
+                # `datum_ig` csak tartalék, és a parser felülírja.
+                "datum_kifejezes": {
+                    "type": "string",
+                    "description": (
+                        "a dátum SZÓ SZERINT a mondatból, pl. 'jövő hét péntek', "
+                        "'holnap', 'kedden' — NE számold ki, ne adj ISO-dátumot"
+                    ),
+                },
                 "datum_tol": {
                     "type": "string",
                     "description": "teljes ISO-8601 UTC időbélyeg, pl. 2026-08-18T00:00:00Z",
@@ -127,12 +139,23 @@ Eszközök:
 Boltok: szundi (altató), ugyifogyi (petárda), torpilla (boldogság).
 "most" (a relatív dátumok — holnap, jövő hét — ehhez képest értendők): {most}
 
-Dátum: szabad_idopontok-nál MINDIG datum_tol/datum_ig (teljes ISO-8601 UTC
-időbélyeg, pl. "2026-08-18T00:00:00Z"), SOSEM "datum". bolt_info-nál MINDIG
-"datum" (csak a naptári nap, pl. "2026-08-22", idő nélkül).
+DÁTUM: a "datum_kifejezes" mezőbe a dátumot SZÓ SZERINT másold a mondatból
+("jövő hét péntek", "holnap", "kedden"). NE számold ki és NE adj ISO-dátumot —
+a feloldás a rendszer dolga. Ha a mondatban nincs időpont, hagyd ki a mezőt.
 
 Lemondáshoz a foglalási kód kell — ha nincs a mondatban, visszakerdez \
-(hianyzo_mezo: foglalasi_kod)."""
+(hianyzo_mezo: foglalasi_kod).
+
+Példák:
+{peldak}"""
+
+
+def _peldak_szovege() -> str:
+    """A few-shot példák (`peldak.py`) promptba illesztett alakja —
+    `mondat -> JSON` párok, soronként."""
+    return "\n".join(
+        f"{mondat}\n-> {json.dumps(kimenet, ensure_ascii=False)}" for mondat, kimenet in PELDAK
+    )
 
 
 # Az a JSON-mezőkészlet, amire bizonyosságot számolunk. A kulcs a
@@ -292,7 +315,10 @@ class LLMErtelmezo:
         payload = {
             "model": self.szolgaltato.modell,
             "messages": [
-                {"role": "system", "content": _RENDSZER_PROMPT.format(most=most)},
+                {
+                    "role": "system",
+                    "content": _RENDSZER_PROMPT.format(most=most, peldak=_peldak_szovege()),
+                },
                 {"role": "user", "content": mondat},
             ],
             "format": FORMAT_SEMA,

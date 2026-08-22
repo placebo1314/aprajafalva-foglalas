@@ -1,7 +1,9 @@
 # ADR-016: Kaszkád értelmező — determinisztikus előbb, LLM csak kiegészít
 
 - **Dátum:** 2026-08-22
-- **Állapot:** elfogadott
+- **Állapot:** elfogadott — **megerősítve 2026-08-22-én** (ADR-018: a
+  fordított sorrendet megmértük, rosszabbnak bizonyult, ez a döntés
+  marad hatályban)
 - **Megjegyzés a számozáshoz:** a 015 szándékosan kimaradt — sem a
   git-történetben, sem a repóban nem szerepelt korábban 015-ös ADR;
   ellenőrizve (2026-08-22), a szám emiatt véglegesen kimarad, nem kerül

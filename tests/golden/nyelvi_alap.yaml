@@ -33,6 +33,7 @@ meta:
     # elvetése) — a determinisztikus alapvonalon várhatóan 0%, ezért az
     # `igenyel_llm: true` jelölés (l. a réteg fejlécét lent).
     elengedes: 0.90
+    valtozatossag: 0.90
 
 esetek:
 
@@ -582,3 +583,94 @@ esetek:
       A dátum a 2. fordulóban nincs megnevezve, ezért az általános
       ablakra esik vissza — ez a szándék-rétegzés szerint helyes.
     cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]
+
+# -----------------------------------------------------------------------
+# Nyelvi változatosság — amit MINTAILLESZTÉSSEL nem lehet megoldani
+# (ADR-018). Ezek nem "nehezebb" esetek, hanem MÁS FAJTÁJÚAK: mindegyik
+# olyan megfogalmazás, amihez a szabály-alapú rétegnek új mintát kellene
+# felvenni, és a következő megfogalmazáshoz megint egy újat. Épp ezért
+# mérik a fordított kaszkád létjogosultságát.
+#
+# `igenyel_llm: true` — a determinisztikus alapvonalon várhatóan buknak
+# (l. az `elengedes` réteg fejlécének azonos indoklását).
+# -----------------------------------------------------------------------
+
+  - id: valtozatossag-01-vagylagos
+    bemenet: "Jövő héten, vagy szeptember 4-én tudok menni a petárdáshoz."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-24T00:00:00Z"
+        datum_ig: "2026-09-04T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Vagylagos időpont: a vásárló KÉT lehetőséget ad. A helyes ablak
+      mindkettőt lefedi (az elsőtől az utolsóig) — a pontozó úgyis a
+      ténylegesen szabad slotokból választ. A determinisztikus réteg a
+      `hun_date_parser` első találatát veszi, és a "szeptember 4"
+      lehetőséget csendben elveszíti.
+    cimkek: [valtozatossag, vagylagos]
+
+  - id: valtozatossag-02-lemondas-minta-nelkul
+    bemenet: "Nem tudok elmenni a péntekire, a kód X7K2M9QP."
+    igenyel_llm: true
+    varhato:
+      eszkoz: foglalas_lemondas
+      parameterek:
+        foglalasi_kod: "X7K2M9QP"
+    megjegyzes: >
+      Lemondás a "lemond" szó NÉLKÜL. A determinisztikus réteg
+      `_LEMONDAS_MINTA`-ja ezt nem fogja meg, ezért keresésre terel —
+      és mivel boltot sem talál, visszakérdez. Ez a legrosszabb fajta
+      hiba: a vásárló lemondani akar, a rendszer pedig foglalni.
+    cimkek: [valtozatossag, lemondas_korulras]
+
+  - id: valtozatossag-03-bolt-termek-szerint
+    bemenet: "Ahol a durranókat árulják, oda mennék holnap."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A bolt a TERMÉK köznyelvi szinonimájával körülírva ("durranó" a
+      petárda helyett). A `_BOLT_MINTAK` a "petárd" szótövet ismeri,
+      ezt nem — és minden további szinonima újabb mintát igényelne.
+    cimkek: [valtozatossag, bolt_korulras_szinonimaval]
+
+  - id: valtozatossag-04-bolt-megjelenes-szerint
+    bemenet: "A csillagos kirakatú boltba szeretnék bejutni szerdán."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-19T00:00:00Z"
+        datum_ig: "2026-08-19T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A bolt a MEGJELENÉSÉVEL azonosítva (a Szundi kék, csillagos
+      homlokzatú — `seed/betolt.py`). Ezt mintával reménytelen: a
+      megjelenés szerkesztett, admin által bármikor átírható adat.
+    cimkek: [valtozatossag, bolt_megjelenes_szerint]
+
+  - id: valtozatossag-05-ures-keres
+    bemenet: "Valamikor mennék."
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    megjegyzes: >
+      Teljesen üres kérés — se bolt, se időpont. A helyes válasz zárt
+      kérdés, NEM találgatás. Ezt a determinisztikus réteg is tudja
+      (ezért nincs `igenyel_llm`), de a fordított kaszkádnak sem szabad
+      elrontania: ez a réteg regressziós horgonya, ami azt méri, hogy a
+      modell nem kezd el kitalálni.
+    cimkek: [valtozatossag, ures_keres]
