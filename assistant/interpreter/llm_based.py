@@ -162,7 +162,33 @@ Lemondáshoz a foglalási kód kell — ha nincs a mondatban, visszakerdez \
 (hianyzo_mezo: foglalasi_kod).
 
 Példák:
-{peldak}"""
+{peldak}{kontextus}"""
+
+# A szándék KEMÉNY része (bolt, szolgáltatás) — csak ezt adjuk át a
+# modellnek a korábbi fordulókból. A PUHA rész (dátum, napszak) minden
+# fordulóban frissen dől el (`orchestrator.kovetkezo_kontextus`), ezért
+# azt átadni félrevezető lenne: a modell azt hihetné, hogy egy korábbi
+# dátumot kell megismételnie.
+_KEMENY_KONTEXTUS_MEZOK = ("bolt_id", "szolgaltatas_id")
+
+
+def _kontextus_szovege(megorzott: dict) -> str:
+    """A korábbi fordulók kemény része a promptban — enélkül a modell
+    minden fordulót nulláról kezd, és egy alkudozó follow-up mondatra
+    ("talán jövő héten") a boltra kérdez rá, amit a beszélgetés két
+    mondattal korábban már tisztázott."""
+    kemeny = [
+        f"{mezo}={megorzott[mezo]}" for mezo in _KEMENY_KONTEXTUS_MEZOK if megorzott.get(mezo)
+    ]
+    if not kemeny:
+        return ""
+    return (
+        "\n\nA beszélgetés eddig ezt tudta: "
+        + ", ".join(kemeny)
+        + ". Ha az új mondat nem mond mást erről, TARTSD MEG (ne kérdezz rá újra). "
+        "Ha viszont a mondat azt mondja, hogy mindegy melyik, vagy másikat kér, "
+        "akkor hagyd ki a mezőt, illetve add meg az újat."
+    )
 
 
 def _peldak_szovege() -> str:
@@ -332,7 +358,11 @@ class LLMErtelmezo:
             "messages": [
                 {
                     "role": "system",
-                    "content": _RENDSZER_PROMPT.format(most=most, peldak=_peldak_szovege()),
+                    "content": _RENDSZER_PROMPT.format(
+                        most=most,
+                        peldak=_peldak_szovege(),
+                        kontextus=_kontextus_szovege(kontextus.megorzott_parameterek),
+                    ),
                 },
                 {"role": "user", "content": mondat},
             ],

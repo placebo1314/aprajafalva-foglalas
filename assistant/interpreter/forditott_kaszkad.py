@@ -151,7 +151,7 @@ class ForditottKaszkadErtelmezo:
             return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
 
         if eszkoz == "bolt_info":
-            return self._bolt_info_kapu(parameterek, nyers, most, bizonyossag)
+            return self._bolt_info_kapu(parameterek, nyers, mondat, most, bizonyossag)
 
         if eszkoz == "foglalas_lemondas":
             kod = rule_based.foglalasi_kod_kiolvas(mondat) or parameterek.get("foglalasi_kod")
@@ -165,19 +165,43 @@ class ForditottKaszkadErtelmezo:
 
         if eszkoz == "visszakerdez":
             hianyzo = parameterek.get("hianyzo_mezo") or "bolt_id"
+            # KONTEXTUS-KAPU: a modell minden fordulót nulláról értelmez,
+            # ezért egy alkudozó follow-up mondatra ("talán jövő héten")
+            # a boltra kérdezne rá — arra, amit a beszélgetés két
+            # mondattal korábban már tisztázott, és ami itt, a
+            # kontextusban ott is van. Amit determinisztikusan tudunk,
+            # arra nem kérdezünk vissza (a vásárló 6. igénye: javítás, ne
+            # újrakezdés).
+            if hianyzo == "bolt_id" and self._ismert_bolt(parameterek, kontextus):
+                _LOG.info("kaszkád: a modell a boltra kérdezne, de a kontextus ismeri — keresés")
+                return self._kereses_kapu(parameterek, nyers, mondat, most, kontextus, bizonyossag)
             return self._visszakerdez(
                 hianyzo,
                 parameterek.get("varhato_kerdes_tipusa", "zart"),
                 bizonyossag,
-                megorzott=self._megorzendo(parameterek, nyers, most, kontextus),
+                megorzott=self._megorzendo(parameterek, nyers, mondat, most, kontextus),
             )
 
-        return self._kereses_kapu(parameterek, nyers, most, kontextus, bizonyossag)
+        return self._kereses_kapu(parameterek, nyers, mondat, most, kontextus, bizonyossag)
+
+    @staticmethod
+    def _ismert_bolt(parameterek: dict, kontextus: ErtelmezesKontextus) -> str | None:
+        """Ismert-e a bolt a modell válaszából VAGY a megőrzött
+        kontextusból — a zárt halmaz ellen ellenőrizve."""
+        for jelolt in (
+            parameterek.get("bolt_id"),
+            kontextus.megorzott_parameterek.get("bolt_id"),
+        ):
+            if jelolt in BOLT_SLUGOK:
+                return jelolt
+        return None
 
     # -- dátum-kapu ----------------------------------------------------
 
     @staticmethod
-    def _datum_ablak(nyers: dict, most: str) -> tuple[str | None, str | None, str | None]:
+    def _datum_ablak(
+        nyers: dict, mondat: str, most: str
+    ) -> tuple[str | None, str | None, str | None]:
         """`(datum_tol, datum_ig, napszak_a_kifejezesbol)` — a
         determinisztikus dátumfeloldás.
 
@@ -192,7 +216,15 @@ class ForditottKaszkadErtelmezo:
         az ÖSSZEVONÁS is determinisztikus, a modell csak idéz. Ez azért
         helyes, mert a pontozó úgyis a ténylegesen szabad slotokból
         választ: egy tágabb ablakban benne van mindkét kért nap, és a
-        vásárló nem veszíti el a második lehetőségét."""
+        vásárló nem veszíti el a második lehetőségét.
+
+        **Ha a modell egyáltalán nem idézett dátumot**, a MONDAT EGÉSZÉT
+        odaadjuk ugyanannak a determinisztikus parsernek. Ez nem a modell
+        felülbírálása (akkor lép be, ha a modell semmit nem mondott),
+        hanem az az elv, hogy amit determinisztikusan LÁTUNK a
+        mondatban, azt ne veszítsük el csak azért, mert a modell
+        kihagyta — különben egy visszakérdezés után a vásárlónak újra el
+        kellene mondania a már megadott napot."""
         kifejezes = (nyers.get("datum_kifejezes") or "").strip()
         parser_tol, parser_ig = rule_based.datum_ablak_feloldas(kifejezes, most)
         napszak = rule_based.napszak_feloldas(kifejezes) if kifejezes else None
@@ -220,12 +252,20 @@ class ForditottKaszkadErtelmezo:
 
         if nyers.get("datum_tol"):
             _LOG.info("kaszkád: a modell ISO-dátuma feloldható kifejezés nélkül maradt, eldobva")
-        return None, None, napszak
+
+        # A modell nem idézett feloldható kifejezést — a MONDAT EGÉSZE
+        # megy ugyanannak a parsernek (l. docstring).
+        mondat_tol, mondat_ig = rule_based.datum_ablak_feloldas(mondat, most)
+        napszak = napszak or rule_based.napszak_feloldas(mondat)
+        if mondat_tol:
+            _LOG.info("kaszkád: a dátum a mondat egészéből oldódott fel (%s)", mondat_tol)
+        return mondat_tol, mondat_ig, napszak
 
     def _kereses_kapu(
         self,
         parameterek: dict,
         nyers: dict,
+        mondat: str,
         most: str,
         kontextus: ErtelmezesKontextus,
         bizonyossag: dict,
@@ -236,10 +276,10 @@ class ForditottKaszkadErtelmezo:
                 "bolt_id",
                 "zart",
                 bizonyossag,
-                megorzott=self._megorzendo(parameterek, nyers, most, kontextus),
+                megorzott=self._megorzendo(parameterek, nyers, mondat, most, kontextus),
             )
 
-        datum_tol, datum_ig, kifejezes_napszak = self._datum_ablak(nyers, most)
+        datum_tol, datum_ig, kifejezes_napszak = self._datum_ablak(nyers, mondat, most)
         napszak = parameterek.get("napszak") or kifejezes_napszak
 
         vegleges: dict = {"bolt_id": bolt_id}
@@ -258,8 +298,15 @@ class ForditottKaszkadErtelmezo:
                 vegleges["datum_tol"], vegleges["datum_ig"], napszak
             )
 
-        szolgaltatas = parameterek.get("szolgaltatas_id") or BOLT_EGYERTELMU_SZOLGALTATAS.get(
-            bolt_id
+        # A szolgáltatás zárt halmaz, és a mondatból determinisztikusan
+        # kinyerhető ("nagy petárda") — ha a modell kihagyta, NEM a bolt
+        # alapértelmezett szolgáltatására esünk vissza azonnal, előbb
+        # megnézzük, mit mond a mondat. A sorrend fontos: a modell
+        # válasza nyer, a szabály csak pótol.
+        szolgaltatas = (
+            parameterek.get("szolgaltatas_id")
+            or rule_based.szolgaltatas_feloldas(mondat, bolt_id)
+            or BOLT_EGYERTELMU_SZOLGALTATAS.get(bolt_id)
         )
         if szolgaltatas:
             vegleges["szolgaltatas_id"] = szolgaltatas
@@ -272,12 +319,14 @@ class ForditottKaszkadErtelmezo:
             "bizonyossag": bizonyossag,
         }
 
-    def _bolt_info_kapu(self, parameterek: dict, nyers: dict, most: str, bizonyossag: dict) -> dict:
+    def _bolt_info_kapu(
+        self, parameterek: dict, nyers: dict, mondat: str, most: str, bizonyossag: dict
+    ) -> dict:
         bolt_id = parameterek.get("bolt_id")
         if bolt_id is None:
             return self._visszakerdez("bolt_id", "zart", bizonyossag)
         vegleges = {"bolt_id": bolt_id, "mit": parameterek.get("mit") or "nyitvatartas"}
-        datum_tol, _, _ = self._datum_ablak(nyers, most)
+        datum_tol, _, _ = self._datum_ablak(nyers, mondat, most)
         if datum_tol:
             # `bolt_info.datum` csak a naptári nap, idő nélkül.
             vegleges["datum"] = datum_tol[:10]
@@ -287,12 +336,14 @@ class ForditottKaszkadErtelmezo:
 
     @staticmethod
     def _megorzendo(
-        parameterek: dict, nyers: dict, most: str, kontextus: ErtelmezesKontextus
+        parameterek: dict, nyers: dict, mondat: str, most: str, kontextus: ErtelmezesKontextus
     ) -> dict:
         """Amit egy visszakérdezésbe át kell vinni, hogy ne kelljen újra
         megkérdezni (golden set, toredekes-03)."""
         megorzott = dict(kontextus.megorzott_parameterek)
-        datum_tol, datum_ig, kifejezes_napszak = ForditottKaszkadErtelmezo._datum_ablak(nyers, most)
+        datum_tol, datum_ig, kifejezes_napszak = ForditottKaszkadErtelmezo._datum_ablak(
+            nyers, mondat, most
+        )
         if datum_tol:
             megorzott["datum_tol"] = datum_tol
             megorzott["datum_ig"] = datum_ig

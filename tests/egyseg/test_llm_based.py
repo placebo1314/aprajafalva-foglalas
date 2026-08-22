@@ -102,6 +102,53 @@ def test_ertelmez_think_explicit_false():
     assert elkuldott["payload"]["model"] == "teszt-modell"
 
 
+def _elkuldott_rendszer_prompt(megorzott: dict) -> str:
+    ertelmezo = LLMErtelmezo(LLMSzolgaltato(modell="teszt-modell"))
+    elkuldott = {}
+
+    def hamis_urlopen(req, timeout=None):
+        elkuldott["payload"] = json.loads(req.data)
+        return _ollama_valasz({"eszkoz": "nincs", "parameterek": {}})
+
+    with patch("urllib.request.urlopen", side_effect=hamis_urlopen):
+        ertelmezo.ertelmez(
+            "és jövő héten?",
+            most=_MOST,
+            kontextus=ErtelmezesKontextus(megorzott_parameterek=megorzott),
+        )
+    return elkuldott["payload"]["messages"][0]["content"]
+
+
+def test_a_kemeny_kontextus_bekerul_a_promptba():
+    """A modell minden fordulót nulláról lát — a korábbi fordulók kemény
+    része (bolt, szolgáltatás) nélkül egy alkudozó follow-up mondatra a
+    boltra kérdezne rá, amit a beszélgetés már tisztázott."""
+    prompt = _elkuldott_rendszer_prompt({"bolt_id": "szundi", "szolgaltatas_id": "altato"})
+
+    assert "bolt_id=szundi" in prompt
+    assert "szolgaltatas_id=altato" in prompt
+
+
+def test_a_puha_kontextus_nem_kerul_a_promptba():
+    """A dátum/napszak MINDEN fordulóban frissen dől el
+    (`orchestrator.kovetkezo_kontextus`) — átadni félrevezető lenne: a
+    modell azt hihetné, hogy a korábbi dátumot kell megismételnie."""
+    prompt = _elkuldott_rendszer_prompt(
+        {"bolt_id": "szundi", "datum_tol": "2026-08-18T00:00:00Z", "napszak": "delelott"}
+    )
+    kontextus_szakasz = prompt[prompt.index("A beszélgetés eddig ezt tudta") :]
+
+    assert "bolt_id=szundi" in kontextus_szakasz
+    assert "2026-08-18" not in kontextus_szakasz
+    assert "napszak" not in kontextus_szakasz
+
+
+def test_ures_kontextusnal_nincs_kontextus_szakasz_a_promptban():
+    prompt = _elkuldott_rendszer_prompt({})
+
+    assert "A beszélgetés eddig ezt tudta" not in prompt
+
+
 def test_ertelmez_ollama_nem_elerheto_nincs_kivetel(monkeypatch):
     """Ha az Ollama nem fut, NEM dob kivételt — 'nincs'-et ad vissza, és
     az utolso_hiba mezőn jelzi a hibát (a kaszkad.py ezt használja)."""

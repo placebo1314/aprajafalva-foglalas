@@ -8,10 +8,12 @@ a projekt egészéhez `docs/ALLAPOT.md`.
 
 | Parancs | Mit futtat | Kb. mennyi ideig tart | Ha elbukik |
 |---|---|---|---|
-| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `294 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
+| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `439 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
 | `python feladat.py teszt-mindketto` | Ugyanaz a tesztkészlet, előbb `sqlite`, utána `postgres` "motorral". | ~26 másodperc | **Figyelem:** a `postgres` ág ma ténylegesen ugyanazt a SQLite-ot futtatja újra (nincs Postgres-adapter, ADR-004) — ez a parancs ma nem bizonyít semmit Postgresen, csak kétszer futtatja le ugyanazt. |
 | `python feladat.py lint` | `ruff format --check .`, utána `ruff check .`. | néhány másodperc | Kiírja a formázási/lint hibás fájlokat és sorokat. `ruff format .` (a `--check` nélküli) automatikusan javítja a formázást; a `ruff check .` hibáit kézzel kell megnézni. |
-| `python feladat.py golden` | **Ma hibával leáll**: `No module named tests.golden.futtato`. Az M3 értékelő script még nincs megírva, csak az esetfájl (`tests/golden/nyelvi_alap.yaml`, 22 eset). Az M-1 mérésekhez az eldobható `spike/golden_futtato.py` futott, nem ez. | — | — |
+| `python feladat.py golden` | A golden set (`tests/golden/nyelvi_alap.yaml`, 45 eset) kiértékelése a **determinisztikus** értelmezővel — nem indít Ollamát. Rétegenkénti bontást ír. | néhány másodperc | Kilépőkód 1, ha egy réteg a küszöbe alatt van; a kimenet megnevezi, melyik. Ma három réteg van küszöb alatt (`elengedes`, `valtozatossag`, `mintan_tul`) — ezek `igenyel_llm` esetek, a determinisztikus úton szándékosan buknak, nem hiba. |
+| `python feladat.py golden --ertelmezo forditott --modell qwen3.5:9b` | Ugyanaz az **éles** értelmezővel (ADR-018: fordított kaszkád). Ollamát hív. `llm` és `kaszkad` értékkel a másik két felállás mérhető. | ~7-10 perc | Ha az Ollama nem fut, a mérés végigmegy, de minden fordulót a szabály-alapú tartalék old meg — a "Réteg-megoszlás" sorban `szabaly=45` látszik. Ez a jele. |
+| `python feladat.py vegigjatszas` | A vásárlói felület szöveges útját játssza végig Tkinter-eseményhurok nélkül, 13 beszélgetéssel (`tools/vegigjatszas.py`). | ~1-3 perc | Traceback, vagy egy olyan forduló, ahol az `eszköz` sor `None`. A `naplo/probak.jsonl` közben ugyanúgy telik, mint kézi próbánál. |
 
 ## Kézi próbák sorban
 
@@ -135,23 +137,26 @@ python -m ui.vasarlo
 ```
 
 Két fül nyílik, **Koppintós út** és **Írjon nekünk** — mindkettő
-ugyanazt az `assistant/orchestrator.py`-t hívja, LLM nélkül (a
-determinisztikus értelmezőt, `assistant/interpreter/rule_based.py`).
+ugyanazt az `assistant/orchestrator.py`-t hívja. A szöveges út a
+fordított kaszkádot használja (ADR-018): ha fut a háttérszolgáltatás
+(Ollama, `APRAJAFALVA_LLM_MODELL`), a modell értelmez; ha nem, **néma
+visszaesés** a determinisztikus rétegre — a felület ugyanúgy működik,
+csak a próba-naplóban lesz `"reteg": "szabaly"` mindenhol.
 
-**Fontos dátum-figyelmeztetés, mielőtt elkezded:** a koppintós út "Nap"
-legördülője a valódi mai naptól számított 7 napot kínálja fel, de a
-demóadat (`python feladat.py seed`) egy fix, **2026-12-21-gyel kezdődő
-hétre** generál beosztást. Koppintós keresésnél emiatt kézzel írd be a
-"Nap" mezőbe (vagy válaszd ki, ha a legördülő engedi) egy ebbe a hétbe
-eső dátumot (pl. `2026-12-22`), különben "Sajnos nincs szabad időpont
-ebben az ablakban" választ kapsz — ez ilyenkor NEM hiba.
+**Dátumot nem kell fejben tartanod.** Az ablak tetején egy sor kiírja,
+melyik hétre és melyik boltba van beosztás, és mit jelent ezen a
+felületen a "ma" — a felület a beosztáshoz igazodik, nem a
+rendszerórához (részletesen lent, "Beszélgetés-próba").
 
-1. **Koppintós keresés.** *Koppintós út* fül → válassz boltot (pl.
-   "Törpilla") → írd be a napot (`2026-12-22`) → napszak "bármikor" →
-   "Időpontok keresése". **Mit kell látnod:** egy szürke nyugtázó sor
-   ("Nézem, mi van a(z) Törpilla boltban, 2026-12-22…") azonnal, utána
-   gombokként a talált időpontok. **A hiba jele:** piros hibaszöveg,
-   vagy egyik sem jelenik meg.
+1. **Koppintós keresés.** *Koppintós út* fül → válassz boltot
+   (**Törpilla** — a demóadat csak ide generál beosztást) → a "Nap"
+   legördülő már a beosztás hetét kínálja, hagyd az alapértéken →
+   napszak "bármikor" → "Időpontok keresése". **Mit kell látnod:** egy
+   szürke nyugtázó sor ("Nézem, mi van a(z) Törpilla boltban…") azonnal,
+   utána gombokként a talált időpontok. **A hiba jele:** piros
+   hibaszöveg, vagy egyik sem jelenik meg. (Szundi vagy Ügyifogyi
+   választásakor a "Sajnos nincs szabad időpont" helyes válasz — oda a
+   demóadat nem generál műszakot.)
 2. **Választás és megerősítés.** Kattints az egyik időpont-gombra.
    **Mit kell látnod:** "Biztosan lefoglaljam ezt az időpontot?" kérdés,
    egy azonosító-beviteli mező, "Igen, foglalom" és "Mégse" gomb. Írj be
@@ -165,13 +170,12 @@ ebben az ablakban" választ kapsz — ez ilyenkor NEM hiba.
    elutasított időpontnak is szerepelnie kell a jelöltek közt (a hold
    felszabadult).
 4. **Szöveges keresés, zárt kérdés gombokkal.** *Írjon nekünk* fül →
-   írd be: `szeretnék petárdázni` → Küldés. **Mit kell látnod:** a
-   rendszer visszakérdez, és mivel a bolt nem derül ki a mondatból, **három
-   gomb** jelenik meg (Szundi / Ügyifogyi / Törpilla) — nem kell
-   begépelni a választ. Kattints "Ügyifogyi"-ra. **Mit kell látnod:** a
-   nyugtázó sor ("Nézem, mi van a(z) Ügyifogyi boltban…"), majd a
-   találatok gombként (vagy "Sajnos nincs szabad időpont", ha a mai
-   dátum nem esik a demóhétbe — lásd a fenti figyelmeztetést).
+   írd be: `szeretnék menni valamikor` → Küldés. **Mit kell látnod:** a
+   rendszer visszakérdez, és mivel a bolt nem derül ki a mondatból,
+   **három gomb** jelenik meg (Szundi / Ügyifogyi / Törpilla) — nem kell
+   begépelni a választ. Kattints "Törpilla"-ra. **Mit kell látnod:** a
+   nyugtázó sor ("Nézem, mi van a(z) Törpilla boltban…"), majd a
+   találatok gombként.
 5. **Tényválasz-ág.** *Írjon nekünk* fül → írd be: `Hogy néz ki a
    Törpilla bolt?`. **Mit kell látnod:** a szerkesztett "megjelenés"
    szöveg jelenik meg válaszként (amit a `seed/betolt.py` töltött be,
@@ -226,22 +230,19 @@ tekinteni.
 
 ## Mit NE várj még
 
-- **Nincs LLM.** A `ui/vasarlo.py` szöveges útja magyarul ír mondatot
-  ÉS válaszol, de az értelmező determinisztikus szabályrendszer
-  (`assistant/interpreter/rule_based.py`), nem nyelvi modell — ez az M4
-  mérföldkő **alapvonala**, amit egy jövőbeli LLM-integrációnak felül
-  kell múlnia (`docs/ALLAPOT.md`). Kötött dekódolás, önkonzisztencia-
-  ellenőrzés, bizalmi jelzés logprobokból — egyik sincs, mert nincs
-  modellhívás, aminek szüksége lenne rájuk.
-- **A magyar nyelvi értelmezés korlátozott.** A determinisztikus
-  értelmező a golden set látható 22 esetén jól teljesít (lásd
-  `docs/ALLAPOT.md`), de kulcsszó-/regex-alapú — szokatlan
-  megfogalmazásra, amit nem láttunk előre, könnyen visszakérdezéssel
-  vagy hibás felismeréssel reagál. Ez elvárt, nem hiba.
-- **A `valasz` modul (M5) nincs megírva.** A rendszer válaszai (`ui/
-  vasarlo.py::_UZENET_KULCS_SZOVEG`, `tenyvalasz_szoveg()`) egy
-  ideiglenes, kódba írt szótárból jönnek, nem egy önálló
-  mondatgeneráló rétegből.
+- **Önkonzisztencia-ellenőrzés nincs**, és a kötött dekódolás ma az
+  Ollama JSON-séma-kényszere (`format`), nem GBNF/XGrammar szintű
+  nyelvtan — a kettő nem ugyanaz (`docs/ALLAPOT.md`, M4 sor).
+- **A magyar nyelvi értelmezés korlátozott.** A modell egy 9B-s, nem
+  magyarra hangolt háló; a golden set `valtozatossag` és `mintan_tul`
+  rétegein mindkét felállás a küszöb alatt van (`docs/ALLAPOT.md`,
+  "Konkrét számok"). Szokatlan megfogalmazásra a rendszer
+  visszakérdezéssel vagy hibás felismeréssel reagálhat. Ez ma elvárt,
+  nem hiba — de ez a mérendő pont.
+- **A modell nélküli futás nem hibaüzenet.** Ha nincs beállítva
+  `APRAJAFALVA_LLM_MODELL`, vagy nem fut az Ollama, a felület csendben a
+  determinisztikus rétegre esik vissza. Hogy melyik történt, a
+  próba-napló `reteg` mezőjéből derül ki ("Napló megnyitása" gomb).
 - **Nincs értesítésküldés.** Az M5 mérföldkő (értesítés-**előállítás**,
   küldés nélkül, ADR-012) nem kezdődött el. Ma semmilyen csatornán nem
   megy ki üzenet.

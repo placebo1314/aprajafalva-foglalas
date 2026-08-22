@@ -471,6 +471,14 @@ def datum_ablak_feloldas(kifejezes: str, most: str) -> tuple[str | None, str | N
     return _datum_ablak_explicit(normalizal(kifejezes), most)
 
 
+def szolgaltatas_feloldas(mondat: str, bolt_id: str | None) -> str | None:
+    """A szolgáltatás (méret) kinyerése a mondatból, ZÁRT halmazon —
+    nyilvános alak (`_szolgaltatas_azonositas`), hogy a fordított kaszkád
+    is innen pótolhassa, ha a modell kihagyta. `None`, ha a mondat nem
+    mond méretet, vagy a bolthoz nem tartozik ilyen megkülönböztetés."""
+    return _szolgaltatas_azonositas(normalizal(mondat).lower(), bolt_id)
+
+
 def napszak_feloldas(kifejezes: str) -> str | None:
     """Napszak kinyerése szövegből — a modell `datum_kifejezes` mezője
     tartalmazhatja ("holnap este"), és ilyenkor ne vesszen el."""

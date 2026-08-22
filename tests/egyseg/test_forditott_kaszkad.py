@@ -313,6 +313,85 @@ def test_bolt_a_kontextusbol_orokolheto():
     assert eredmeny["parameterek"]["bolt_id"] == "torpilla"
 
 
+def test_a_modell_visszakerdezese_nem_megy_ki_ha_a_kontextus_ismeri_a_boltot():
+    """KONTEXTUS-KAPU: a modell minden fordulót nulláról lát, ezért egy
+    alkudozó follow-up mondatra a boltra kérdezne rá — arra, amit a
+    beszélgetés már tisztázott. Amit determinisztikusan tudunk, arra nem
+    kérdezünk vissza."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        }
+    )
+    eredmeny = _ertelmez(
+        _kaszkad(llm), "talán jövő héten, még nem tudom biztosan", megorzott={"bolt_id": "szundi"}
+    )
+
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert eredmeny["parameterek"]["bolt_id"] == "szundi"
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-24T00:00:00Z"
+
+
+def test_a_visszakerdezes_megmarad_ha_a_bolt_tenyleg_ismeretlen():
+    """A kontextus-kapu ellenpárja: üres kontextusnál a visszakérdezés a
+    HELYES válasz, nem szabad találgatásra váltani."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "valamikor mennék")
+
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["hianyzo_mezo"] == "bolt_id"
+
+
+def test_a_datum_a_mondatbol_potlodik_ha_a_modell_nem_idezett():
+    """Amit determinisztikusan LÁTUNK a mondatban, ne vesszen el csak
+    azért, mert a modell kihagyta — különben a vásárlónak egy
+    visszakérdezés után újra el kellene mondania a napot."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "Szeretnék bemenni a boltba holnap délelőtt.")
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
+    assert eredmeny["parameterek"]["napszak"] == "delelott"
+
+
+def test_a_modell_datuma_nyer_a_mondat_egesze_folott():
+    """A pótlás CSAK akkor lép be, ha a modell semmit nem idézett — nem
+    bírálja felül a modell (feloldható) kifejezését."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "szundi", "datum_kifejezes": "szerdán"},
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "szerdán jó lenne, holnap semmiképp")
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-19T00:00:00Z"
+
+
+def test_szolgaltatas_a_mondatbol_potlodik_ha_a_modell_kihagyta():
+    """A méret zárt halmaz és determinisztikusan kinyerhető — a modell
+    kihagyása nem jelenti, hogy nincs is a mondatban."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "ugyifogyi", "datum_kifejezes": "kedd"},
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "Szeretnék időpontot kedden nagy petárdához.")
+
+    assert eredmeny["parameterek"]["szolgaltatas_id"] == "nagy_petarda"
+
+
 def test_bizonyossag_atmegy_a_kapukon():
     """Az orchestrator a `bizonyossag` alapján dönt a visszakérdezésről
     — a kaszkádnak ezt továbbítania kell."""

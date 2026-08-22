@@ -115,7 +115,12 @@ def _tilos_ellenorzes(eset: Eset, kimenet_param: dict) -> str | None:
             if kulcs in kimenet_param and kulcs not in megorzott:
                 return "kitalalt_datum — a modell dátumot adott meg, ahol nem volt rá elég infó"
     if "kitalalt_ar" in eset.tilos:
-        if any("ar" in str(k).lower() for k in kimenet_param):
+        # TELJES mezőnév-egyezés (vagy `*_ar` utótag), nem részszöveg: az
+        # "ar" mint substring olyan ártatlan mezőnevekben is benne van,
+        # mint a `varhato_kerdes_tipusa` — a korábbi részszöveg-vizsgálat
+        # ezekre HAMIS RIASZTÁST adott, és egy visszakérdezést
+        # "kitalált árnak" minősített.
+        if any(str(k).lower() == "ar" or str(k).lower().endswith("_ar") for k in kimenet_param):
             return "kitalalt_ar — a modell árat adott meg, holott ez nem engedélyezett tényválasz"
     return None
 
