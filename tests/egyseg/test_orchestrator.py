@@ -8,6 +8,8 @@ ugyanígy illeszkedne (`assistant/interpreter/__init__.py::Ertelmezo`)."""
 
 from __future__ import annotations
 
+import time
+
 from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 from assistant.orchestrator import Orchestrator, kovetkezo_kontextus
@@ -501,3 +503,115 @@ def test_fordulo_valodi_ertelmezovel_alkudozas_szukites_megorzi_a_boltot(tmp_pat
         "datum_ig": "2026-08-28T11:59:59Z",
         "napszak": "delelott",
     }
+
+
+# --- foglalas_lekerdezes: enumeráció-védelem és rate limiting -------
+# (blueprint 8. szakasz, adatvedelem skill — az orchestrator felelőssége,
+# nem az eszközé.)
+
+
+def _foglalj(conn, org_id: str, vasarlo_kulcs_hash: str) -> None:
+    """Végigviszi a teljes foglalási utat, hogy legyen VALÓDI, meglévő
+    azonosító a `foglalas_lekerdezes` teszteknek."""
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                },
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=org_id)
+    ajanlat = orch.fordulo("foglalo-session", "petárdázni szeretnék kedden", _MOST)
+    slot_id = ajanlat["jeloltek"][0]["slot_id"]
+    orch.valaszt("foglalo-session", slot_id)
+    orch.megerosit("foglalo-session", vasarlo_kulcs_hash)
+
+
+def test_fordulo_foglalas_lekerdezes_azonos_valasz_letezo_es_nem_letezo_azonositora(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    letezo_hash = "a" * 64
+    _foglalj(conn, ctx["org_id"], letezo_hash)
+
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {"eszkoz": "foglalas_lekerdezes", "parameterek": {"vasarlo_kulcs_hash": letezo_hash}},
+            {
+                "eszkoz": "foglalas_lekerdezes",
+                "parameterek": {"vasarlo_kulcs_hash": "b" * 64},
+            },
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    letezo_valasz = orch.fordulo("lekerdezo-1", "mik a foglalásaim?", _MOST)
+    nemletezo_valasz = orch.fordulo("lekerdezo-2", "mik a foglalásaim?", _MOST)
+
+    # A válasz ALAKJA azonos (sikeres, `foglalasok` lista) — csak a
+    # tartalom tér el, nem a boríték.
+    assert letezo_valasz.keys() == nemletezo_valasz.keys()
+    assert letezo_valasz["sikeres"] is True
+    assert nemletezo_valasz["sikeres"] is True
+    assert letezo_valasz["foglalasok"]
+    assert nemletezo_valasz["foglalasok"] == []
+
+
+def test_fordulo_foglalas_lekerdezes_azonos_valaszido_letezo_es_nem_letezo_azonositora(tmp_path):
+
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    letezo_hash = "a" * 64
+    _foglalj(conn, ctx["org_id"], letezo_hash)
+
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {"eszkoz": "foglalas_lekerdezes", "parameterek": {"vasarlo_kulcs_hash": letezo_hash}},
+            {
+                "eszkoz": "foglalas_lekerdezes",
+                "parameterek": {"vasarlo_kulcs_hash": "b" * 64},
+            },
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    kezdet1 = time.monotonic()
+    orch.fordulo("lekerdezo-1", "mik a foglalásaim?", _MOST)
+    telt1 = time.monotonic() - kezdet1
+
+    kezdet2 = time.monotonic()
+    orch.fordulo("lekerdezo-2", "mik a foglalásaim?", _MOST)
+    telt2 = time.monotonic() - kezdet2
+
+    # Mindkettő eléri a válaszidő-padding küszöbét, és nem térnek el
+    # érdemben egymástól — a valós lekérdezés (van/nincs találat) ideje
+    # elenyésző a paddinghez képest, ez nyeli el a különbséget.
+    assert telt1 >= 0.09
+    assert telt2 >= 0.09
+    assert abs(telt1 - telt2) < 0.05
+
+
+def test_fordulo_foglalas_lekerdezes_rate_limit_session_szintu(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    hivas = {"eszkoz": "foglalas_lekerdezes", "parameterek": {"vasarlo_kulcs_hash": "c" * 64}}
+    ertelmezo = _ScriptedErtelmezo([hivas] * 6)
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    for _ in range(5):
+        valasz = orch.fordulo("session-1", "mik a foglalásaim?", _MOST)
+        assert valasz.get("ok") != "rate_limit"
+
+    hatodik = orch.fordulo("session-1", "mik a foglalásaim?", _MOST)
+    assert hatodik == {"sikeres": False, "ok": "rate_limit", "uzenet_kulcs": "tul_sok_keres"}
+
+    # A korlát SESSION-szintű, nem globális — egy másik session még mehet.
+    ertelmezo.hivasok.clear()
+    masik_ertelmezo = _ScriptedErtelmezo([hivas])
+    masik_orch = Orchestrator(conn, masik_ertelmezo, org_id=ctx["org_id"])
+    masik_valasz = masik_orch.fordulo("session-2", "mik a foglalásaim?", _MOST)
+    assert masik_valasz.get("ok") != "rate_limit"

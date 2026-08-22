@@ -29,6 +29,7 @@ megerősítő-lépés bevezetéséhez."""
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
@@ -109,6 +110,25 @@ def kovetkezo_kontextus(elozo_megorzott: dict, ertelmezes: dict) -> dict:
     return dict(elozo_megorzott)
 
 
+# Enumeráció-védelem és rate limiting a `foglalas_lekerdezes` ágon
+# (blueprint 8. szakasz, "Hitelesítés": "erős rate limiting és
+# enumeráció-védelem"; adatvedelem skill). Ez az orchestrator
+# felelőssége, nem az eszközé (`assistant/tools/foglalas_lekerdezes.py`
+# docstring) — az eszköz önmagában csak listáz.
+#
+# - **Session-szintű kérésszám-korlát**: ennyi hívás után a session
+#   további "mik a foglalásaim" kérése elutasításra kerül, akkor is, ha
+#   egyébként érvényes hash-t adna meg — ez teszi drágává a próbálgatásos
+#   (brute-force) azonosító-találgatást.
+# - **Azonos válaszidő létező és nem létező azonosítóra**: a tool hívása
+#   után a válasz KIADÁSÁIG legalább ennyi idő telik el — ha a tényleges
+#   lekérdezés gyorsabb volt (pl. nincs találat, rövidebb út), az
+#   orchestrator várakozással tölti ki a különbséget, hogy a válaszidő
+#   ne áruljon el semmit a találat tényéről.
+_LEKERDEZES_RATE_LIMIT = 5
+_LEKERDEZES_VALASZIDO_PADDING_MASODPERC = 0.1
+
+
 @dataclass
 class _SessionAllapot:
     session_id: str
@@ -117,6 +137,7 @@ class _SessionAllapot:
     sikertelen_ertelmezesek: int = 0
     aktualis_jeloltek: list[dict] = field(default_factory=list)
     valasztott_slot_id: str | None = None
+    lekerdezesek_szama: int = 0
 
 
 class Orchestrator:
@@ -164,7 +185,7 @@ class Orchestrator:
             return foglalas_athelyezes.hivas(self.conn, teljes)
         if eszkoz == "foglalas_lekerdezes":
             teljes = {**parameterek, "session_id": session_id}
-            return foglalas_lekerdezes.hivas(self.conn, teljes)
+            return self._foglalas_lekerdezes(allapot, teljes)
 
         # Ismeretlen eszköznév az értelmezőtől — LLM-es implementációnál
         # ez elméletileg kizárt (kötött dekódolás), a szabály-alapúnál
@@ -190,6 +211,23 @@ class Orchestrator:
             "kerdes_tipusa": kerdes_tipusa,
             "valaszthato_ertekek": parameterek.get("valaszthato_ertekek", []),
         }
+
+    def _foglalas_lekerdezes(self, allapot: _SessionAllapot, teljes: dict) -> dict:
+        """Enumeráció-védelem és rate limiting (blueprint 8. szakasz,
+        adatvedelem skill) — l. a modulszintű `_LEKERDEZES_*`
+        konstansok dokumentációját. Ez az orchestrator felelőssége, az
+        eszköz (`assistant/tools/foglalas_lekerdezes.py`) önmagában csak
+        listáz."""
+        allapot.lekerdezesek_szama += 1
+        if allapot.lekerdezesek_szama > _LEKERDEZES_RATE_LIMIT:
+            return {"sikeres": False, "ok": "rate_limit", "uzenet_kulcs": "tul_sok_keres"}
+
+        kezdet = time.monotonic()
+        eredmeny = foglalas_lekerdezes.hivas(self.conn, teljes)
+        hatralevo = _LEKERDEZES_VALASZIDO_PADDING_MASODPERC - (time.monotonic() - kezdet)
+        if hatralevo > 0:
+            time.sleep(hatralevo)
+        return eredmeny
 
     def _szabad_idopontok(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
         teljes = {
