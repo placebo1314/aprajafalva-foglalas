@@ -83,10 +83,17 @@ def aktiv_modell_neve() -> str | None:
 
 
 def alapertelmezett_ertelmezo() -> Ertelmezo:
-    """A projekt SZABVÁNYOS értelmezője — a kaszkád (`kaszkad.py`,
-    ADR-016), csendes (hiba nélküli) visszaeséssel a tisztán
-    szabály-alapú rétegre, ha nincs konfigurált modell
-    (`APRAJAFALVA_LLM_MODELL` — `llm_based.py::LLMSzolgaltato`).
+    """A projekt SZABVÁNYOS értelmezője — a FORDÍTOTT kaszkád
+    (`forditott_kaszkad.py`, ADR-018: a normalizáló fut előbb, a modell
+    értelmez kötött dekódolással, a determinisztikus rétegek a kapuk),
+    csendes (hiba nélküli) visszaeséssel a tisztán szabály-alapú
+    rétegre, ha nincs konfigurált modell (`APRAJAFALVA_LLM_MODELL` —
+    `llm_based.py::LLMSzolgaltato`) vagy nem elérhető a szolgáltatás.
+
+    Az ADR-016 sorrendje (`kaszkad.py`: determinisztikus előbb) a
+    repóban maradt, és `python feladat.py golden --ertelmezo kaszkad`
+    paranccsal bármikor újramérhető — ez a visszaút (ADR-018, "Kiváltó
+    feltétel").
 
     Ez a belépési pont, amit a hívók (pl. `ui/vasarlo.py`) használnak —
     ők nem importálják és nem is tudják, hogy LLM van-e a kaszkádban
@@ -95,7 +102,7 @@ def alapertelmezett_ertelmezo() -> Ertelmezo:
     körkörös importot a csomag `__init__`-je és az itt importált
     testvérmodulok között, amik maguk is ebből az `__init__`-ből
     importálnak (`Ertelmezo`, `ErtelmezesKontextus`)."""
-    from assistant.interpreter.kaszkad import KaszkadErtelmezo
+    from assistant.interpreter.forditott_kaszkad import ForditottKaszkadErtelmezo
     from assistant.interpreter.llm_based import LLMErtelmezo, LLMSzolgaltato
     from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
@@ -103,4 +110,4 @@ def alapertelmezett_ertelmezo() -> Ertelmezo:
         llm = LLMErtelmezo(LLMSzolgaltato())
     except ValueError:
         llm = None
-    return KaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
+    return ForditottKaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)

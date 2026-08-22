@@ -1,9 +1,22 @@
 # ADR-016: Kaszkád értelmező — determinisztikus előbb, LLM csak kiegészít
 
 - **Dátum:** 2026-08-22
-- **Állapot:** elfogadott — **megerősítve 2026-08-22-én** (ADR-018: a
-  fordított sorrendet megmértük, rosszabbnak bizonyult, ez a döntés
-  marad hatályban)
+- **Állapot:** **FELÜLÍRVA (ADR-018, 2026-08-23)** — az éles út a
+  fordított sorrend: a modell értelmez, a determinisztikus réteg a kapu
+  és a tartalék. Ez a dokumentum megmarad, mert (a) a benne rögzített
+  HÁROM KORLÁT (dátum a parserből, zárt halmazok, réteg-napló)
+  változatlanul érvényes, csak most a fordított kaszkádban
+  kényszerítjük ki őket, (b) a `kaszkad.py` a repóban maradt, és ez a
+  visszaút, (c) a felülírás indoklása pontosan az itt leírt mérés
+  korlátaira épül — l. lent a "Kontextus" szakaszban a saját
+  figyelmeztetésünket a látható halmazról.
+
+  **Rövid történet:** 2026-08-22-én az ADR-018 első változata megmérte a
+  fordított sorrendet és ELVETETTE. 2026-08-23-án kiderült, hogy az a
+  mérés egy félkész modult mért (a futtatóban a `forditott` kapcsoló nem
+  is volt bekötve, és a modell a beszélgetés kontextusát meg sem kapta);
+  a befejezett modul újramérve jobb lett. Az ADR-018 ezért átdolgozva,
+  elfogadott állapotban van.
 - **Megjegyzés a számozáshoz:** a 015 szándékosan kimaradt — sem a
   git-történetben, sem a repóban nem szerepelt korábban 015-ös ADR;
   ellenőrizve (2026-08-22), a szám emiatt véglegesen kimarad, nem kerül

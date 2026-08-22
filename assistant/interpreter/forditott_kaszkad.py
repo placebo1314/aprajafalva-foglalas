@@ -1,17 +1,19 @@
 """Fordított kaszkád — a modell értelmez, a determinisztikus réteg a
 kapu és a tartalék.
 
-**ÁLLAPOT: MÉRT KÍSÉRLET, NEM AZ ALAPÉRTELMEZÉS** (ADR-018, elvetve).
-Ez a modul azért maradt a repóban, hogy a kísérlet reprodukálható
-legyen (`python feladat.py golden --ertelmezo forditott`) — az éles út
-továbbra is a determinisztikus-előbb `kaszkad.py` (ADR-016).
+**ÁLLAPOT: EZ AZ ÉLES ÚT** (ADR-018, elfogadva 2026-08-23 — felülírja
+az ADR-016 sorrendjét). Ezt építi fel az `assistant/interpreter/
+__init__.py::alapertelmezett_ertelmezo()`, ezt használja a
+`ui/vasarlo.py`. A determinisztikus-előbb sorrend (`kaszkad.py`) a
+repóban maradt: az a visszaút, `--ertelmezo kaszkad`-dal mérhető.
 
-A 2026-08-22-i mérés (36 eset, qwen3.5:9b) szerint ez a felállás
-ÖSSZESÍTETTEN rosszabb: 69,4% a determinisztikus-előbb 80,6%-ával
-szemben. Pontosan ott javít, ahol vártuk (nyelvi változatosság
-20% -> 60%, kemény rész elengedése 0% -> 66,7%), és mindenütt ront,
-amit a szabályok már jól kezeltek (köznyelvi 100% -> 40%, kapuőr
-100% -> 50%). Részletek és a visszatérés feltétele: ADR-018.
+Rövid történet, mert a döntés MEGFORDULT: az ADR-018 első változata
+(2026-08-22) ezt a felállást megmérte és elvetette (69,4% vs 86,1%). Az
+a mérés egy félkész modult mért — a modell a beszélgetés kontextusát
+meg sem kapta, a `--ertelmezo forditott` kapcsoló a futtatóban nem is
+volt bekötve. A befejezett modul újramérve (45 eset, qwen3.5:9b) jobb
+lett a determinisztikus-előbb sorrendnél, ÉS a leggyengébb rétegen is
+jobb. Számok és a visszafordulás feltétele: ADR-018.
 
 ```
 mondat
@@ -21,15 +23,28 @@ mondat
   │
   ├─ 2. LLM ÉRTELMEZŐ (llm_based.py), kötött dekódolással
   │      az enumok tartják a zárt halmazokat (bolt, szolgáltatás,
-  │      napszak, mit) — kitalált érték strukturálisan kizárva;
-  │      a dátumot a modell SZÖVEGESEN idézi (`datum_kifejezes`)
+  │      napszak, mit, hianyzo_mezo) — kitalált érték strukturálisan
+  │      kizárva; a dátumot a modell SZÖVEGESEN idézi
+  │      (`datum_kifejezes`, vagylagosnál `datum_kifejezes_2`); a
+  │      beszélgetés KEMÉNY kontextusa (bolt, szolgáltatás) a promptban
   │
-  ├─ 3. DÁTUM-KAPU (rule_based.datum_ablak_feloldas)
-  │      a `datum_kifejezes`-t a hun-date-parser oldja fel. Ha a modell
-  │      mégis ISO-dátumot adott, azt is ellenőrizzük a parserrel —
-  │      ELTÉRÉSNÉL A PARSER NYER.
+  ├─ 3. ELENGEDÉS-KAPU — ha a bolt a kontextusból jön, és a mondat
+  │      determinisztikusan nem nevez meg boltot, egy külön, ZÁRT
+  │      kérdés dönti el, hogy a mondat elveti-e ("mi esik ki?", csak
+  │      mezőnevek); a `kaszkad.kemeny_reszt_vedd` védőhálóval
   │
-  ├─ 4. BIZONYOSSÁG-KAPU — küszöb alatt zárt kérdés. Ez NEM itt van,
+  ├─ 4. DÁTUM-KAPU (rule_based.datum_ablak_feloldas)
+  │      a `datum_kifejezes`-t a hun-date-parser oldja fel, két
+  │      kifejezésnél az ablakokat determinisztikusan összevonjuk. Ha a
+  │      modell mégis ISO-dátumot adott, azt is ellenőrizzük a
+  │      parserrel — ELTÉRÉSNÉL A PARSER NYER.
+  │
+  ├─ 5. PÓTLÁS-KAPU — amit a modell kihagyott, de determinisztikusan
+  │      LÁTSZIK a mondatban (dátum, napszak, szolgáltatás, preferált
+  │      óra), azt a szabály-alapú kinyerés pótolja. A modell válasza
+  │      MINDIG nyer; a szabály csak hiányt tölt.
+  │
+  ├─ 6. BIZONYOSSÁG-KAPU — küszöb alatt zárt kérdés. Ez NEM itt van,
   │      hanem az orchestratorban (blueprint 10.: "a visszakérdezésről
   │      az orchestrator dönt, nem az LLM"); ez a modul csak továbbadja
   │      a `bizonyossag` mezőt.
@@ -48,6 +63,13 @@ mintaillesztéssé nőtt (bolt-, napszak-, lemondás-, áthelyezés-minták
 listája), és a nyelvi változatosságot elvi okból nem tudja lefedni:
 minden új megfogalmazás új mintát igényelne.
 
+**Ami MÉG NEM determinisztikus, pedig kellene** (ADR-018, "A következő
+lépés"): a **kapuőr**. A "Mennyibe kerül a nagy petárda?" mondatra ma a
+modell dönt, és a mérésen 50%-ot ad — a blueprint 10. szakasza szerint a
+témán belül tartás kifejezetten NEM múlhat a modell prompt-fegyelmén. A
+kapuőr-minták a modell ELÉ emelése külön ADR-t igényel, mert az már
+hibrid architektúra, nem "fordított kaszkád".
+
 **Amit a fordítás NEM változtat meg** — ezek továbbra is
 determinisztikusak, és a modell nem kerülheti meg őket:
 
@@ -59,7 +81,8 @@ determinisztikusak, és a modell nem kerülheti meg őket:
 3. **A foglalási kódot a mondatból olvassuk vissza**, nem a modelltől —
    ott egy elrontott karakter néma hibát okozna.
 4. **Naplózva van, melyik réteg oldotta meg** (`utolso_reteg`) — ez a
-   mérőszám (`python feladat.py golden --ertelmezo kaszkad`).
+   mérőszám (`python feladat.py golden --ertelmezo forditott`), és ez
+   jelenik meg a felület próba-naplójában is (`naplo/probak.jsonl`).
 """
 
 from __future__ import annotations

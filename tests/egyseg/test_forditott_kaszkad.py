@@ -1,8 +1,7 @@
 """Egységtesztek a FORDÍTOTT kaszkád értelmezőre (`assistant/
-interpreter/forditott_kaszkad.py`, ADR-018 — mért kísérlet, elvetve,
-de reprodukálhatóan megtartva) — az LLM-réteget mindenütt egy
-szkriptelt hamisítvány (`_FakeLLM`) helyettesíti, ez a fájl SOSEM hív
-valódi Ollamát.
+interpreter/forditott_kaszkad.py`, ADR-018 — **ez az éles út**) — az
+LLM-réteget mindenütt egy szkriptelt hamisítvány (`_FakeLLM`)
+helyettesíti, ez a fájl SOSEM hív valódi Ollamát.
 
 A hangsúly a DETERMINISZTIKUS KAPUKON van: a modell értelmez, de a
 dátumot a parser adja, a bolt/szolgáltatás zárt halmazon marad, a
