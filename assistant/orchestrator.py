@@ -146,6 +146,10 @@ class Orchestrator:
         self.ertelmezo = ertelmezo
         self.org_id = org_id
         self._sessionok: dict[str, _SessionAllapot] = {}
+        # Az utolsó `fordulo()`-hívás nyers értelmezés-kimenete
+        # ({eszkoz, parameterek}) — nem a válasz része, csak
+        # megfigyelhetőséghez (pl. ui/vasarlo.py próba-naplózásához).
+        self.utolso_ertelmezes: dict | None = None
 
     def _allapot(self, session_id: str) -> _SessionAllapot:
         if session_id not in self._sessionok:
@@ -158,6 +162,7 @@ class Orchestrator:
         allapot = self._allapot(session_id)
         kontextus = ErtelmezesKontextus(megorzott_parameterek=dict(allapot.megorzott_parameterek))
         ertelmezes = self.ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
+        self.utolso_ertelmezes = ertelmezes
         eszkoz = ertelmezes.get("eszkoz")
         parameterek = ertelmezes.get("parameterek") or {}
 

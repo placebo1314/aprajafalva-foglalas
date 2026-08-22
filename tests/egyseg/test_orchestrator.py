@@ -86,6 +86,21 @@ def test_fordulo_nincs_elutasitas(tmp_path):
     assert valasz == {"tipus": "elutasitas", "uzenet_kulcs": "nem_foglalasi_kerdes"}
 
 
+def test_fordulo_utolso_ertelmezes_a_nyers_kimenetet_orzi(tmp_path):
+    """`utolso_ertelmezes` a nyers {eszkoz, parameterek} kimenet —
+    megfigyelhetőséghez (pl. ui/vasarlo.py próba-naplózása), nem a
+    válasz része."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    nyers = {"eszkoz": "nincs", "parameterek": {}}
+    ertelmezo = _ScriptedErtelmezo([nyers])
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    assert orch.utolso_ertelmezes is None
+    orch.fordulo("session-1", "Milyen idő lesz holnap?", _MOST)
+    assert orch.utolso_ertelmezes == nyers
+
+
 def test_fordulo_visszakerdez_nyitott_elso_korben(tmp_path):
     conn = _conn(tmp_path)
     _seed(conn)

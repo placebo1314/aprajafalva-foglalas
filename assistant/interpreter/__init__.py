@@ -45,3 +45,27 @@ class Ertelmezo(Protocol):
 
         Visszatérési érték: `{"eszkoz": str, "parameterek": dict}`."""
         ...
+
+
+def alapertelmezett_ertelmezo() -> Ertelmezo:
+    """A projekt SZABVÁNYOS értelmezője — a kaszkád (`kaszkad.py`,
+    ADR-016), csendes (hiba nélküli) visszaeséssel a tisztán
+    szabály-alapú rétegre, ha nincs konfigurált modell
+    (`APRAJAFALVA_LLM_MODELL` — `llm_based.py::LLMSzolgaltato`).
+
+    Ez a belépési pont, amit a hívók (pl. `ui/vasarlo.py`) használnak —
+    ők nem importálják és nem is tudják, hogy LLM van-e a kaszkádban
+    (CLAUDE.md, "Modulhatárok": "a ui/ nem hívhat LLM-et közvetlenül").
+    A lusta (függvényen belüli) importok szándékosak: elkerülik a
+    körkörös importot a csomag `__init__`-je és az itt importált
+    testvérmodulok között, amik maguk is ebből az `__init__`-ből
+    importálnak (`Ertelmezo`, `ErtelmezesKontextus`)."""
+    from assistant.interpreter.kaszkad import KaszkadErtelmezo
+    from assistant.interpreter.llm_based import LLMErtelmezo, LLMSzolgaltato
+    from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
+
+    try:
+        llm = LLMErtelmezo(LLMSzolgaltato())
+    except ValueError:
+        llm = None
+    return KaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)

@@ -30,12 +30,32 @@ ajánl fel** — a `python feladat.py seed` demóadata viszont egy fix,
 Kézi kipróbáláskor emiatt a legördülőben más dátumot kell választani,
 mint a mai nap — ez dokumentált korlát, nem hiba (`docs/TESZTELES.md`).
 
+**Az értelmezőt az `assistant/interpreter/__init__.py::
+alapertelmezett_ertelmezo()` építi fel** (kaszkád, ADR-016: a
+determinisztikus réteg fut előbb, a háttér-modellszolgáltatást csak
+hiányzó bolt kiegészítésére hívja) — ez a modul (CLAUDE.md,
+"Modulhatárok": "a ui/ nem hívhat LLM-et közvetlenül") a modell-
+specifikus osztályokat sosem importálja, és nem is tudja, fut-e éppen
+a háttérszolgáltatás — ha nincs konfigurálva vagy nem elérhető, a
+felépítés CSENDBEN (hiba nélkül) a tisztán szabály-alapú viselkedésre
+esik vissza.
+
+**Próba-napló** (`naplo/probak.jsonl`, a `.gitignore` kizárja): a
+szöveges úton minden bemenetet és a rá adott értelmezést naplózza —
+bemenet, felismert eszköz, paraméterek, melyik réteg oldotta meg,
+időbélyeg. Ez a jövőbeli rejtett golden halmaz nyersanyaga
+(golden-set skill: "valós beszélgetésben hiba → redaktált trace →
+annotálás → golden set"). **Vásárlóazonosító ide sosem jut el** — a
+megerősítéshez használt azonosító-mező (`_megerosit`) egy KÜLÖN
+út a `privacy/` hash-hívásba, nem érinti ezt a naplót.
+
 Indítás:
     python -m ui.vasarlo
 """
 
 from __future__ import annotations
 
+import json
 import sys
 import tkinter as tk
 from datetime import UTC, date, datetime, timedelta
@@ -46,7 +66,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from assistant import valasz as valasz_szoveg  # noqa: E402
-from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo  # noqa: E402
+from assistant.interpreter import alapertelmezett_ertelmezo  # noqa: E402
 from assistant.orchestrator import Orchestrator  # noqa: E402
 from assistant.tools import katalogus  # noqa: E402
 from core.azonosito import new_uuid  # noqa: E402
@@ -61,6 +81,8 @@ _NAPSZAKOK = [
     ("barmikor", "bármikor"),
 ]
 
+_PROBA_NAPLO_UTVONAL = ROOT / "naplo" / "probak.jsonl"
+
 
 def _most_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -70,6 +92,21 @@ def _idopont_cimke(kezdet_iso: str, veg_iso: str) -> str:
     kezdet = datetime.fromisoformat(kezdet_iso.replace("Z", "+00:00"))
     veg = datetime.fromisoformat(veg_iso.replace("Z", "+00:00"))
     return f"{kezdet.strftime('%Y-%m-%d %H:%M')}–{veg.strftime('%H:%M')} (UTC)"
+
+
+def _proba_naplo_ir(bemenet: str, ertelmezes: dict | None, reteg: str | None) -> None:
+    """Egy szöveges bemenetet és a rá adott értelmezést ír a
+    `naplo/probak.jsonl`-be — l. modul docstring, "Próba-napló"."""
+    _PROBA_NAPLO_UTVONAL.parent.mkdir(parents=True, exist_ok=True)
+    sor = {
+        "idobelyeg": _most_iso(),
+        "bemenet": bemenet,
+        "eszkoz": (ertelmezes or {}).get("eszkoz"),
+        "parameterek": (ertelmezes or {}).get("parameterek"),
+        "reteg": reteg,
+    }
+    with _PROBA_NAPLO_UTVONAL.open("a", encoding="utf-8") as fajl:
+        fajl.write(json.dumps(sor, ensure_ascii=False) + "\n")
 
 
 class VasarloApp(tk.Tk):
@@ -85,7 +122,7 @@ class VasarloApp(tk.Tk):
         orgs = torzsadat_repo.orgs_list(self.conn)
         self.org_id = orgs[0]["id"] if orgs else None
         self.session_id = new_uuid()
-        self.orchestrator = Orchestrator(self.conn, SzabalyAlapuErtelmezo(), org_id=self.org_id)
+        self.orchestrator = Orchestrator(self.conn, alapertelmezett_ertelmezo(), org_id=self.org_id)
 
         self.protocol("WM_DELETE_WINDOW", self._close)
         self._build()
@@ -314,6 +351,11 @@ class VasarloApp(tk.Tk):
         self.szo_uzenet.config(text="")
 
         valasz = self.orchestrator.fordulo(self.session_id, szoveg, _most_iso())
+        _proba_naplo_ir(
+            szoveg,
+            self.orchestrator.utolso_ertelmezes,
+            getattr(self.orchestrator.ertelmezo, "utolso_reteg", None),
+        )
         self._szoveges_valasz_kezel(valasz)
 
     def _szoveges_valasz_kezel(self, valasz: dict) -> None:
