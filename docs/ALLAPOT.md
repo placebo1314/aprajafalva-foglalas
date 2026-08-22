@@ -135,10 +135,16 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   orchestrator.py` dokumentált hatókör-korlátja). Az áthelyezés a v1-ben
   mindig visszakérdez (nincs automatikus új-időpont-keresés egy
   mondatból).
-- **A koppintós UI "Nap" választója a valódi rendszerórától számol**,
-  a demóadat viszont egy fix, 2026-12-21-gyel kezdődő hétre generál
-  beosztást — kézi kipróbáláskor ezért más dátumot kell választani,
-  mint a mai nap (`ui/vasarlo.py` dokumentálja).
+- **A vásárlói felület a BEOSZTÁSHOZ horgonyoz, nem a rendszerórához.**
+  A demóadat egy fix, 2026-12-21-gyel kezdődő hétre és EGYETLEN boltra
+  (Törpilla) generál beosztást; a felület ezért a nap-választót és a
+  szöveges út `most`-ját is ehhez igazítja (`ui/vasarlo.py::
+  horgony_most`), és az ablak tetején kiírja, mit jelent itt a "ma". Ez
+  **felületi horgony**, nem idő-eltolás a magban: a `core/` és az
+  eszközök ugyanazt a UTC ISO-időbélyeget kapják, mint bármikor
+  (CLAUDE.md 4. invariáns). Korlát marad viszont, hogy a demóadat két
+  boltba egyáltalán nem generál műszakot — ott az üres válasz helyes,
+  csak megtévesztő.
 - **A `foglalas_lekerdezes` rate limit (5 kérés/session) és a
   válaszidő-padding (0,1 s) dokumentált, de tetszőlegesen választott
   érték** (`assistant/orchestrator.py::_LEKERDEZES_RATE_LIMIT`,
