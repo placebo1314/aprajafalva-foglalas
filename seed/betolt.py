@@ -37,6 +37,16 @@ from core.slot.blokk import FixedBlock
 ROOT = Path(__file__).resolve().parents[1]
 ALAP_DB_PATH = ROOT / "aprajafalva.db"
 
+
+class AdatbazisMarFeltoltve(RuntimeError):
+    """Az adatbázis már tartalmazza a demóadatot — nem nyers SQL-hiba
+    (`sqlite3.IntegrityError`), hanem egy előre látott, olvasható állapot.
+    Kezelése: `betolt(..., ujra=True)` vagy a `--ujra` CLI-kapcsoló, ami
+    előbb kiüríti a táblákat (visszagörgeti, majd újra lefuttatja az
+    összes migrációt — `core/repo/migracio.py::rollback`/`migral`), és
+    csak utána tölt be újra."""
+
+
 _NEVTER = uuid.UUID("a9f5d3b0-1234-4000-8000-000000000000")
 _ZONE = ZoneInfo("Europe/Budapest")
 _WEEK_START = date(2026, 12, 21)  # hétfő
@@ -99,12 +109,29 @@ _TORPILLA_COUNTERS = [
 ]
 
 
-def betolt(db_path: str | Path = ALAP_DB_PATH) -> dict:
+def betolt(db_path: str | Path = ALAP_DB_PATH, *, ujra: bool = False) -> dict:
     """Betölti a teljes demóadatot. Visszaadja a legfontosabb
-    azonosítókat — tesztekben és a CLI-ben egyaránt hasznos."""
+    azonosítókat — tesztekben és a CLI-ben egyaránt hasznos.
+
+    Az azonosítók determinisztikusak (l. modul docstring) — egy már
+    feltöltött adatbázisra való újrafuttatás emiatt egyediségi
+    kényszerbe ütközne. `ujra=False` (alapértelmezett) esetén ezt
+    előre, olvashatóan jelezzük (`AdatbazisMarFeltoltve`), nem hagyjuk,
+    hogy nyers `sqlite3.IntegrityError` szálljon fel. `ujra=True`
+    esetén előbb kiürítjük a sémát (visszagörgetés + újramigrálás),
+    és csak utána töltünk be — így a hívó nem kell, hogy tudja, melyik
+    táblát milyen sorrendben kellene törölni."""
     conn = migracio.conn_nyitas(str(db_path))
     try:
         migracio.migral(conn)
+        if torzsadat_repo.orgs_list(conn):
+            if not ujra:
+                raise AdatbazisMarFeltoltve(
+                    f"Az adatbázis már fel van töltve ({db_path}) — "
+                    "használd a --ujra kapcsolót (vagy betolt(..., ujra=True))."
+                )
+            migracio.rollback(conn)
+            migracio.migral(conn)
         data = _master_data_load(conn)
         data["muszakok"] = _week_schedule_load(conn, data)
         return data
@@ -345,9 +372,24 @@ def _fo() -> None:
     # kell maradjon).
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
-    db_path = sys.argv[1] if len(sys.argv) > 1 else str(ALAP_DB_PATH)
-    data = betolt(db_path)
-    print(f"Betöltve: {db_path}")
+
+    argv = sys.argv[1:]
+    ujra = "--ujra" in argv
+    pozicionalis = [a for a in argv if a != "--ujra"]
+    db_path = pozicionalis[0] if pozicionalis else str(ALAP_DB_PATH)
+
+    try:
+        data = betolt(db_path, ujra=ujra)
+    except AdatbazisMarFeltoltve as exc:
+        # Olvasható üzenet, nem nyers traceback — a hívó (feladat.py
+        # seed) ebből tudja, mit kell tennie.
+        print(str(exc))
+        raise SystemExit(1) from None
+
+    if ujra:
+        print(f"Újratöltve: {db_path}")
+    else:
+        print(f"Betöltve: {db_path}")
     print(f"  szervezet: {data['szervezet_id']}")
     print(f"  boltok: {list(data['boltok'].keys())}")
     generated = [m for m in data["muszakok"] if not m["kihagyva"]]

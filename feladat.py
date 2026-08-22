@@ -5,7 +5,7 @@ python feladat.py teszt
 python feladat.py teszt-mindketto
 python feladat.py golden [--json UTVONAL]
 python feladat.py migracio "<leiras>"
-python feladat.py seed
+python feladat.py seed [--ujra]
 python feladat.py lint
 
 A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
@@ -61,8 +61,8 @@ def migracio(argv: list[str]) -> int:
     return fut([sys.executable, "-m", "tools.uj_migracio", argv[0]])
 
 
-def seed(_: list[str]) -> int:
-    return fut([sys.executable, "-m", "seed.betolt"])
+def seed(argv: list[str]) -> int:
+    return fut([sys.executable, "-m", "seed.betolt", *argv])
 
 
 def lint(_: list[str]) -> int:

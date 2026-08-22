@@ -6,7 +6,7 @@ import sqlite3
 
 import pytest
 
-from seed.betolt import betolt
+from seed.betolt import AdatbazisMarFeltoltve, betolt
 
 
 @pytest.fixture
@@ -132,10 +132,38 @@ def test_deterministic_azonositok(db_path, tmp_path):
     ]
 
 
-def test_double_load_same_db_ra_conflicts(db_path):
+def test_double_load_same_db_ra_ertelmes_hibat_ad(db_path):
     """A determinisztikus id-k szándékos következménye: kétszeri betöltés
-    ugyanarra a fájlra egyediségi kényszerbe ütközik, nem duplázza csendben
-    az adatot."""
+    ugyanarra a fájlra egyediségi kényszerbe ütközne — ezt előre,
+    olvasható hibaüzenettel jelezzük (`AdatbazisMarFeltoltve`), nem
+    hagyjuk, hogy nyers `sqlite3.IntegrityError` szálljon fel."""
     betolt(db_path)
-    with pytest.raises(sqlite3.IntegrityError):
+    with pytest.raises(AdatbazisMarFeltoltve, match="--ujra"):
         betolt(db_path)
+
+
+def test_ujra_kapcsolo_ures_adatbazisra_is_mukodik(db_path):
+    """`ujra=True` üres (még sosem töltött) adatbázisra is működik —
+    nincs mit kiüríteni előtte, egyszerűen betölt."""
+    data = betolt(db_path, ujra=True)
+    assert set(data["boltok"].keys()) == {"szundi", "ugyifogyi", "torpilla"}
+
+
+def test_ujra_kapcsolo_mar_feltoltott_adatbazist_ujratolt(db_path):
+    """`ujra=True` egy már feltöltött adatbázison nem dob hibát, hanem
+    kiüríti a táblákat (visszagörgetés + újramigrálás), és utána
+    ugyanazt a (determinisztikus) demóadatot tölti be újra — nem
+    duplázza, nem hagy régi sorokat."""
+    elso = betolt(db_path)
+    masodik = betolt(db_path, ujra=True)
+
+    assert masodik["szervezet_id"] == elso["szervezet_id"]
+    assert masodik["boltok"] == elso["boltok"]
+    assert len(masodik["muszakok"]) == len(elso["muszakok"])
+
+    conn = sqlite3.connect(db_path)
+    try:
+        (darab,) = conn.execute("SELECT COUNT(*) FROM szervezet").fetchone()
+        assert darab == 1, "az újratöltés nem duplázhatja a szervezet sorát"
+    finally:
+        conn.close()
