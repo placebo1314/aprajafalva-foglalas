@@ -334,3 +334,79 @@ class LLMErtelmezo:
         ertelmezes.setdefault("parameterek", {})
         ertelmezes["bizonyossag"] = bizonyossag_szamol(valasz.get("logprobs"), ertelmezes)
         return ertelmezes
+
+    def valtozas_elemzes(self, mondat: str, megorzott_parameterek: dict) -> dict | None:
+        """**Mi változott?** — a modell egyetlen, szigorúan zárt
+        feladata a kaszkádban (`kaszkad.py`, ADR-016): megmondja, hogy a
+        beszélgetés eddigi, MEGŐRZÖTT paramétereiből melyiket tartja meg
+        a mondat, és melyiket engedi el.
+
+        A kimenet kizárólag **mezőnevek** két listája — a modell SOSEM
+        ad értéket. Emiatt nem is tud rossz boltot vagy dátumot
+        hallucinálni: az értékek továbbra is a determinisztikus
+        parserből, illetve a zárt katalógusból jönnek. Ez a szűk szerep
+        teszi ellenőrizhetővé a hozzájárulását.
+
+        A választható mezőnevek halmaza a ténylegesen meglévő
+        kontextuskulcsokra szűkül (`enum`), tehát olyan mezőt sem tud
+        megnevezni, ami nincs is a kontextusban.
+
+        Visszatérési érték: `{"megtart": [...], "elenged": [...]}`, vagy
+        `None`, ha nincs mit elemezni / a hívás nem sikerült (ilyenkor a
+        hívó a szabály-alapú viselkedésnél marad)."""
+        self.utolso_hiba = None
+        kulcsok = sorted(k for k in megorzott_parameterek if k != "session_id")
+        if not kulcsok:
+            return None
+
+        sema = {
+            "type": "object",
+            "properties": {
+                "elenged": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": kulcsok},
+                },
+            },
+            "required": ["elenged"],
+            "additionalProperties": False,
+        }
+        prompt = (
+            "Egy foglalási beszélgetés eddig ezeket tudta a vásárlóról:\n"
+            + "\n".join(f"- {k}: {megorzott_parameterek[k]}" for k in kulcsok)
+            + "\n\nA vásárló új mondata: "
+            + mondat
+            + "\n\nMelyik korábbi adat NEM érvényes már az új mondat után? "
+            "Csak azokat sorold fel, amiket a mondat ténylegesen felülír vagy "
+            "elvet. Ha mindegyik érvényben marad, üres listát adj."
+        )
+        payload = {
+            "model": self.szolgaltato.modell,
+            "messages": [{"role": "user", "content": prompt}],
+            "format": sema,
+            "stream": False,
+            "think": False,
+            "options": {"temperature": 0},
+        }
+        req = urllib.request.Request(
+            self.szolgaltato.url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.szolgaltato.timeout_masodperc) as resp:
+                valasz = json.loads(resp.read().decode("utf-8"))
+            eredmeny = json.loads(valasz.get("message", {}).get("content", ""))
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            self.utolso_hiba = f"változás-elemzés sikertelen: {exc}"
+            _LOG.warning(self.utolso_hiba)
+            return None
+
+        if not isinstance(eredmeny, dict):
+            self.utolso_hiba = f"Váratlan alak a változás-elemzésben: {eredmeny!r}"
+            return None
+
+        # Védőháló: a zárt halmazon kívüli mezőnevet eldobjuk, akkor is,
+        # ha a séma elvileg kizárta.
+        elenged = [m for m in (eredmeny.get("elenged") or []) if m in kulcsok]
+        return {"megtart": [k for k in kulcsok if k not in elenged], "elenged": elenged}

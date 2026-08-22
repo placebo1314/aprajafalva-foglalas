@@ -4,22 +4,28 @@ csak akkor segít, ha az nem boldogul.
 ```
 mondat → SzabalyAlapuErtelmezo
              │
-             ├─ nem "visszakerdez" (vagy hiányzó mezője nem
-             │  kiegészíthető)  →  ennyi, a szabály-alapú válasz megy
+             ├─ "visszakerdez", hiányzó mező = bolt_id
+             │      → KIEGÉSZÍTÉS: az LLM egy ZÁRT HALMAZBELI bolt_id-t
+             │        javasol, majd a SzabalyAlapuErtelmezo ÚJRAFUT a
+             │        kiegészített bolttal
              │
-             └─ "visszakerdez", hiányzó mező = bolt_id
-                    │
-                    ├─ nincs LLM, vagy az LLM nem érhető el → marad a
-                    │  szabály-alapú visszakérdezés
-                    │
-                    └─ az LLM (assistant/interpreter/llm_based.py) egy
-                       ZÁRT HALMAZBELI bolt_id-t javasol
-                           │
-                           └─ a SzabalyAlapuErtelmezo ÚJRAFUT, a
-                              kiegészített bolttal a kontextusban — a
-                              dátum, napszak, szolgáltatás-egyértelműsítés
-                              innentől is a determinisztikus parserből jön
+             └─ döntött (nem visszakerdez), de VAN megőrzött kontextus
+                    → ELENGEDÉS: az LLM megmondja, a korábbi
+                      paraméterekből mi ESIK KI az új mondat után
+                      (csak MEZŐNEVEK, soha nem érték), majd a
+                      SzabalyAlapuErtelmezo ÚJRAFUT a szűkített
+                      kontextussal
+
+mindkét ágon: nincs LLM / nem elérhető / nem változtat
+                    → marad a szabály-alapú válasz
 ```
+
+Az **elengedés** ág azért kell, mert a "mégis mindegy, mikor" típusú
+mondatokat a mintaillesztés nem látja: nincs bennük olyan szó, amit egy
+szabály kereshetne, és kulcsszólistát írni rájuk ráigazítás lenne a
+mérési halmazra. A modell itt egy ellenőrizhető, zárt kérdésre válaszol
+("melyik korábbi adat nem érvényes már?"), nem az egész értelmezést
+végzi.
 
 **Miért ez a sorrend, nem fordítva** (ADR-016 részletezi a kiváltó
 feltétellel együtt): a determinisztikus réteg olcsó, gyors, és soha nem
@@ -85,9 +91,18 @@ class KaszkadErtelmezo:
         szabaly_eredmeny = self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
         self.utolso_reteg = "szabaly"
 
-        if szabaly_eredmeny.get("eszkoz") != "visszakerdez" or self.llm is None:
+        if self.llm is None:
             _LOG.info("kaszkád: réteg=szabaly eszköz=%s", szabaly_eredmeny.get("eszkoz"))
             return szabaly_eredmeny
+
+        if szabaly_eredmeny.get("eszkoz") != "visszakerdez":
+            # VAN kontextus és a determinisztikus réteg döntött — de a
+            # döntése némán MEGTARTHATOTT olyan korábbi paramétert, amit
+            # a mondat valójában elenged ("mégis mindegy, mikor"). Ezt a
+            # mintaillesztés nem látja: nincs benne olyan szó, amit egy
+            # szabály kereshetne. Kulcsszólistát írni rá ráigazítás
+            # lenne — ezért ezt a modell dönti el, ZÁRT kimenettel.
+            return self._elengedes_finomitas(mondat, most, kontextus, szabaly_eredmeny)
 
         hianyzo_mezo = (szabaly_eredmeny.get("parameterek") or {}).get("hianyzo_mezo")
         if hianyzo_mezo not in _KIEGESZITHETO_MEZOK:
@@ -124,4 +139,49 @@ class KaszkadErtelmezo:
         _LOG.info(
             "kaszkád: réteg=llm eszköz=%s (bolt_id=%s kiegészítve)", vegleges.get("eszkoz"), bolt_id
         )
+        return vegleges
+
+    def _elengedes_finomitas(
+        self,
+        mondat: str,
+        most: str,
+        kontextus: ErtelmezesKontextus,
+        szabaly_eredmeny: dict,
+    ) -> dict:
+        """A modell megmondja, a megőrzött kontextusból mi ESIK KI az új
+        mondat után; a determinisztikus parser ezután újrafut a szűkített
+        kontextussal.
+
+        A modell szerepe itt szigorúan zárt: **mezőneveket** ad vissza,
+        soha nem értéket (`LLMErtelmezo.valtozas_elemzes`). A dátum
+        továbbra is a parserből jön, a bolt a zárt katalógusból — a
+        modell csak azt befolyásolja, MELYIK korábbi adatot ne vigyük
+        tovább.
+
+        Ez a "bármelyik másik boltban" típusú mondatok kezelése
+        kulcsszólista NÉLKÜL: nem felsoroljuk a lehetséges
+        megfogalmazásokat (az ráigazítás lenne a mérési halmazra), hanem
+        a modellre bízzuk a döntést egy ellenőrizhető, zárt kimenettel."""
+        megorzott = kontextus.megorzott_parameterek
+        if not megorzott:
+            _LOG.info("kaszkád: réteg=szabaly (nincs megőrzött kontextus)")
+            return szabaly_eredmeny
+
+        valtozas = self.llm.valtozas_elemzes(mondat, megorzott)
+        if not valtozas or not valtozas.get("elenged"):
+            _LOG.info("kaszkád: réteg=szabaly (a modell szerint semmi nem esik ki)")
+            return szabaly_eredmeny
+
+        szukitett = {k: v for k, v in megorzott.items() if k not in valtozas["elenged"]}
+        vegleges = self.szabaly.ertelmez(
+            mondat, most=most, kontextus=ErtelmezesKontextus(megorzott_parameterek=szukitett)
+        )
+        if vegleges == szabaly_eredmeny:
+            # Az elengedés nem változtatott az eredményen — akkor a
+            # modell érdemben nem járult hozzá, ne is állítsuk azt.
+            _LOG.info("kaszkád: réteg=szabaly (az elengedés nem változtatott)")
+            return szabaly_eredmeny
+
+        self.utolso_reteg = "llm"
+        _LOG.info("kaszkád: réteg=llm (elengedve: %s)", valtozas["elenged"])
         return vegleges
