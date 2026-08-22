@@ -190,6 +190,111 @@ rendszerórához (részletesen lent, "Beszélgetés-próba").
    adat, de a kapuőr ma is elutasítja, mielőtt odáig eljutna (golden set
    `kapuor-02`).
 
+### Beszélgetés-próba
+
+Ez a szakasz a szöveges út (`Írjon nekünk` fül) kézi próbája: **pontosan
+mit írj be, mit kell látnod, mi a hiba jele.**
+
+#### Előkészület
+
+```
+python feladat.py seed
+python -m ui.vasarlo
+```
+
+Modellel is, modell nélkül is végigjátszható. Modellel:
+
+```
+set APRAJAFALVA_LLM_MODELL=qwen3.5:9b     # Windows, cmd
+$env:APRAJAFALVA_LLM_MODELL="qwen3.5:9b"  # Windows, PowerShell
+```
+
+és fusson az Ollama (`ollama serve`). Ha bármelyik hiányzik, a felület
+**nem hibázik**, csak csendben a determinisztikus értelmezőre esik
+vissza — az ablak tetején álló sor megmondja, melyik eset áll fenn.
+
+#### Dátumot NEM kell fejben tartanod
+
+Az ablak tetején egy sor áll, ilyesmi:
+
+> A demóadat 2026-12-21 – 2026-12-27 hetére szól, beosztás ezekben a
+> boltokban van: Törpilla. A mai nap (…) kívül esik ezen, ezért a „ma”
+> ezen a felületen 2026-12-21-t jelent — nem kell dátumot fejben
+> tartanod. Értelmező: qwen3.5:9b (ha nem fut, csendben szabály-alapú).
+
+Ez azt jelenti: **nyugodtan írj „ma”-t, „holnap”-ot, „kedden”-t** — a
+felület ezeket a demóhéthez képest oldja fel. Amit tudni érdemes:
+
+| Amit beírsz | Mire oldódik fel | Van rá beosztás? |
+|---|---|---|
+| `ma` | 2026-12-21 (hétfő) | igen |
+| `holnap` | 2026-12-22 (kedd) | igen |
+| `szerdán` | 2026-12-23 | igen |
+| `a héten` | 2026-12-21 – 27 | igen |
+| `jövő héten` | 2026-12-28 – 2027-01-03 | **nincs** — az üres válasz itt helyes |
+
+És **boltot** a **Törpillát** válaszd: a demóadat csak oda generál
+műszakot. Szundi/Ügyifogyi keresésre a "Sajnos nincs szabad időpont"
+válasz helyes, nem hiba.
+
+#### A tíz próba
+
+Mindegyik előtt érdemes friss ablakot nyitni (a beszélgetés kontextusa
+megmarad a fülön belül).
+
+| # | Amit beírsz | Mit kell látnod | A hiba jele |
+|---|---|---|---|
+| 1 | `Törpillához mennék holnap` | Nyugtázó sor a felismert ablakkal, majd időpontok gombként. | Visszakérdezés a boltra (a mondat kimondta), vagy üres találat. |
+| 2 | `szeretnék menni valamikor` | Zárt kérdés + **három bolt-gomb**. Kattints a Törpillára → nyugtázó sor, majd időpontok. | Kitalált bolt vagy kitalált dátum: a helyes válasz itt a kérdés, nem a találgatás. |
+| 3 | `Mennyibe kerül a nagy petárda?` | "Ez a kérdés nem foglalással kapcsolatos…" | **Bármilyen ár** a válaszban, vagy foglalási ágra terelés. |
+| 4 | `Hogy néz ki a Törpilla bolt?` | A szerkesztett megjelenés-szöveg (`seed/betolt.py`, vagy amit adminban átírtál). | Kitalált leírás — ezt a mezőt a modell sosem generálja. |
+| 5 | `Meddig van nyitva a Szundi szombaton?` | Nyitvatartás-mondat. | Foglalási ág, vagy találgatott nyitvatartás. |
+| 6 | Előbb `Törpillához mennék`, aztán **külön fordulóban** `inkább délután` | A második fordulóban a boltot **nem** kérdezi újra — délutáni időpontok jönnek. | Újra rákérdez a boltra: a szándék kemény része elveszett. |
+| 7 | Előbb `Törpillához mennék holnap`, aztán `és bármelyik másik boltban?` | Zárt kérdés a boltra, a három gombbal. | Makacsul marad a Törpillánál: a mondat elvetette, mégsem engedte el. |
+| 8 | `Le szeretném mondani a foglalásomat.` | Kérdés a foglalási kódra. | Bármi más — kód nélkül lemondani nem szabad. |
+| 9 | Írd be háromszor egymás után ugyanazt a semmitmondó mondatot (`mennék`) | A harmadikra **más mondat**, és koppintható kiút-gombok (Másik bolt / Másik hét / Másik napszak). | Harmadszor is ugyanaz a válasz. |
+| 10 | Egy időpont-gomb → azonosítónak írj bármit → "Igen, foglalom" | "Foglalás létrejött! Foglalási kód: XXXXXXXX" | Hibaüzenet, vagy nincs kód. |
+
+#### Ha valami furcsa: nyisd meg a naplót
+
+A szöveges fül alján a **"Napló megnyitása"** gomb kiírja az eddigi
+fordulókat (`naplo/probak.jsonl`), fordulónként nyolc mezővel:
+
+```
+3. [2026-12-21T10:04:12Z]
+   bemenet:      'Törpillához mennék holnap'
+   normalizált:  'Törpillához mennék holnap'
+   réteg:        llm
+   eszköz:       szabad_idopontok
+   paraméterek:  {'bolt_id': 'torpilla', 'datum_tol': '2026-12-22T00:00:00Z', ...}
+   bizonyosság:  {'eszkoz': 0.99, 'bolt_id': 0.98, ...}
+   válasz:       ajanlat
+```
+
+Amit ebből leolvashatsz:
+
+- **`réteg`** — `llm`, ha a modell értelmezett; `szabaly`, ha a
+  determinisztikus tartalék. Ha mindenhol `szabaly`, akkor nem fut az
+  Ollama, vagy nincs beállítva a modellnév.
+- **`normalizált`** — mit LÁTOTT a rendszer abból, amit beírtál (a
+  tájszólási alakok itt már köznyelviek).
+- **`bizonyosság`** — a modell tényleges dekódolási valószínűségei. Ha
+  egy kritikus mező 0,6 alatt van, az orchestrator zárt kérdéssel
+  tisztáz (`BizonyossagKuszobok`) — ilyenkor a `válasz` mező
+  `visszakerdezes` lesz, pedig a mondat egyértelműnek tűnt.
+- **`válasz`** — `ajanlat`, `visszakerdezes`, `elutasitas`, `kiut`,
+  `eszkoz_hiba` vagy `sikeres`.
+
+#### Ugyanez fej nélkül, egyben
+
+```
+python feladat.py vegigjatszas
+```
+
+Végigjátssza a fenti (és a golden set `mintan_tul` rétegének)
+mondatait Tkinter-eseményhurok nélkül, és fordulónként kiírja ugyanezt.
+Hasznos, ha csak azt akarod látni, változott-e valami az előző futás óta.
+
 ### Mentés és helyreállítás
 
 Ehhez ma nincs önálló CLI-parancs, csak Python-függvény

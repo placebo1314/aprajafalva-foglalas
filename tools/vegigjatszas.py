@@ -17,6 +17,12 @@ eszköz és paraméterek, a válasz típusa, és a felület által ténylegesen
 megjelenített mondatok. A `naplo/probak.jsonl` közben ugyanúgy telik,
 mint kézi próbánál.
 
+**VALÓDI foglalást hoz létre** a megadott adatbázisban (a végigjátszás
+utolsó menete végigmegy a megerősítésig) — ez szándékos, mert épp azt
+ellenőrzi, hogy a felület elvezet-e a foglalási kódig. A demóadaton ez
+ártalmatlan: `python feladat.py seed --ujra` visszaállítja, vagy adj meg
+egy külön fájlt a `--db` kapcsolóval.
+
 **Ollama nélkül is lefut**: az értelmező ilyenkor csendben a
 determinisztikus rétegre esik vissza (`assistant/interpreter/__init__.py::
 alapertelmezett_ertelmezo`), és a végigjátszás ugyanúgy végigmegy — a
@@ -66,12 +72,21 @@ BESZELGETESEK: list[tuple[str, list[str]]] = [
         ["Törpillához mennék.", "hát izé, valamikor a jövő hét elején lenne jó"],
     ),
     # -- saját próbák, a mérésen kívül --------------------------------
-    ("zárt kérdés + gombnyomás", ["szeretnék időpontot holnapra", "ugyifogyi"]),
+    # Ezek szándékosan a TÖRPILLÁT célozzák: a demóadat csak oda generál
+    # műszakot, tehát csak itt fut végig a tényleges keresés → ajánlat →
+    # foglalás út. A fenti nyolc a nyelvi értelmezést méri, ez az ötös
+    # azt, hogy a felület ténylegesen elvezet-e a foglalási kódig.
+    ("zárt kérdés + gombnyomás", ["szeretnék időpontot holnapra", "torpilla"]),
     ("kapuőr", ["Mennyibe kerül a nagy petárda?"]),
     ("tényválasz", ["Hogy néz ki a Törpilla bolt?"]),
     ("lemondás kód nélkül", ["Le szeretném mondani a foglalásomat."]),
     ("ismétlés → kiút", ["mennék", "szeretnék menni", "menni szeretnék"]),
 ]
+
+# A teljes foglalási menet (keresés → jelölt → megerősítés → kód) — ezt
+# nem mondatlistával, hanem gombnyomásokkal kell végigvinni, ezért külön
+# függvényben van (`_foglalasi_menet`).
+FOGLALASI_MENET_MONDAT = "Törpillához mennék holnap"
 
 
 def _naplo_ujdonsag(app, korabbi_hossz: int) -> tuple[list[str], int]:
@@ -91,6 +106,18 @@ def _gombfeliratok(app) -> list[str]:
 
 def _jelolt_gombok(app) -> list[str]:
     return [w.cget("text") for w in app.szo_jelolt_keret.winfo_children()]
+
+
+def _widgetek(keret, osztaly: str) -> list:
+    """Egy widgetfa MINDEN adott osztályú eleme, mélységben — a
+    megerősítő gombok egy beágyazott `Frame`-ben ülnek, tehát a
+    `winfo_children()` önmagában nem találná meg őket."""
+    talalatok = []
+    for widget in keret.winfo_children():
+        if widget.winfo_class() == osztaly:
+            talalatok.append(widget)
+        talalatok.extend(_widgetek(widget, osztaly))
+    return talalatok
 
 
 def vegigjatszas(db_path: str) -> int:
@@ -127,8 +154,47 @@ def vegigjatszas(db_path: str) -> int:
                 print(f"    gombok:      {gombok}")
         print()
 
+    _foglalasi_menet(app)
     app._close()
     return 0
+
+
+def _foglalasi_menet(app) -> None:
+    """A teljes út a foglalási kódig, gombnyomásokkal — ugyanazokat a
+    `command`-eket hívja, amiket egy kattintás hívna (`Button.invoke()`),
+    tehát a felület valódi útját járja be, nem egy mellékbejáratot."""
+    print("=" * 72)
+    print("# teljes foglalási menet (keresés → jelölt → megerősítés → kód)")
+    app.session_id = new_uuid()
+    app._szo_kuldes(FOGLALASI_MENET_MONDAT)
+    print(f"\n  > {FOGLALASI_MENET_MONDAT}")
+
+    jeloltek = app.szo_jelolt_keret.winfo_children()
+    if not jeloltek:
+        print("    NINCS jelölt — a menet itt megáll (nézd meg a beosztás időszakát).")
+        return
+    print(f"    jelöltek:    {[w.cget('text') for w in jeloltek]}")
+
+    jeloltek[0].invoke()  # az első időpont-gomb
+    keret = app.szo_jelolt_keret
+    mezok = _widgetek(keret, "TEntry")
+    if not mezok:
+        print("    NINCS azonosító-mező a megerősítés után — a menet megáll.")
+        return
+    print("    megerősítés: bekérte az azonosítót")
+
+    mezok[0].delete(0, "end")
+    mezok[0].insert(0, "proba-azonosito-123")
+    igen = next((g for g in _widgetek(keret, "TButton") if "foglalom" in g.cget("text")), None)
+    if igen is None:
+        print("    NINCS 'Igen, foglalom' gomb — a menet megáll.")
+        return
+    igen.invoke()
+
+    eredmeny = [w.cget("text") for w in _widgetek(keret, "TLabel")]
+    print(f"    eredmény:    {eredmeny}")
+    if app.szo_uzenet.cget("text"):
+        print(f"    hibasor:     {app.szo_uzenet.cget('text')}")
 
 
 def main(argv: list[str] | None = None) -> int:

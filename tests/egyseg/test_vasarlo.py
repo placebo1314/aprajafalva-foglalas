@@ -35,7 +35,7 @@ def test_idopont_cimke_formazas():
 def test_horgony_a_beosztas_elso_napjara_esik_ha_a_mai_nap_kivul_van():
     """A demóadat távoli hete: a "ma" a beosztás első napja legyen,
     hogy a "holnap"/"kedden" ne üres keresésre fusson."""
-    assert horgony_most(_IDOSZAK, "2026-08-22T14:30:00Z") == "2026-12-21T14:30:00Z"
+    assert horgony_most(_IDOSZAK, "2026-08-22T14:30:00Z") == "2026-12-21T00:00:00Z"
 
 
 def test_horgony_a_valodi_idot_hagyja_ha_a_mai_nap_a_beosztasban_van():
@@ -48,10 +48,11 @@ def test_horgony_beosztas_nelkul_a_valodi_idot_adja():
     assert horgony_most(None, "2026-08-22T14:30:00Z") == "2026-08-22T14:30:00Z"
 
 
-def test_horgony_a_napszakot_megtartja():
-    """A nap változik, az óra/perc nem — este próbálgatva az "este"
-    napszak-szűrő is értelmes maradjon."""
-    assert horgony_most(_IDOSZAK, "2026-08-22T19:45:12Z")[11:] == "19:45:12Z"
+def test_horgony_a_nap_elejere_all_nem_a_valodi_orara():
+    """Este próbálgatva a valódi óra megtartása azt jelentené, hogy a
+    "ma" a bolt zárása UTÁN kezdődik — üres válasz, pontosan az a hiba,
+    amit a horgony megszüntetni hivatott."""
+    assert horgony_most(_IDOSZAK, "2026-08-22T19:45:12Z") == "2026-12-21T00:00:00Z"
 
 
 # --- _proba_naplo_ir -------------------------------------------------

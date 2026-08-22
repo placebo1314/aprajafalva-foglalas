@@ -114,14 +114,20 @@ _NAP_VALASZTO_MAX = 21
 
 def horgony_most(idoszak: dict | None, valodi_most: str) -> str:
     """A szöveges út `most` értéke: a valódi idő, HA a mai nap beleesik a
-    beosztás időszakába — különben az időszak első napja, a mai
-    napszakot megtartva.
+    beosztás időszakába — különben az időszak első napjának ELEJE.
 
     Miért: a demóadat egy fix, távoli hétre szól. Ha a "holnap" a valódi
     holnapot jelentené, minden keresés üresen térne vissza, és a
     próbálgató ebből azt látná, hogy a rendszer nem működik — a
     dokumentált, de észben tartandó dátum a legrosszabb fajta felületi
     teher (`docs/TESZTELES.md`, "Beszélgetés-próba").
+
+    **A napszakot is elengedjük** (`T00:00:00Z`), nem csak a napot: ha a
+    valódi órát tartanánk meg, egy este próbálgató felhasználónak a "ma"
+    egy olyan ablakot jelentene, ami a bolt nyitvatartása UTÁN kezdődik —
+    tehát üresen térne vissza, pontosan attól a hibától, amit ez a
+    horgony megszüntetni hivatott. A horgonyzott nap amúgy is egy másik
+    (jövőbeli) naptári nap, ott a "már elmúlt" fogalomnak nincs értelme.
 
     Ez a horgony **kizárólag a felületé**: az így kapott ISO-időbélyeg
     ugyanúgy UTC és ugyanúgy végigmegy az orchestratoron, mint bármelyik
@@ -132,7 +138,7 @@ def horgony_most(idoszak: dict | None, valodi_most: str) -> str:
     ma = valodi_most[:10]
     if idoszak["elso_nap"] <= ma <= idoszak["utolso_nap"]:
         return valodi_most
-    return f"{idoszak['elso_nap']}T{valodi_most[11:]}"
+    return f"{idoszak['elso_nap']}T00:00:00Z"
 
 
 def _idopont_cimke(kezdet_iso: str, veg_iso: str) -> str:
@@ -547,8 +553,14 @@ class VasarloApp(tk.Tk):
         self.szo_beviteli_valto.set("")
         self._naplo_ir("Te", szoveg)
 
-        for widget in self.szo_gombsor.winfo_children():
-            widget.destroy()
+        # MINDKÉT gombkeretet ürítjük, nem csak a kiút-gombokat: a
+        # korábbi forduló időpont-gombjai különben a képernyőn maradnának
+        # egy olyan válasz mellett, aminek semmi köze hozzájuk (pl. egy
+        # lemondás-kérdés alatt ott állna három foglalható időpont) — és
+        # rájuk kattintva egy már lezárt ajánlatból választana a vásárló.
+        for keret in (self.szo_gombsor, self.szo_jelolt_keret):
+            for widget in keret.winfo_children():
+                widget.destroy()
         self.szo_uzenet.config(text="")
 
         valasz = self.orchestrator.fordulo(self.session_id, szoveg, self._most_iso())
