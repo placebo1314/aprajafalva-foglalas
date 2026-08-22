@@ -333,6 +333,20 @@ class VasarloApp(tk.Tk):
         self.szo_uzenet = ttk.Label(tab, text="", foreground="#a00", wraplength=700)
         self.szo_uzenet.pack(anchor="w")
 
+    # A kiút-gombok mögötti, előre megírt mondatok: a választás egy új
+    # fordulóként megy vissza az orchestratorba, hogy onnantól a szokásos
+    # út fusson (értelmező → állapotgép), ne külön ág.
+    _KIUT_MONDAT = {
+        "bolt": "másik boltban szeretnék",
+        "het": "jövő héten szeretnék",
+        "napszak": "bármikor jó, bármelyik napszakban",
+    }
+
+    def _kiut_valasztas(self, dimenzio: str) -> None:
+        mondat = self._KIUT_MONDAT.get(dimenzio)
+        if mondat:
+            self._szo_kuldes(mondat)
+
     def _alternativa_felajanl(self, dimenzio: str | None) -> None:
         """Ha az eszköz talált alternatívát (`alternativ_dimenzio`),
         felajánljuk KOPPINTHATÓ gombként — a vásárlónak nem kell újra
@@ -386,6 +400,19 @@ class VasarloApp(tk.Tk):
 
         if tipus == "elutasitas":
             self._naplo_ir("Rendszer", valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"]))
+            return
+
+        if tipus == "kiut":
+            # Ugyanaz a válasz harmadszor nem megy ki — más mondat, zárt
+            # választással (blueprint 7. szakasz, "Négy technika" 2.).
+            bevezetes, gombok = valasz_szoveg.kiut_szoveg(valasz.get("valaszthato_dimenziok", []))
+            self._naplo_ir("Rendszer", bevezetes)
+            for dimenzio, felirat in gombok:
+                ttk.Button(
+                    self.szo_gombsor,
+                    text=felirat,
+                    command=lambda d=dimenzio: self._kiut_valasztas(d),
+                ).pack(side="left", padx=(0, 6))
             return
 
         if tipus == "visszakerdezes":

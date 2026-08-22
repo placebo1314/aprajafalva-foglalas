@@ -56,6 +56,10 @@ SABLONOK: dict[str, dict[str, object]] = {
             "nem_ajanlott_jelolt": "Ez az időpont már nem szerepel az ajánlatban.",
             "nincs_folyamatban_levo_valasztas": "Előbb válassz egy időpontot.",
             "nincs_korabbi_kereses": "Előbb keress időpontot, utána tudok alternatívát mutatni.",
+            # A kiút saját, bővebb megfogalmazása a `kiut` kategóriában
+            # van (gombokkal együtt) — ez a tartalék, ha a hívó csak a
+            # hibakulcsot tudja megjeleníteni.
+            "ismetlodo_valasz_kiut": "Úgy látom, itt körbe-körbe járunk — próbáljuk másképp.",
             "ervenytelen_alternativa": "Ezt az alternatívát most nem tudom megmutatni.",
             "ervenytelen_kod": "Nem találtam ilyen foglalási kódot.",
             "nincs_ilyen_foglalas": "Nem találtam ilyen foglalási kódot.",
@@ -88,6 +92,22 @@ SABLONOK: dict[str, dict[str, object]] = {
         # szóló, koppintható felajánlás felirata — nem a modell
         # fogalmazza, sablon.
         # ------------------------------------------------------------
+        # ------------------------------------------------------------
+        # kiut — ha ugyanaz a válasz harmadszor jönne ki, nem ismételjük
+        # meg: más mondat, és zárt, koppintható választás. A `dimenzio`
+        # kulcsai az `assistant/orchestrator.py::_KIUT_DIMENZIOK` zárt
+        # halmaza.
+        # ------------------------------------------------------------
+        "kiut": {
+            "bevezetes": (
+                "Úgy látom, itt körbe-körbe járunk — próbáljuk másképp. Min tudsz lazítani?"
+            ),
+            "dimenzio": {
+                "bolt": "Másik bolt",
+                "het": "Másik hét",
+                "napszak": "Másik napszak",
+            },
+        },
         "alternativa": {
             "bevezetes": {
                 "napszak": "Ebben a napszakban nincs, de aznap más napszakban van szabad időpont.",

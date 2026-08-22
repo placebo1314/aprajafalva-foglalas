@@ -701,3 +701,101 @@ def test_fordulo_foglalas_lekerdezes_rate_limit_session_szintu(tmp_path):
     masik_orch = Orchestrator(conn, masik_ertelmezo, org_id=ctx["org_id"])
     masik_valasz = masik_orch.fordulo("session-2", "mik a foglalásaim?", _MOST)
     assert masik_valasz.get("ok") != "rate_limit"
+
+
+# --- ismétlésfigyelés (blueprint 7., "Négy technika") ----------------
+
+
+def _visszakerdez_valasz(mezo: str = "bolt_id") -> dict:
+    return {
+        "eszkoz": "visszakerdez",
+        "parameterek": {"hianyzo_mezo": mezo, "varhato_kerdes_tipusa": "zart"},
+    }
+
+
+def test_ismetles_ugyanaz_a_valasz_ketszer_mehet_ki(tmp_path):
+    conn = _conn(tmp_path)
+    _seed(conn)
+    orch = Orchestrator(conn, _ScriptedErtelmezo([_visszakerdez_valasz()] * 2), org_id="bármi")
+
+    elso = orch.fordulo("s1", "hova is menjek", _MOST)
+    masodik = orch.fordulo("s1", "hát nem tudom", _MOST)
+
+    assert elso["tipus"] == "visszakerdezes"
+    assert masodik["tipus"] == "visszakerdezes"
+
+
+def test_ismetles_harmadikra_kiutat_ajanl_zart_valasztassal(tmp_path):
+    """A harmadik azonos válasz helyett más mondat és zárt választás —
+    a rendszer nem mondja harmadszor ugyanazt."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    orch = Orchestrator(conn, _ScriptedErtelmezo([_visszakerdez_valasz()] * 3), org_id="bármi")
+
+    orch.fordulo("s1", "hova is menjek", _MOST)
+    orch.fordulo("s1", "hát nem tudom", _MOST)
+    harmadik = orch.fordulo("s1", "nem tudom megmondani", _MOST)
+
+    assert harmadik["tipus"] == "kiut"
+    assert harmadik["uzenet_kulcs"] == "ismetlodo_valasz_kiut"
+    assert harmadik["valaszthato_dimenziok"] == ["bolt", "het", "napszak"]
+
+
+def test_ismetles_mas_valaszfajta_nullazza_a_szamlalot(tmp_path):
+    """Ha a beszélgetés elmozdul (másik válaszfajta jön), a számláló
+    nullázódik — nem büntetjük a vásárlót egy korábbi szakaszért."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            _visszakerdez_valasz(),
+            _visszakerdez_valasz(),
+            {"eszkoz": "nincs", "parameterek": {}},  # elmozdulás
+            _visszakerdez_valasz(),
+            _visszakerdez_valasz(),
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    orch.fordulo("s1", "a", _MOST)
+    orch.fordulo("s1", "b", _MOST)
+    orch.fordulo("s1", "milyen idő lesz?", _MOST)
+    negyedik = orch.fordulo("s1", "c", _MOST)
+    otodik = orch.fordulo("s1", "d", _MOST)
+
+    assert negyedik["tipus"] == "visszakerdezes"
+    assert otodik["tipus"] == "visszakerdezes", "a számlálónak nullázódnia kellett"
+
+
+def test_ismetles_kulon_mezore_kulon_szamlal(tmp_path):
+    """A visszakérdezés azonossága a HIÁNYZÓ MEZŐN múlik — más mezőt
+    kérdezni előrelépés, nem ismétlés."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            _visszakerdez_valasz("bolt_id"),
+            _visszakerdez_valasz("bolt_id"),
+            _visszakerdez_valasz("foglalasi_kod"),
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    orch.fordulo("s1", "a", _MOST)
+    orch.fordulo("s1", "b", _MOST)
+    harmadik = orch.fordulo("s1", "c", _MOST)
+
+    assert harmadik["tipus"] == "visszakerdezes"
+    assert harmadik["hianyzo_mezo"] == "foglalasi_kod"
+
+
+def test_ismetles_sessionok_kozott_fuggetlen(tmp_path):
+    conn = _conn(tmp_path)
+    _seed(conn)
+    orch = Orchestrator(conn, _ScriptedErtelmezo([_visszakerdez_valasz()] * 3), org_id="bármi")
+
+    orch.fordulo("s1", "a", _MOST)
+    orch.fordulo("s1", "b", _MOST)
+    masik_session = orch.fordulo("s2", "c", _MOST)
+
+    assert masik_session["tipus"] == "visszakerdezes"

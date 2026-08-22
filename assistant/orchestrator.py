@@ -66,6 +66,16 @@ _VISSZAKERDEZ_IRANYITASI_MEZOK = frozenset(
 # kontextusra, nem a slot-zárolásra vetítve).
 _KEMENY_MEZOK = frozenset({"bolt_id", "szolgaltatas_id"})
 
+# Ugyanaz a válaszfajta legfeljebb ennyiszer mehet ki változatlanul; a
+# következőre a rendszer kiutat ajánl (`_ismetlest_figyel`). Kettő: az
+# első válasz maga, plusz egy megismétlés — a harmadikra már látszik,
+# hogy körbe futunk.
+_ISMETLES_KUSZOB = 2
+
+# A kiútban felajánlott, zárt választási lehetőségek — azok a
+# dimenziók, amelyek mentén a vásárló ténylegesen tud lazítani.
+_KIUT_DIMENZIOK = ("bolt", "het", "napszak")
+
 
 def kovetkezo_kontextus(elozo_megorzott: dict, ertelmezes: dict) -> dict:
     """Tiszta, állapot nélküli függvény: az előző fordulóban megőrzött
@@ -142,6 +152,9 @@ class _SessionAllapot:
     # `alternativa_kereses()`, hogy a vásárlónak ne kelljen újra
     # elmondania, mit keresett.
     utolso_kereses: dict = field(default_factory=dict)
+    # Ismétlésfigyelés: {"kulcs": <válaszfajta>, "darab": n} — l.
+    # `Orchestrator._ismetlest_figyel`.
+    valasz_ismetles: dict = field(default_factory=dict)
 
 
 class Orchestrator:
@@ -164,6 +177,12 @@ class Orchestrator:
 
     def fordulo(self, session_id: str, mondat: str, most: str) -> dict:
         allapot = self._allapot(session_id)
+        valasz = self._fordulo_belso(allapot, session_id, mondat, most)
+        return self._ismetlest_figyel(allapot, valasz)
+
+    def _fordulo_belso(
+        self, allapot: _SessionAllapot, session_id: str, mondat: str, most: str
+    ) -> dict:
         kontextus = ErtelmezesKontextus(megorzott_parameterek=dict(allapot.megorzott_parameterek))
         ertelmezes = self.ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
         self.utolso_ertelmezes = ertelmezes
@@ -202,6 +221,51 @@ class Orchestrator:
         return self._visszakerdez(
             allapot, {"hianyzo_mezo": "eszkoz", "varhato_kerdes_tipusa": "zart"}
         )
+
+    @staticmethod
+    def _valasz_kulcs(valasz: dict) -> str | None:
+        """A válasz "fajtájának" stabil azonosítója az ismétlésfigyeléshez.
+        Visszakérdezésnél a HIÁNYZÓ MEZŐ a lényeg (ugyanazt a mezőt
+        kérdezzük-e újra), máshol az `uzenet_kulcs`. Sikeres ajánlat/
+        visszaigazolás nem ismétlés-gyanús — arra `None`."""
+        tipus = valasz.get("tipus")
+        if tipus == "visszakerdezes":
+            return f"visszakerdezes:{valasz.get('hianyzo_mezo')}"
+        kulcs = valasz.get("uzenet_kulcs")
+        return f"{tipus or 'eszkoz'}:{kulcs}" if kulcs else None
+
+    def _ismetlest_figyel(self, allapot: _SessionAllapot, valasz: dict) -> dict:
+        """Ugyanaz a válaszfajta legfeljebb `_ISMETLES_KUSZOB`-ször mehet
+        ki változatlanul. A küszöb fölött a rendszer nem mondja
+        harmadszor is ugyanazt, hanem **kiutat** ajánl: más mondat, és
+        egy zárt, koppintható választás (bolt / hét / napszak) —
+        blueprint 7. szakasz, "Négy technika" 2. pontjának szellemében
+        (bizonytalanságnál zárt kérdés), és a vásárló 8. igénye szerint
+        (legyen kiút).
+
+        A számláló csak az AZONOS fajtára nő; egy másfajta válasz
+        nullázza, mert az azt jelenti, hogy a beszélgetés elmozdult."""
+        kulcs = self._valasz_kulcs(valasz)
+        if kulcs is None:
+            allapot.valasz_ismetles = {}
+            return valasz
+
+        if allapot.valasz_ismetles.get("kulcs") != kulcs:
+            allapot.valasz_ismetles = {"kulcs": kulcs, "darab": 1}
+            return valasz
+
+        allapot.valasz_ismetles["darab"] += 1
+        if allapot.valasz_ismetles["darab"] <= _ISMETLES_KUSZOB:
+            return valasz
+
+        return {
+            "tipus": "kiut",
+            "uzenet_kulcs": "ismetlodo_valasz_kiut",
+            "valaszthato_dimenziok": list(_KIUT_DIMENZIOK),
+            # Az eredeti válasz kulcsát megtartjuk, hogy a hívó (és a
+            # próba-napló) lássa, MIBŐL futottunk körbe.
+            "eredeti_uzenet_kulcs": valasz.get("uzenet_kulcs"),
+        }
 
     def _visszakerdez(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
         allapot.sikertelen_ertelmezesek += 1

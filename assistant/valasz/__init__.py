@@ -64,6 +64,18 @@ def ajanlat_bevezetes_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
     return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_bevezetes"]
 
 
+def kiut_szoveg(
+    dimenziok: list[str], *, nyelv: str = _NYELV_ALAPERTELMEZETT
+) -> tuple[str, list[tuple[str, str]]]:
+    """`(bevezető mondat, [(dimenzió, gombfelirat), ...])` az
+    ismétlés-kiúthoz. A `dimenziok` az orchestrator zárt kimenete
+    (`_KIUT_DIMENZIOK`) — ismeretlen elemet kihagyunk, nem találunk ki
+    hozzá feliratot."""
+    sablonok = SABLONOK[nyelv]["kiut"]
+    gombok = [(d, sablonok["dimenzio"][d]) for d in dimenziok if d in sablonok["dimenzio"]]
+    return sablonok["bevezetes"], gombok
+
+
 def alternativa_szoveg(
     dimenzio: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT
 ) -> tuple[str, str] | None:
