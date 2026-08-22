@@ -370,14 +370,25 @@ class LLMErtelmezo:
             "required": ["elenged"],
             "additionalProperties": False,
         }
+        # A megfogalmazás mérésből származik: az első változat ("melyik
+        # adat nem érvényes már?") a modellt túl-elengedésre vitte —
+        # minden olyan mezőt eldobott, amit a mondat NEM EMLÍTETT, nem
+        # csak amit ELLENTMONDOTT neki. Emiatt a "bármikor a jövő héten"
+        # (ami a dátumot változtatja) a boltot is eldobta. A kimondott
+        # alapszabály + a két eset szembeállítása ezt a hibaosztályt
+        # célozza, nem egy-egy konkrét mondatot.
         prompt = (
             "Egy foglalási beszélgetés eddig ezeket tudta a vásárlóról:\n"
             + "\n".join(f"- {k}: {megorzott_parameterek[k]}" for k in kulcsok)
             + "\n\nA vásárló új mondata: "
             + mondat
-            + "\n\nMelyik korábbi adat NEM érvényes már az új mondat után? "
-            "Csak azokat sorold fel, amiket a mondat ténylegesen felülír vagy "
-            "elvet. Ha mindegyik érvényben marad, üres listát adj."
+            + "\n\nVedd sorra a fenti adatokat egyenként. Egy adatot akkor "
+            "sorolj fel, ha a mondat AZ ADOTT ADATRÓL szól, és mást kér, mint "
+            "ami fent szerepel (akár konkrét másikat, akár azt, hogy mindegy). "
+            "Ha a mondat nem erről az adatról szól, hagyd ki.\n\n"
+            "Példa a gondolatmenetre: ha a mondat egy másik napról szól, akkor "
+            "a dátum szerepel a listában, a bolt viszont nem — a mondat nem a "
+            "boltról szólt."
         )
         payload = {
             "model": self.szolgaltato.modell,

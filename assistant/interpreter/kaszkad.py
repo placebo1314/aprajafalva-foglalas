@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import logging
 
-from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
+from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, rule_based
 from assistant.interpreter.llm_based import LLMErtelmezo
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 from assistant.tools.katalogus import BOLT_SLUGOK
@@ -73,6 +73,10 @@ _LOG = logging.getLogger(__name__)
 # szellemben, mint az áthelyezés egyfordulós korlátja
 # (assistant/orchestrator.py docstring).
 _KIEGESZITHETO_MEZOK = frozenset({"bolt_id"})
+
+# A szándék KEMÉNY része (ADR-016, `orchestrator.kovetkezo_kontextus`) —
+# ezt egy időről szóló mondat nem engedheti el, l. `_kemeny_reszt_vedd`.
+_KEMENY_MEZOK = frozenset({"bolt_id", "szolgaltatas_id"})
 
 
 class KaszkadErtelmezo:
@@ -172,7 +176,12 @@ class KaszkadErtelmezo:
             _LOG.info("kaszkád: réteg=szabaly (a modell szerint semmi nem esik ki)")
             return szabaly_eredmeny
 
-        szukitett = {k: v for k, v in megorzott.items() if k not in valtozas["elenged"]}
+        elenged = self._kemeny_reszt_vedd(mondat, most, valtozas["elenged"])
+        if not elenged:
+            _LOG.info("kaszkád: réteg=szabaly (a javasolt elengedést a védőháló kiszűrte)")
+            return szabaly_eredmeny
+
+        szukitett = {k: v for k, v in megorzott.items() if k not in elenged}
         vegleges = self.szabaly.ertelmez(
             mondat, most=most, kontextus=ErtelmezesKontextus(megorzott_parameterek=szukitett)
         )
@@ -183,5 +192,31 @@ class KaszkadErtelmezo:
             return szabaly_eredmeny
 
         self.utolso_reteg = "llm"
-        _LOG.info("kaszkád: réteg=llm (elengedve: %s)", valtozas["elenged"])
+        _LOG.info("kaszkád: réteg=llm (elengedve: %s)", elenged)
         return vegleges
+
+    @staticmethod
+    def _kemeny_reszt_vedd(mondat: str, most: str, elenged: list[str]) -> list[str]:
+        """Védőháló a modell túl-elengedése ellen: ha a mondat POZITÍV
+        időbeli jelzést tartalmaz (a determinisztikus parser dátumot vagy
+        napszakot old fel belőle), akkor a mondat IDŐRŐL szól — ilyenkor
+        a KEMÉNY rész (bolt, szolgáltatás) nem eshet ki miatta.
+
+        Ez nem kulcsszólista és nem a mérési halmazhoz igazítás: a
+        szándék-rétegzés doktrínájának (ADR-016,
+        `orchestrator.kovetkezo_kontextus`) közvetlen alkalmazása — a
+        kemény rész csak akkor mozdul, ha a mondat POZITÍVAN mást állít
+        róla, nem pusztán attól, hogy nem említi.
+
+        Miért kell: három különböző promptmegfogalmazással mérve a
+        qwen3.5:9b vagy MINDENT elengedett (a "bármikor a jövő héten"
+        mondatra a boltot is), vagy semmit — a "melyik adatnak mond
+        ellent a mondat" osztályozás ezen a modellméreten önmagában nem
+        megbízható. A védőháló azt a hibaosztályt zárja ki, ami a
+        determinisztikus alapvonalat RONTANÁ."""
+        if not rule_based.idobeli_jelzes(mondat, most):
+            return list(elenged)
+        szurt = [m for m in elenged if m not in _KEMENY_MEZOK]
+        if szurt != list(elenged):
+            _LOG.info("kaszkád: a kemény rész védve (a mondat időről szól)")
+        return szurt

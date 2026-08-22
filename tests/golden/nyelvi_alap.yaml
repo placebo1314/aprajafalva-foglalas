@@ -29,6 +29,10 @@ meta:
     szleng: 0.92
     egyszerusitett: 0.90
     alkudozas: 0.90
+    # Az elengedés-réteg a KASZKÁD képességét méri (a kemény rész
+    # elvetése) — a determinisztikus alapvonalon várhatóan 0%, ezért az
+    # `igenyel_llm: true` jelölés (l. a réteg fejlécét lent).
+    elengedes: 0.90
 
 esetek:
 
@@ -505,3 +509,76 @@ esetek:
       2. forduló ("van esetleg más napon?") a boltot újramondás nélkül,
       általános ablakkal folytathatja a keresést.
     cimkek: [alkudozas, elutasitas_utan_alternativa, tobbfordulos]
+
+# -----------------------------------------------------------------------
+# Elengedés — a szándék KEMÉNY részének (bolt, szolgáltatás) elvetése egy
+# későbbi fordulóban. Ez az a képesség, amit a determinisztikus réteg NEM
+# tud: a szándék-rétegzés (ADR-016) a puha részt (dátum, napszak) magától
+# elengedi egy lezárt keresés után, a keményet viszont szándékosan
+# megtartja — épp ezért kell hozzá a modell (`assistant/interpreter/
+# kaszkad.py`, elengedés-ág).
+#
+# `igenyel_llm: true` — ezek az esetek a determinisztikus alapvonalon
+# VÁRHATÓAN buknak. Nem hiba: ez a golden set első olyan rétege, ami
+# ténylegesen megkülönbözteti a szabály-alapú és a kaszkád értelmezőt.
+# A `tests/egyseg/test_rule_based_golden_set.py` regressziós védőháló
+# (ami a determinisztikus réteget őrzi) emiatt kihagyja őket — a
+# `python feladat.py golden` viszont MINDEN értelmezőre jelenti.
+#
+# A várt értékeket a HELYES viselkedésből vezettük le, nem abból, amit a
+# modell éppen ad (golden-set skill: "Ne a modell kimenetéből írj
+# tesztesetet").
+# -----------------------------------------------------------------------
+
+  - id: elengedes-01-bolt
+    bemenet:
+      - "Petárdázni szeretnék kedden."
+      - "és bármelyik másik boltban?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    megjegyzes: >
+      A 2. forduló elveti a korábban megnevezett boltot, de nem nevez meg
+      újat — a helyes válasz ezért zárt visszakérdezés a boltra. A
+      determinisztikus réteg itt az ugyifogyi-t tartaná meg, mert a
+      mondatban nincs olyan szó, amit szabállyal keresni lehetne;
+      kulcsszólistát írni rá ráigazítás lenne.
+    cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]
+
+  - id: elengedes-02-bolt-mas-megfogalmazas
+    bemenet:
+      - "Szeretnék időpontot a Szundiba szerdára."
+      - "mindegy melyik bolt, csak legyen hely"
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    megjegyzes: >
+      Ugyanaz a képesség, MÁS megfogalmazással — szándékosan, hogy a
+      mérés ne egyetlen mondatra álljon be. A "mindegy melyik" itt a
+      boltot engedi el, nem az időpontot.
+    cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]
+
+  - id: elengedes-03-szolgaltatas
+    bemenet:
+      - "Nagy petárdát szeretnék kedden."
+      - "mindegy milyen méret"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-24T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A kemény rész MÁSIK fele: a szolgáltatás (méret) esik ki, a bolt
+      marad. A determinisztikus réteg a nagy_petarda-t tartaná meg.
+      A dátum a 2. fordulóban nincs megnevezve, ezért az általános
+      ablakra esik vissza — ez a szándék-rétegzés szerint helyes.
+    cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]

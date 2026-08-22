@@ -62,6 +62,10 @@ class Eset:
     cimkek: list[str]
     reszleges_elfogadas: dict | None = None
     tilos: list[str] = field(default_factory=list)
+    # Ez az eset olyan képességet mér, amit a determinisztikus réteg
+    # nem tud (pl. a szándék kemény részének elengedése) — a
+    # determinisztikus regressziós védőháló kihagyja, a mérés nem.
+    igenyel_llm: bool = False
 
     @property
     def reteg(self) -> str:
@@ -87,6 +91,7 @@ def betolt(utvonal: Path = GOLDEN_UTVONAL) -> tuple[dict, list[Eset]]:
             cimkek=e.get("cimkek", []),
             reszleges_elfogadas=e.get("reszleges_elfogadas"),
             tilos=e.get("tilos", []),
+            igenyel_llm=bool(e.get("igenyel_llm", False)),
         )
         for e in adat["esetek"]
     ]

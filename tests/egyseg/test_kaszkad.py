@@ -312,3 +312,55 @@ def test_kaszkad_elengedes_a_datumot_tovabbra_is_a_parser_adja():
 
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-24T00:00:00Z"
     assert eredmeny["parameterek"]["datum_ig"] == "2026-08-30T23:59:59Z"
+
+
+def test_kaszkad_idorol_szolo_mondat_nem_engedheti_el_a_boltot():
+    """Védőháló a modell túl-elengedése ellen: ha a mondat POZITÍV
+    időbeli jelzést tartalmaz, a KEMÉNY rész (bolt) nem eshet ki —
+    akkor sem, ha a modell ezt javasolja. Mérve ez volt a modell
+    tipikus hibája: a "bármikor a jövő héten" mondatra a boltot is
+    eldobta."""
+    llm = _FakeElengedoLLM(elenged=["bolt_id"])
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = kaszkad.ertelmez(
+        "bármikor a jövő héten",
+        most=_MOST,
+        kontextus=ErtelmezesKontextus(megorzott_parameterek={"bolt_id": "ugyifogyi"}),
+    )
+
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi", "a bolt nem eshet ki"
+    assert kaszkad.utolso_reteg == "szabaly"
+
+
+def test_kaszkad_idojelzes_nelkuli_mondat_elengedheti_a_boltot():
+    """A védőháló csak az IDŐRŐL szóló mondatokra véd — egy boltról
+    szóló mondat továbbra is elengedheti a boltot."""
+    llm = _FakeElengedoLLM(elenged=["bolt_id"])
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = kaszkad.ertelmez(
+        "és máshol?",
+        most=_MOST,
+        kontextus=ErtelmezesKontextus(megorzott_parameterek={"bolt_id": "ugyifogyi"}),
+    )
+
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert kaszkad.utolso_reteg == "llm"
+
+
+def test_kaszkad_idorol_szolo_mondat_a_puha_reszt_elengedheti():
+    """A védőháló a KEMÉNY részre szól — a napszakot egy időről szóló
+    mondat továbbra is elengedheti."""
+    llm = _FakeElengedoLLM(elenged=["napszak", "datum_tol", "datum_ig"])
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = kaszkad.ertelmez(
+        "inkább jövő héten",
+        most=_MOST,
+        kontextus=ErtelmezesKontextus(megorzott_parameterek=dict(_KONTEKTUS_NAPSZAKKAL)),
+    )
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-24T00:00:00Z"
+    assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi"

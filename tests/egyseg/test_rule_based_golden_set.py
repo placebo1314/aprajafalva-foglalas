@@ -8,7 +8,15 @@ UGYANAZ a kód fut itt, mint amit `python feladat.py golden` közvetlenül
 futtat. Nincs itt önálló másolat: a `tests/golden/futtato.py` a tartós
 modul (M3), ez a fájl csak a pytest-integrációt adja hozzá (rétegenkénti
 küszöb-assertek, tiltott-minta ellenőrzés) — egy- ÉS többfordulós
-(alkudozás) esetekkel egyaránt."""
+(alkudozás) esetekkel egyaránt.
+
+**Az `igenyel_llm: true` eseteket kihagyja** — azok olyan képességet
+mérnek, amit a determinisztikus réteg elvileg nem tud (a szándék kemény
+részének elengedése, `elengedes-*`), és amit csak a kaszkád LLM-rétege
+old meg. Ezeket beleszámolni ebbe a védőhálóba félrevezető lenne: nem
+regresszió, hanem a réteg dokumentált korlátja. A `python feladat.py
+golden` viszont MINDEN esetet jelent, minden értelmezőre — a mérés
+teljes marad, csak ez a determinisztikus őrszem szűkebb."""
 
 from __future__ import annotations
 
@@ -18,8 +26,20 @@ from tests.golden.futtato import betolt, ertelmezo_hivo, fut
 
 def _futtat():
     meta, esetek = betolt()
-    eredmenyek = fut(meta, esetek, ertelmezo_hivo(SzabalyAlapuErtelmezo()))
-    return meta, esetek, eredmenyek
+    determinisztikus = [e for e in esetek if not e.igenyel_llm]
+    eredmenyek = fut(meta, determinisztikus, ertelmezo_hivo(SzabalyAlapuErtelmezo()))
+    return meta, determinisztikus, eredmenyek
+
+
+def test_golden_set_az_llm_igenyu_esetek_ki_vannak_hagyva():
+    """Előfeltétel-ellenőrzés: a szűkítés ténylegesen kihagy eseteket, és
+    a kihagyottak mind meg vannak jelölve. Ha ez elromlana, a védőháló
+    csendben mást mérne, mint amit állít."""
+    _, determinisztikus, _ = _futtat()
+    _, osszes = betolt()
+    kihagyott = [e for e in osszes if e.igenyel_llm]
+    assert kihagyott, "kell legyen legalább egy igenyel_llm eset"
+    assert len(determinisztikus) + len(kihagyott) == len(osszes)
 
 
 def test_golden_set_minden_eset_lefut_hiba_nelkul():

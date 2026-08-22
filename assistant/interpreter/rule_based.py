@@ -422,3 +422,16 @@ class SzabalyAlapuErtelmezo:
             "parameterek": vegleges,
             "bizonyossag": bizonyossag,
         }
+
+
+def idobeli_jelzes(mondat: str, most: str) -> bool:
+    """Tartalmaz-e a mondat POZITÍV időbeli jelzést (feloldható dátumot
+    vagy napszakot)? Determinisztikus, ugyanazokkal a szabályokkal, mint
+    az értelmezés maga — nem külön kulcsszólista.
+
+    A kaszkád (`kaszkad.py`) ezzel dönti el, hogy egy mondat "időről
+    szól-e": ha igen, akkor a KEMÉNY rész (bolt, szolgáltatás) nem eshet
+    ki miatta, mert a mondat nem arról szólt."""
+    szoveg = normalizal(mondat)
+    datum_tol, _ = _datum_ablak_explicit(szoveg, most)
+    return bool(datum_tol) or _napszak_explicit(szoveg.lower()) is not None
