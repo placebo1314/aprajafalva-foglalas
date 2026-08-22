@@ -114,24 +114,24 @@ paraméternevekben, ezért a `varhato_kerdes_tipusa` mezőt is "kitalált
 | Értelmező | Összesített | Leggyengébb réteg | Válaszidő | Réteg-megoszlás |
 |---|---|---|---|---|
 | `szabaly` | 78,9% | `elengedes` 0% | ~0,00 s | — |
-| `llm` (kapuk nélkül) | PLACEHOLDER_LLM_SZAZALEK | PLACEHOLDER_LLM_RETEG | PLACEHOLDER_LLM_IDO | — |
+| `llm` (kapuk nélkül) | 25,6% | `alkudozas` 0,0% | ~6,44 s | — |
 | `kaszkad` (ADR-016) | 83,3% | `valtozatossag` 40,0% | ~3,07 s | llm=6, szabaly=39 |
 | **`forditott` (ez az ADR)** | **88,9%** | **`koznyelvi` 80,0%** | ~7,83 s | llm=45 |
 
 Rétegenként (n = esetszám):
 
-| Réteg | n | `szabaly` | `kaszkad` | `forditott` |
-|---|---|---|---|---|
-| `alkudozas` | 6 | 100,0% | 100,0% | 100,0% |
-| `egyszerusitett` | 4 | 100,0% | 100,0% | 87,5% |
-| `elengedes` | 3 | 0,0% | 100,0% | 100,0% |
-| `kapuor` | 2 | 100,0% | 100,0% | **50,0%** |
-| `koznyelvi` | 5 | 100,0% | 100,0% | 80,0% |
-| `mintan_tul` | 9 | 72,2% | 72,2% | 83,3% |
-| `szleng` | 3 | 100,0% | 100,0% | 100,0% |
-| `tajszolas` | 4 | 100,0% | **50,0%** | 100,0% |
-| `toredekes` | 4 | 100,0% | 100,0% | 100,0% |
-| `valtozatossag` | 5 | 20,0% | 40,0% | 80,0% |
+| Réteg | n | `szabaly` | `llm` | `kaszkad` | `forditott` |
+|---|---|---|---|---|---|
+| `alkudozas` | 6 | 100,0% | 0,0% | 100,0% | 100,0% |
+| `egyszerusitett` | 4 | 100,0% | 50,0% | 100,0% | 87,5% |
+| `elengedes` | 3 | 0,0% | 33,3% | 100,0% | 100,0% |
+| `kapuor` | 2 | 100,0% | 50,0% | 100,0% | **50,0%** |
+| `koznyelvi` | 5 | 100,0% | 20,0% | 100,0% | 80,0% |
+| `mintan_tul` | 9 | 72,2% | 22,2% | 72,2% | 83,3% |
+| `szleng` | 3 | 100,0% | 0,0% | 100,0% | 100,0% |
+| `tajszolas` | 4 | 100,0% | 25,0% | **50,0%** | 100,0% |
+| `toredekes` | 4 | 100,0% | 37,5% | 100,0% | 100,0% |
+| `valtozatossag` | 5 | 20,0% | 40,0% | 40,0% | 80,0% |
 
 **Fontos mérési figyelmeztetés — a szórás nem elhanyagolható.** A
 `forditott` `mintan_tul` rétege UGYANAZZAL a kóddal két futáson 94,4% és
@@ -165,6 +165,14 @@ Az ADR-016 sorrendje (`kaszkad.py`) a repóban marad,
   halmazok és a foglalási kód ugyanúgy a determinisztikus rétegből
   jönnek, mint eddig — csak a DÖNTÉS sorrendje fordult meg, nem a
   kényszerek helye.
+- **A legfontosabb szám a 25,6% és a 88,9% különbsége.** Ugyanaz a
+  modell, ugyanaz a prompt: kapuk nélkül 25,6%, a determinisztikus
+  kapukkal 88,9%. A **+63,3 pontot a determinisztikus réteg adja**, nem
+  a modell. Ez az ADR nem arról szól, hogy megbízunk a modellben —
+  arról, hogy **a modell értelmez, a determinisztikus réteg pedig
+  kapuz**. A magas nyers hibaarány mellett is ez a helyes felosztás,
+  mert a modell hibáit a kapuk fogják meg, a szabályok merevségét
+  viszont semmi nem oldja fel.
 
 ## Amit feladunk
 
