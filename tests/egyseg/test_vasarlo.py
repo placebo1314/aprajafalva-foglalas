@@ -13,12 +13,74 @@ from __future__ import annotations
 import json
 
 import ui.vasarlo as vasarlo_modul
-from ui.vasarlo import _idopont_cimke, _proba_naplo_ir
+from ui.vasarlo import (
+    _idopont_cimke,
+    _proba_naplo_ir,
+    horgony_most,
+    idoszak_szoveg,
+    proba_naplo_olvas,
+    proba_naplo_szoveg,
+)
+
+_IDOSZAK = {"elso_nap": "2026-12-21", "utolso_nap": "2026-12-27", "boltok": ["Törpilla"]}
 
 
 def test_idopont_cimke_formazas():
     cimke = _idopont_cimke("2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z")
     assert cimke == "2026-08-18 08:00–08:30 (UTC)"
+
+
+# --- horgony_most: a felület a beosztáshoz igazodik ------------------
+
+
+def test_horgony_a_beosztas_elso_napjara_esik_ha_a_mai_nap_kivul_van():
+    """A demóadat távoli hete: a "ma" a beosztás első napja legyen,
+    hogy a "holnap"/"kedden" ne üres keresésre fusson."""
+    assert horgony_most(_IDOSZAK, "2026-08-22T14:30:00Z") == "2026-12-21T14:30:00Z"
+
+
+def test_horgony_a_valodi_idot_hagyja_ha_a_mai_nap_a_beosztasban_van():
+    """Ha a beosztás a mai napot is lefedi, semmit nem tolunk el — az
+    eltolás kizárólag a demóadat távoli hetének problémáját oldja meg."""
+    assert horgony_most(_IDOSZAK, "2026-12-23T09:00:00Z") == "2026-12-23T09:00:00Z"
+
+
+def test_horgony_beosztas_nelkul_a_valodi_idot_adja():
+    assert horgony_most(None, "2026-08-22T14:30:00Z") == "2026-08-22T14:30:00Z"
+
+
+def test_horgony_a_napszakot_megtartja():
+    """A nap változik, az óra/perc nem — este próbálgatva az "este"
+    napszak-szűrő is értelmes maradjon."""
+    assert horgony_most(_IDOSZAK, "2026-08-22T19:45:12Z")[11:] == "19:45:12Z"
+
+
+# --- idoszak_szoveg: az indító sor ------------------------------------
+
+
+def test_idoszak_szoveg_kiirja_az_idoszakot_es_a_ma_jelenteset():
+    szoveg = idoszak_szoveg(_IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z")
+    assert "2026-12-21 – 2026-12-27" in szoveg
+    assert "2026-12-21" in szoveg
+    assert "2026-08-22" in szoveg
+
+
+def test_idoszak_szoveg_ha_a_ma_beleesik_nem_beszel_eltolasrol():
+    szoveg = idoszak_szoveg(_IDOSZAK, "2026-12-23T09:00:00Z", "2026-12-23T09:00:00Z")
+    assert "2026-12-21 – 2026-12-27" in szoveg
+    assert "kívül esik" not in szoveg
+
+
+def test_idoszak_szoveg_megmondja_melyik_boltban_van_beosztas():
+    """A demóadat EGYETLEN boltra generál — a másik kettőben minden
+    keresés helyesen, de megtévesztően üres. Ezt ki kell mondani."""
+    szoveg = idoszak_szoveg(_IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z")
+    assert "Törpilla" in szoveg
+
+
+def test_idoszak_szoveg_beosztas_nelkul_a_seedre_mutat():
+    szoveg = idoszak_szoveg(None, "2026-08-22T09:00:00Z", "2026-08-22T09:00:00Z")
+    assert "seed" in szoveg
 
 
 # --- _proba_naplo_ir -------------------------------------------------
@@ -80,3 +142,83 @@ def test_proba_naplo_ir_hianyzo_ertelmezesnel_ures_mezoket_ir(tmp_path, monkeypa
     assert sor["eszkoz"] is None
     assert sor["parameterek"] is None
     assert sor["reteg"] is None
+
+
+def test_proba_naplo_ir_a_teljes_fordulot_rogziti(tmp_path, monkeypatch):
+    """Mind a nyolc mező — tesztelés közben mindegyikre külön kérdés
+    merül fel (l. `_proba_naplo_ir` docstring)."""
+    naplo_utvonal = tmp_path / "probak.jsonl"
+    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+
+    _proba_naplo_ir(
+        "Möggyek-ë hónap a petárdáshó?",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "ugyifogyi"},
+            "bizonyossag": {"eszkoz": 0.91, "bolt_id": 0.88},
+        },
+        "llm",
+        normalizalt="Möggyek-ë holnap a petárdáshó?",
+        valasz_tipus="ajanlat",
+    )
+
+    sor = json.loads(naplo_utvonal.read_text(encoding="utf-8").splitlines()[0])
+    assert sor["normalizalt"] == "Möggyek-ë holnap a petárdáshó?"
+    assert sor["reteg"] == "llm"
+    assert sor["bizonyossag"] == {"eszkoz": 0.91, "bolt_id": 0.88}
+    assert sor["valasz_tipus"] == "ajanlat"
+
+
+# --- napló megnyitása --------------------------------------------------
+
+
+def test_proba_naplo_olvas_hianyzo_fajlnal_ures(tmp_path, monkeypatch):
+    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", tmp_path / "nincs.jsonl")
+    assert proba_naplo_olvas() == []
+
+
+def test_proba_naplo_olvas_serult_sort_atugrik(tmp_path, monkeypatch):
+    """Egy félbeszakadt korábbi futás ne akadályozza meg a napló
+    megnyitását."""
+    naplo_utvonal = tmp_path / "probak.jsonl"
+    naplo_utvonal.write_text('{"bemenet": "jó"}\nnem-json\n\n', encoding="utf-8")
+    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+
+    sorok = proba_naplo_olvas()
+
+    assert len(sorok) == 1
+    assert sorok[0]["bemenet"] == "jó"
+
+
+def test_proba_naplo_olvas_utolso_n_sort_ad(tmp_path, monkeypatch):
+    naplo_utvonal = tmp_path / "probak.jsonl"
+    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    for i in range(5):
+        _proba_naplo_ir(f"{i}", {"eszkoz": "nincs", "parameterek": {}}, "szabaly")
+
+    sorok = proba_naplo_olvas(utolso=2)
+
+    assert [s["bemenet"] for s in sorok] == ["3", "4"]
+
+
+def test_proba_naplo_szoveg_ures_naplonal_utbaigazit():
+    assert "Még nincs" in proba_naplo_szoveg([])
+
+
+def test_proba_naplo_szoveg_minden_mezot_megmutat():
+    szoveg = proba_naplo_szoveg(
+        [
+            {
+                "idobelyeg": "2026-08-22T10:00:00Z",
+                "bemenet": "petárda holnap",
+                "normalizalt": "petárda holnap",
+                "reteg": "llm",
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {"bolt_id": "ugyifogyi"},
+                "bizonyossag": {"eszkoz": 0.9},
+                "valasz_tipus": "ajanlat",
+            }
+        ]
+    )
+    for reszlet in ("petárda holnap", "llm", "szabad_idopontok", "ugyifogyi", "ajanlat"):
+        assert reszlet in szoveg

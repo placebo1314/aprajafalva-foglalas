@@ -98,16 +98,24 @@ class ForditottKaszkadErtelmezo:
         self.llm = llm
         # "llm" | "szabaly" — melyik réteg adta az utolsó választ.
         self.utolso_reteg: str | None = None
+        # Az utolsó mondat normalizált alakja — megfigyelhetőséghez
+        # (`ui/vasarlo.py` próba-naplója: mit LÁTOTT a modell). Nem a
+        # protokoll része, a hívók `getattr`-ral olvassák.
+        self.utolso_normalizalt: str | None = None
 
     def ertelmez(self, mondat: str, *, most: str, kontextus: ErtelmezesKontextus) -> dict:
+        # 1. NORMALIZÁLÓ — determinisztikus szótár a modell ELŐTT
+        # (blueprint 7., "Négy technika" 1. pont). A tájszólási és
+        # szleng-alakokat nem a modellnek kell kitalálnia. A
+        # determinisztikus réteg maga is normalizál, ezért a tartalék-ág
+        # a NYERS mondatot kapja — a napló mégis a normalizált alakot
+        # mutatja, mert a feldolgozás mindkét úton azon történik.
+        normalizalt = normalizal(mondat)
+        self.utolso_normalizalt = normalizalt
+
         if self.llm is None:
             self.utolso_reteg = "szabaly"
             return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
-
-        # 1. NORMALIZÁLÓ — determinisztikus szótár a modell ELŐTT
-        # (blueprint 7., "Négy technika" 1. pont). A tájszólási és
-        # szleng-alakokat nem a modellnek kell kitalálnia.
-        normalizalt = normalizal(mondat)
 
         llm_eredmeny = self.llm.ertelmez(normalizalt, most=most, kontextus=kontextus)
         if self.llm.utolso_hiba is not None:

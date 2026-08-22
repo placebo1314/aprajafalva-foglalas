@@ -24,30 +24,48 @@ megoldás (CLAUDE.md 2. invariáns) még nincs megírva — amíg nincs, a
 azonosítót ez a modul (ui/vasarlo.py) sosem kapja meg szimbólumnévként
 — rögtön a `privacy/` hívásának adja át, onnantól csak a hash kering.
 
-**A koppintós "Nap" választó a valódi rendszerórától számított 7 napot
-ajánl fel** — a `python feladat.py seed` demóadata viszont egy fix,
-2026-12-21-gyel kezdődő hétre generál beosztást (`seed/betolt.py`).
-Kézi kipróbáláskor emiatt a legördülőben más dátumot kell választani,
-mint a mai nap — ez dokumentált korlát, nem hiba (`docs/TESZTELES.md`).
+**A felület a BEOSZTÁSHOZ igazodik, nem a rendszerórához.** A
+`python feladat.py seed` demóadata egy fix, 2026-12-21-gyel kezdődő
+hétre generál beosztást (`seed/betolt.py`) — ha a felület a mai naptól
+keresne, MINDEN keresés üresen térne vissza, és a próbálgató ebből azt
+látná, hogy "nem működik". Ezért:
+
+- az `_idoszak` a ténylegesen meglévő slotokból derül ki
+  (`core/repo/muszak_repo.py::slot_range`), nem konstansból;
+- a koppintós "Nap" választó ennek az időszaknak a napjait kínálja,
+  alapértelmezésben az elsőt (ha a mai nap az időszakon belül van, akkor
+  a mait);
+- a szöveges út `most`-ja is ide horgonyzódik (`_most_iso`): ha a mai
+  nap kívül esik a beosztáson, a "ma"/"holnap"/"jövő héten" ehhez az
+  időszakhoz képest oldódik fel, nem a valódi naptárhoz. Így a
+  próbálgatónak NEM kell dátumot fejben tartania.
+- az ablak tetején egy sor mindig kiírja, melyik időszakra van beosztás,
+  és hogy a "ma" éppen mit jelent.
+
+Ez **kizárólag a felület horgonya** — a `core/` és az eszközök továbbra
+is a kapott ISO-időbélyeggel dolgoznak, semmilyen idő-eltolás nem kerül
+beléjük (CLAUDE.md 4. invariáns: minden idő UTC-ben tárolódik).
 
 **Az értelmezőt az `assistant/interpreter/__init__.py::
-alapertelmezett_ertelmezo()` építi fel** (kaszkád, ADR-016: a
-determinisztikus réteg fut előbb, a háttér-modellszolgáltatást csak
-hiányzó bolt kiegészítésére hívja) — ez a modul (CLAUDE.md,
-"Modulhatárok": "a ui/ nem hívhat LLM-et közvetlenül") a modell-
-specifikus osztályokat sosem importálja, és nem is tudja, fut-e éppen
-a háttérszolgáltatás — ha nincs konfigurálva vagy nem elérhető, a
+alapertelmezett_ertelmezo()` építi fel** (fordított kaszkád, ADR-018: a
+normalizáló fut előbb, a modell értelmez kötött dekódolással, a dátumot
+a parser oldja fel, a determinisztikus réteg a tartalék) — ez a modul
+(CLAUDE.md, "Modulhatárok": "a ui/ nem hívhat LLM-et közvetlenül") a
+modell-specifikus osztályokat sosem importálja, és nem is tudja, fut-e
+éppen a háttérszolgáltatás — ha nincs konfigurálva vagy nem elérhető, a
 felépítés CSENDBEN (hiba nélkül) a tisztán szabály-alapú viselkedésre
 esik vissza.
 
 **Próba-napló** (`naplo/probak.jsonl`, a `.gitignore` kizárja): a
-szöveges úton minden bemenetet és a rá adott értelmezést naplózza —
-bemenet, felismert eszköz, paraméterek, melyik réteg oldotta meg,
-időbélyeg. Ez a jövőbeli rejtett golden halmaz nyersanyaga
-(golden-set skill: "valós beszélgetésben hiba → redaktált trace →
-annotálás → golden set"). **Vásárlóazonosító ide sosem jut el** — a
-megerősítéshez használt azonosító-mező (`_megerosit`) egy KÜLÖN
-út a `privacy/` hash-hívásba, nem érinti ezt a naplót.
+szöveges úton minden fordulóról egy sor — bemenet, normalizált alak,
+melyik réteg oldotta meg, felismert eszköz, paraméterek, bizonyosság, a
+válasz típusa, időbélyeg. Ez a jövőbeli rejtett golden halmaz
+nyersanyaga (golden-set skill: "valós beszélgetésben hiba → redaktált
+trace → annotálás → golden set"), és tesztelés közben ez mutatja meg,
+MI történt — a szöveges fülön a "Napló megnyitása" gomb olvashatóan
+kiírja. **Vásárlóazonosító ide sosem jut el** — a megerősítéshez
+használt azonosító-mező (`_megerosit`) egy KÜLÖN út a `privacy/`
+hash-hívásba, nem érinti ezt a naplót.
 
 Indítás:
     python -m ui.vasarlo
@@ -70,7 +88,7 @@ from assistant.interpreter import alapertelmezett_ertelmezo  # noqa: E402
 from assistant.orchestrator import Orchestrator  # noqa: E402
 from assistant.tools import katalogus  # noqa: E402
 from core.azonosito import new_uuid  # noqa: E402
-from core.repo import migracio, torzsadat_repo  # noqa: E402
+from core.repo import migracio, muszak_repo, torzsadat_repo  # noqa: E402
 from privacy.hash_ideiglenes import ideiglenes_hash  # noqa: E402
 from seed.betolt import ALAP_DB_PATH  # noqa: E402
 
@@ -88,25 +106,131 @@ def _most_iso() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Legfeljebb ennyi napot kínál fel a koppintós "Nap" választó a beosztás
+# időszakából — hosszú beosztásnál a legördülő különben használhatatlanná
+# nyúlna. A demóadat egy hét, ez bőven elég rá.
+_NAP_VALASZTO_MAX = 21
+
+
+def horgony_most(idoszak: dict | None, valodi_most: str) -> str:
+    """A szöveges út `most` értéke: a valódi idő, HA a mai nap beleesik a
+    beosztás időszakába — különben az időszak első napja, a mai
+    napszakot megtartva.
+
+    Miért: a demóadat egy fix, távoli hétre szól. Ha a "holnap" a valódi
+    holnapot jelentené, minden keresés üresen térne vissza, és a
+    próbálgató ebből azt látná, hogy a rendszer nem működik — a
+    dokumentált, de észben tartandó dátum a legrosszabb fajta felületi
+    teher (`docs/TESZTELES.md`, "Beszélgetés-próba").
+
+    Ez a horgony **kizárólag a felületé**: az így kapott ISO-időbélyeg
+    ugyanúgy UTC és ugyanúgy végigmegy az orchestratoron, mint bármelyik
+    másik — sem a `core/`, sem az eszközök nem tudnak róla (CLAUDE.md 4.
+    invariáns)."""
+    if idoszak is None:
+        return valodi_most
+    ma = valodi_most[:10]
+    if idoszak["elso_nap"] <= ma <= idoszak["utolso_nap"]:
+        return valodi_most
+    return f"{idoszak['elso_nap']}T{valodi_most[11:]}"
+
+
+def idoszak_szoveg(idoszak: dict | None, horgony: str, valodi_most: str) -> str:
+    """Az indító sor: melyik időszakra van beosztás, és mit jelent ma a
+    "ma". Egyetlen sor — l. `docs/TESZTELES.md`."""
+    if idoszak is None:
+        return "Nincs betöltött beosztás — futtasd: python feladat.py seed"
+    alap = f"A demóadat {idoszak['elso_nap']} – {idoszak['utolso_nap']} hetére szól"
+    boltok = idoszak.get("boltok") or []
+    if boltok:
+        # A demóadat ma EGYETLEN boltra generál beosztást — a másik két
+        # boltban minden keresés helyesen, de megtévesztően üres.
+        alap += f", beosztás ezekben a boltokban van: {', '.join(boltok)}"
+    alap += "."
+    if horgony[:10] == valodi_most[:10]:
+        return f"{alap} A mai nap ebbe az időszakba esik."
+    return (
+        f"{alap} A mai nap ({valodi_most[:10]}) kívül esik ezen, ezért a "
+        f'"ma" ezen a felületen {horgony[:10]}-t jelent — nem kell dátumot fejben tartanod.'
+    )
+
+
 def _idopont_cimke(kezdet_iso: str, veg_iso: str) -> str:
     kezdet = datetime.fromisoformat(kezdet_iso.replace("Z", "+00:00"))
     veg = datetime.fromisoformat(veg_iso.replace("Z", "+00:00"))
     return f"{kezdet.strftime('%Y-%m-%d %H:%M')}–{veg.strftime('%H:%M')} (UTC)"
 
 
-def _proba_naplo_ir(bemenet: str, ertelmezes: dict | None, reteg: str | None) -> None:
-    """Egy szöveges bemenetet és a rá adott értelmezést ír a
-    `naplo/probak.jsonl`-be — l. modul docstring, "Próba-napló"."""
+def _proba_naplo_ir(
+    bemenet: str,
+    ertelmezes: dict | None,
+    reteg: str | None,
+    *,
+    normalizalt: str | None = None,
+    valasz_tipus: str | None = None,
+) -> None:
+    """Egy fordulót ír a `naplo/probak.jsonl`-be — l. modul docstring,
+    "Próba-napló". Nyolc mező, mert tesztelés közben mind a nyolc kérdés
+    külön felmerül: mit írtam be, mit LÁTOTT belőle a rendszer
+    (`normalizalt`), ki oldotta meg (`reteg`), minek értette (`eszkoz`,
+    `parameterek`), mennyire volt biztos benne (`bizonyossag`), mi lett
+    belőle (`valasz_tipus`), és mikor (`idobelyeg`)."""
     _PROBA_NAPLO_UTVONAL.parent.mkdir(parents=True, exist_ok=True)
     sor = {
         "idobelyeg": _most_iso(),
         "bemenet": bemenet,
+        "normalizalt": normalizalt,
+        "reteg": reteg,
         "eszkoz": (ertelmezes or {}).get("eszkoz"),
         "parameterek": (ertelmezes or {}).get("parameterek"),
-        "reteg": reteg,
+        "bizonyossag": (ertelmezes or {}).get("bizonyossag"),
+        "valasz_tipus": valasz_tipus,
     }
     with _PROBA_NAPLO_UTVONAL.open("a", encoding="utf-8") as fajl:
         fajl.write(json.dumps(sor, ensure_ascii=False) + "\n")
+
+
+def proba_naplo_olvas(utolso: int | None = None) -> list[dict]:
+    """A próba-napló sorai, legrégebbitől a legújabbig. `utolso`
+    megadásakor csak az utolsó N sor. Hiányzó fájl esetén üres lista —
+    ez nem hiba, csak azt jelenti, hogy még nem volt forduló.
+
+    A sérült (nem JSON) sorokat átugorja: a napló megnyitása SOHA ne
+    boruljon fel attól, hogy egy korábbi futás félbeszakadt."""
+    if not _PROBA_NAPLO_UTVONAL.exists():
+        return []
+    sorok = []
+    for nyers in _PROBA_NAPLO_UTVONAL.read_text(encoding="utf-8").splitlines():
+        if not nyers.strip():
+            continue
+        try:
+            sorok.append(json.loads(nyers))
+        except json.JSONDecodeError:
+            continue
+    return sorok[-utolso:] if utolso else sorok
+
+
+def proba_naplo_szoveg(sorok: list[dict]) -> str:
+    """A napló olvasható alakja — ez kerül a "Napló megnyitása" ablakba.
+    Külön függvény, hogy Tkinter nélkül is előállítható és tesztelhető
+    legyen (`tests/egyseg/test_vasarlo.py`)."""
+    if not sorok:
+        return "Még nincs egyetlen próba sem. Írj be valamit a szöveges fülön."
+    darabok = []
+    for i, sor in enumerate(sorok, start=1):
+        parameterek = sor.get("parameterek") or {}
+        bizonyossag = sor.get("bizonyossag") or {}
+        darabok.append(
+            f"{i}. [{sor.get('idobelyeg', '?')}]\n"
+            f"   bemenet:      {sor.get('bemenet')!r}\n"
+            f"   normalizált:  {sor.get('normalizalt')!r}\n"
+            f"   réteg:        {sor.get('reteg')}\n"
+            f"   eszköz:       {sor.get('eszkoz')}\n"
+            f"   paraméterek:  {parameterek}\n"
+            f"   bizonyosság:  {bizonyossag}\n"
+            f"   válasz:       {sor.get('valasz_tipus')}"
+        )
+    return "\n\n".join(darabok)
 
 
 class VasarloApp(tk.Tk):
@@ -124,8 +248,32 @@ class VasarloApp(tk.Tk):
         self.session_id = new_uuid()
         self.orchestrator = Orchestrator(self.conn, alapertelmezett_ertelmezo(), org_id=self.org_id)
 
+        # A beosztás időszaka — ehhez igazodik a nap-választó és a
+        # szöveges út `most`-ja is (l. modul docstring).
+        self.idoszak = (
+            muszak_repo.slot_range(self.conn, org_id=self.org_id) if self.org_id else None
+        )
+
         self.protocol("WM_DELETE_WINDOW", self._close)
         self._build()
+
+    def _most_iso(self) -> str:
+        """A szöveges út `most` értéke — a beosztáshoz horgonyozva
+        (`horgony_most`), nem a nyers rendszeróra."""
+        return horgony_most(self.idoszak, _most_iso())
+
+    def _valaszthato_napok(self) -> list[str]:
+        """A koppintós nap-választó értékei: a beosztás időszakának
+        napjai. Beosztás nélkül a mai naptól számított hét nap — így a
+        legördülő üres adatbázison sem marad üres."""
+        if self.idoszak is None:
+            return [(date.today() + timedelta(days=i)).isoformat() for i in range(7)]
+        elso = date.fromisoformat(self.idoszak["elso_nap"])
+        utolso = date.fromisoformat(self.idoszak["utolso_nap"])
+        napok = (utolso - elso).days + 1
+        return [
+            (elso + timedelta(days=i)).isoformat() for i in range(min(napok, _NAP_VALASZTO_MAX))
+        ]
 
     # ------------------------------------------------------------------
     # Felépítés
@@ -140,6 +288,18 @@ class VasarloApp(tk.Tk):
                 foreground="#a00",
             ).pack()
             return
+
+        # Indító sor: melyik időszakra van beosztás, és mit jelent a
+        # "ma" ezen a felületen. Ez az ELSŐ dolog, amit a próbálgató lát —
+        # enélkül a demóadat távoli hete néma kudarcnak látszana.
+        self.idoszak_cimke = ttk.Label(
+            self,
+            text=idoszak_szoveg(self.idoszak, self._most_iso(), _most_iso()),
+            padding=(12, 8),
+            foreground="#046",
+            wraplength=780,
+        )
+        self.idoszak_cimke.pack(anchor="w", fill="x")
 
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True)
@@ -173,8 +333,12 @@ class VasarloApp(tk.Tk):
         ).grid(row=0, column=1, sticky="w", pady=3)
 
         ttk.Label(tab, text="Nap:").grid(row=1, column=0, sticky="w", pady=3)
-        napok = [(date.today() + timedelta(days=i)).isoformat() for i in range(7)]
-        self.kop_nap_valto = tk.StringVar()
+        napok = self._valaszthato_napok()
+        # Alapérték: a mai nap, HA a beosztásban van — különben a
+        # beosztás első napja. Így a "Időpontok keresése" gomb az első
+        # kattintásra is talál valamit (l. modul docstring).
+        alap_nap = _most_iso()[:10] if _most_iso()[:10] in napok else (napok[0] if napok else "")
+        self.kop_nap_valto = tk.StringVar(value=alap_nap)
         ttk.Combobox(
             tab, textvariable=self.kop_nap_valto, values=napok, state="readonly", width=20
         ).grid(row=1, column=1, sticky="w", pady=3)
@@ -333,6 +497,24 @@ class VasarloApp(tk.Tk):
         self.szo_uzenet = ttk.Label(tab, text="", foreground="#a00", wraplength=700)
         self.szo_uzenet.pack(anchor="w")
 
+        # Tesztelés közben ez mutatja meg, MI történt: melyik réteg
+        # oldotta meg, minek értette, mennyire volt biztos benne.
+        ttk.Button(tab, text="Napló megnyitása", command=self._naplo_ablak).pack(
+            anchor="w", pady=(6, 0)
+        )
+
+    def _naplo_ablak(self) -> None:
+        """A `naplo/probak.jsonl` eddigi próbái egy külön ablakban. A
+        tartalmat a `proba_naplo_szoveg()` állítja elő — ez a metódus
+        csak megjeleníti (a formázás Tkinter nélkül is tesztelhető)."""
+        ablak = tk.Toplevel(self)
+        ablak.title("Próba-napló — naplo/probak.jsonl")
+        ablak.geometry("760x520")
+        szoveg = tk.Text(ablak, wrap="word")
+        szoveg.pack(fill="both", expand=True)
+        szoveg.insert("end", proba_naplo_szoveg(proba_naplo_olvas()))
+        szoveg.config(state="disabled")
+
     # A kiút-gombok mögötti, előre megírt mondatok: a választás egy új
     # fordulóként megy vissza az orchestratorba, hogy onnantól a szokásos
     # út fusson (értelmező → állapotgép), ne külön ág.
@@ -387,11 +569,13 @@ class VasarloApp(tk.Tk):
             widget.destroy()
         self.szo_uzenet.config(text="")
 
-        valasz = self.orchestrator.fordulo(self.session_id, szoveg, _most_iso())
+        valasz = self.orchestrator.fordulo(self.session_id, szoveg, self._most_iso())
         _proba_naplo_ir(
             szoveg,
             self.orchestrator.utolso_ertelmezes,
             getattr(self.orchestrator.ertelmezo, "utolso_reteg", None),
+            normalizalt=getattr(self.orchestrator.ertelmezo, "utolso_normalizalt", None),
+            valasz_tipus=valasz.get("tipus") or ("sikeres" if valasz.get("sikeres") else "hiba"),
         )
         self._szoveges_valasz_kezel(valasz)
 

@@ -204,3 +204,51 @@ def test_blocks_list_filter_shift_by(conn, master):
     )
     assert muszak_repo.blocks_list(conn, shift_id=shift_1) == []
     assert len(muszak_repo.blocks_list(conn, shift_id=shift_2)) == 1
+
+
+# --- slot_range ----------------------------------------------------------
+
+
+def test_slot_range_slot_nelkul_none(conn, master):
+    assert muszak_repo.slot_range(conn, org_id=master["szervezet_id"]) is None
+
+
+def test_slot_range_az_elso_es_utolso_napot_adja(conn, master):
+    """A vásárlói felület ebből tudja meg, hol keressen — a slotok
+    tényleges időszaka, nem a mai nap (`ui/vasarlo.py`)."""
+    shift_id = _shift(conn, master, "2026-12-21T08:00:00Z", "2026-12-21T09:00:00Z")
+    kesobbi = _shift(conn, master, "2026-12-27T08:00:00Z", "2026-12-27T09:00:00Z")
+    muszak_repo.blocks_slots_save(
+        conn,
+        shift_id=shift_id,
+        org_id=master["szervezet_id"],
+        blocks=[],
+        slots=[Slot("2026-12-21T08:00:00Z", "2026-12-21T08:10:00Z")],
+    )
+    muszak_repo.blocks_slots_save(
+        conn,
+        shift_id=kesobbi,
+        org_id=master["szervezet_id"],
+        blocks=[],
+        slots=[Slot("2026-12-27T08:00:00Z", "2026-12-27T08:10:00Z")],
+    )
+
+    assert muszak_repo.slot_range(conn, org_id=master["szervezet_id"]) == {
+        "elso_nap": "2026-12-21",
+        "utolso_nap": "2026-12-27",
+        "boltok": ["Ügyifogyi"],
+    }
+
+
+def test_slot_range_mas_szervezet_slotjat_nem_latja(conn, master):
+    shift_id = _shift(conn, master, "2026-12-21T08:00:00Z", "2026-12-21T09:00:00Z")
+    muszak_repo.blocks_slots_save(
+        conn,
+        shift_id=shift_id,
+        org_id=master["szervezet_id"],
+        blocks=[],
+        slots=[Slot("2026-12-21T08:00:00Z", "2026-12-21T08:10:00Z")],
+    )
+    masik_org = torzsadat_repo.org_create(conn, name="Másik falu", timezone="UTC")
+
+    assert muszak_repo.slot_range(conn, org_id=masik_org) is None

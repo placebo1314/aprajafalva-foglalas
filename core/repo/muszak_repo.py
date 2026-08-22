@@ -261,3 +261,43 @@ def exception_days_list(
         (org_id, shop_id),
     ).fetchall()
     return frozenset(row[0] for row in rows)
+
+
+def slot_range(conn: sqlite3.Connection, *, org_id: str) -> dict | None:
+    """Melyik időszakra és MELYIK BOLTOKRA van egyáltalán generált slot
+    ebben a szervezetben — `{"elso_nap": "2026-12-21", "utolso_nap":
+    "2026-12-27", "boltok": ["Törpilla"]}`, vagy `None`, ha nincs egy
+    slot sem.
+
+    Ez nem ütemezési logika, hanem **tájékozódás**: a felületnek tudnia
+    kell, hol keressen. A `ui/vasarlo.py` ebből tölti ki a nap-választó
+    alapértékét és az indító sort ("A demóadat ... hetére szól, beosztás
+    a Törpilla boltban van") — enélkül a vásárlói felület a mai naptól,
+    tetszőleges boltban keresne, a demóadat pedig egy fix, távoli hétre
+    és EGYETLEN boltra szól, tehát minden keresés üresen térne vissza.
+    Az üres találat ilyenkor helyes viselkedés, csak épp
+    megkülönböztethetetlen a hibától — ezt a megkülönböztetést adja ez a
+    függvény.
+
+    A `slot.kezdet` ISO-8601 UTC szöveg, ezért a `MIN`/`MAX` szöveges
+    összehasonlítása helyes rendezést ad (fix hosszú, nullákkal feltöltött
+    alak) — nincs szükség dátum-függvényre, ami motoronként eltérne
+    (db-hordozhatosag skill)."""
+    row = conn.execute(
+        "SELECT MIN(kezdet), MAX(kezdet) FROM slot WHERE szervezet_id = ?",
+        (org_id,),
+    ).fetchone()
+    if row is None or row[0] is None:
+        return None
+    boltok = conn.execute(
+        "SELECT DISTINCT b.nev FROM slot s "
+        "JOIN muszak m ON m.id = s.muszak_id "
+        "JOIN bolt b ON b.id = m.bolt_id "
+        "WHERE s.szervezet_id = ? ORDER BY b.nev",
+        (org_id,),
+    ).fetchall()
+    return {
+        "elso_nap": row[0][:10],
+        "utolso_nap": row[1][:10],
+        "boltok": [sor[0] for sor in boltok],
+    }

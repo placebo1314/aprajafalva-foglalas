@@ -59,6 +59,7 @@ import logging
 
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, rule_based
 from assistant.interpreter.llm_based import LLMErtelmezo
+from assistant.interpreter.normalizalo import normalizal
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 from assistant.tools.katalogus import BOLT_SLUGOK
 
@@ -90,8 +91,12 @@ class KaszkadErtelmezo:
         # Az utolsó `ertelmez()` hívást melyik réteg oldotta meg —
         # "szabaly" vagy "llm". Ez a mérőszám (modul docstring, 3. pont).
         self.utolso_reteg: str | None = None
+        # Az utolsó mondat normalizált alakja — megfigyelhetőséghez
+        # (l. `forditott_kaszkad.py` azonos mezője).
+        self.utolso_normalizalt: str | None = None
 
     def ertelmez(self, mondat: str, *, most: str, kontextus: ErtelmezesKontextus) -> dict:
+        self.utolso_normalizalt = normalizal(mondat)
         szabaly_eredmeny = self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
         self.utolso_reteg = "szabaly"
 

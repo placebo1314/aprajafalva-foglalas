@@ -6,11 +6,15 @@ python feladat.py teszt-mindketto
 python feladat.py golden [--json UTVONAL]
 python feladat.py migracio "<leiras>"
 python feladat.py seed [--ujra]
+python feladat.py vegigjatszas [--db UTVONAL]
 python feladat.py lint
 
 A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
-— nem indít Ollamát, nem hív modellt. Modell-összehasonlításhoz lásd az
-eldobható `spike/golden_futtato.py --ertelmezo llm --modell NEV`-et.
+— nem indít Ollamát, nem hív modellt. A modell-összehasonlítás ugyanennek a
+parancsnak a `--ertelmezo llm|kaszkad|forditott` kapcsolójával megy.
+
+A `vegigjatszas` a vásárlói felületet hajtja végig Tkinter-eseményhurok
+nélkül (`tools/vegigjatszas.py`) — önellenőrzés, mielőtt kézzel leülnél elé.
 """
 
 from __future__ import annotations
@@ -65,6 +69,10 @@ def seed(argv: list[str]) -> int:
     return fut([sys.executable, "-m", "seed.betolt", *argv])
 
 
+def vegigjatszas(argv: list[str]) -> int:
+    return fut([sys.executable, "-m", "tools.vegigjatszas", *argv])
+
+
 def lint(_: list[str]) -> int:
     for parancs in (
         [sys.executable, "-m", "ruff", "format", "--check", "."],
@@ -81,6 +89,7 @@ FELADATOK = {
     "golden": golden,
     "migracio": migracio,
     "seed": seed,
+    "vegigjatszas": vegigjatszas,
     "lint": lint,
 }
 
