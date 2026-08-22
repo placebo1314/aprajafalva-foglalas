@@ -8,10 +8,17 @@ meglévő eszközsémákból jönnek** (`assistant/tools/semak.py`) — nincs it
 külön, kézzel karbantartott másolat, ami szétdrifthetne.
 
 **Rövid rendszerprompt** (Vapi-tanulság, `docs/PLATFORM_TANULSAGOK.md`,
-2. szakasz: "a prompt hossza latencia"): a ritkán szükséges részletek
-(pl. a `bolt_info.datum` mező alakja) a JSON-séma mezőleírásaiba
-kerülnek, nem a mindig elküldött rendszerprompt prózájába — a modell
-csak akkor "olvassa" őket, amikor ténylegesen azt a mezőt tölti ki.
+2. szakasz: "a prompt hossza latencia") — de csak annyira rövid, amennyit
+a mérés (`python feladat.py golden --ertelmezo llm`) igazol: az első
+változat a JSON-séma mezőleírásaira bízta a `datum` vs `datum_tol`/
+`datum_ig` megkülönböztetést és az eszközök leírását — ez mérve
+katasztrofálisan rossz volt (~11% a rétegek 0-40%-án), mert a séma
+"description" kulcsai nem jutnak el ugyanolyan súllyal a modellhez, mint
+a rendszerprompt prózája. Ez a tanulság: **a "ritka instrukció" nem
+ugyanaz, mint "amit a sémába lehet rejteni"** — az eszközök rövid
+leírása és a dátumformátum-különbség minden híváshoz kell, ezért a
+promptban maradt; csak az OLYAN részlet mehetne sémába, ami tényleg csak
+egy-egy mező kitöltésekor releváns.
 
 **`think: False` explicit** (nem kihagyva) — a spike mérése szerint
 (`spike/EREDMENY.md`) a gondolkodás bekapcsolva sokszorosára növeli a
@@ -98,18 +105,33 @@ FORMAT_SEMA = {
     "additionalProperties": False,
 }
 
-# Rövid, mert minden szó latencia (Vapi-tanulság) — a ritka részletek
-# (dátumformátum, mit-enum) a FORMAT_SEMA mezőleírásaiban vannak, nem itt.
+# Rövid, mert minden szó latencia (Vapi-tanulság) — DE mérve (l.
+# spike/EREDMENY.md és a golden mérés): a séma mezőleírásai önmagukban
+# NEM voltak elegendők a "mit" enum és a dátummezők megkülönböztetésére
+# — a FORMAT_SEMA "description" kulcsai láthatóan nem jutnak el
+# ugyanolyan súllyal a modellhez, mint a rendszerprompt prózája. A
+# dátumformátum-sor emiatt itt maradt, nem a sémában — ez nem "ritka",
+# ez minden keresésnél/tényválasznál kell.
 _RENDSZER_PROMPT = """Aprajafalva foglalási asszisztens vagy. A vásárló egy \
 mondatát EGY eszközhívássá alakítod, kizárólag a séma szerint.
+
+Eszközök:
+- szabad_idopontok: szabad időpont keresése (bolt, datum_tol, datum_ig, napszak)
+- bolt_info: bolt/szolgáltatás adata (nyitvatartás, cím, termék, időtartam)
+- foglalas_lemondas: meglévő foglalás lemondása (kell a foglalási kód)
+- visszakerdez: ha egy kritikus adat (jellemzően a bolt) hiányzik a mondatból —
+  ekkor NE találj ki boltot vagy dátumot, inkább kérdezz
+- nincs: ha a kérés nem foglalással/bolttal kapcsolatos
 
 Boltok: szundi (altató), ugyifogyi (petárda), torpilla (boldogság).
 "most" (a relatív dátumok — holnap, jövő hét — ehhez képest értendők): {most}
 
-visszakerdez: ha egy kritikus adat (jellemzően a bolt) hiányzik a mondatból.
-nincs: ha a kérés nem foglalással/bolttal kapcsolatos.
-Lemondáshoz és áthelyezéshez a foglalási kód kell — ha nincs a mondatban, \
-visszakerdez (hianyzo_mezo: foglalasi_kod)."""
+Dátum: szabad_idopontok-nál MINDIG datum_tol/datum_ig (teljes ISO-8601 UTC
+időbélyeg, pl. "2026-08-18T00:00:00Z"), SOSEM "datum". bolt_info-nál MINDIG
+"datum" (csak a naptári nap, pl. "2026-08-22", idő nélkül).
+
+Lemondáshoz a foglalási kód kell — ha nincs a mondatban, visszakerdez \
+(hianyzo_mezo: foglalasi_kod)."""
 
 
 @dataclass(frozen=True)
