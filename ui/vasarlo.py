@@ -485,6 +485,15 @@ class VasarloApp(tk.Tk):
         self.szo_uzenet = ttk.Label(tab, text="", foreground="#a00", wraplength=700)
         self.szo_uzenet.pack(anchor="w")
 
+        # Várakozás-jelző: a modellhívás fordulónként több másodperc is
+        # lehet (ADR-018 mérés: ~8 s), és addig a Tkinter ablak
+        # mozdulatlan. Jelzés nélkül ez lefagyásnak látszik. A mondatot
+        # itt sem a felület fogalmazza — a `nyugtazo` sablonok
+        # "általános" változata megy, ugyanaz, amit a hangcsatorna is
+        # használna töltelékmondatnak.
+        self.szo_allapot = ttk.Label(tab, text="", foreground="#555")
+        self.szo_allapot.pack(anchor="w")
+
         # Tesztelés közben ez mutatja meg, MI történt: melyik réteg
         # oldotta meg, minek értette, mennyire volt biztos benne.
         ttk.Button(tab, text="Napló megnyitása", command=self._naplo_ablak).pack(
@@ -563,7 +572,11 @@ class VasarloApp(tk.Tk):
                 widget.destroy()
         self.szo_uzenet.config(text="")
 
+        self.szo_allapot.config(text=valasz_szoveg.nyugtazo_szoveg({}))
+        self.update_idletasks()
+
         valasz = self.orchestrator.fordulo(self.session_id, szoveg, self._most_iso())
+        self.szo_allapot.config(text="")
         _proba_naplo_ir(
             szoveg,
             self.orchestrator.utolso_ertelmezes,
