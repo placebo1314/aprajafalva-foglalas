@@ -282,7 +282,9 @@ Amit ebből leolvashatsz:
 
 - **`réteg`** — `llm`, ha a modell értelmezett; `szabaly`, ha a
   determinisztikus tartalék. Ha mindenhol `szabaly`, akkor nem fut az
-  Ollama, vagy nincs beállítva a modellnév.
+  Ollama, vagy nincs beállítva a modellnév. **Egy kivétel:** a bolt-gomb
+  megnyomása után szándékosan `szabaly` áll ott — a zárt kérdésre adott
+  válasz zárt halmazbeli érték, azt nem értelmezteti a rendszer.
 - **`normalizált`** — mit LÁTOTT a rendszer abból, amit beírtál (a
   tájszólási alakok itt már köznyelviek).
 - **`bizonyosság`** — a modell tényleges dekódolási valószínűségei. Ha
@@ -299,8 +301,23 @@ python feladat.py vegigjatszas
 ```
 
 Végigjátssza a fenti (és a golden set `mintan_tul` rétegének)
-mondatait Tkinter-eseményhurok nélkül, és fordulónként kiírja ugyanezt.
-Hasznos, ha csak azt akarod látni, változott-e valami az előző futás óta.
+mondatait Tkinter-eseményhurok nélkül, és fordulónként kiírja ugyanezt,
+plusz a teljes foglalási menetet a foglalási kódig. Hasznos, ha csak azt
+akarod látni, változott-e valami az előző futás óta.
+
+**Figyelem:** VALÓDI foglalást hoz létre a megadott adatbázisban (ez a
+lényege — épp azt ellenőrzi, hogy a felület elvezet-e a kódig).
+`python feladat.py seed --ujra` visszaállítja, vagy adj meg külön
+fájlt: `python feladat.py vegigjatszas --db proba.db` (előtte
+`python -m core.api.cli seed proba.db`).
+
+Ez a parancs eddig **hat hibát** talált, amit sem az egységtesztek, sem
+a golden set nem fogott meg — mind felületi vagy réteghatár-hiba volt
+(elavult időpont-gombok a képernyőn, a „ma" horgonya a bolt zárása
+utánra esett, a bolt-gomb megnyomása végtelen visszakérdezésbe futott, a
+modell árat olvastatott fel egy megjelenés-kérdésre, majd a címet, és
+nem volt mód friss beszélgetést kezdeni). Érdemes minden felületi
+változtatás után lefuttatni.
 
 ### Mentés és helyreállítás
 
