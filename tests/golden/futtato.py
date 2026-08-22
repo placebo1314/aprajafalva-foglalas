@@ -1,13 +1,19 @@
 """Golden set kiértékelő — TARTÓS modul (M3, golden-set skill).
 
-Ez a `python feladat.py golden` mögötti kód. Determinisztikusan fut: a
-`assistant/interpreter/rule_based.py::SzabalyAlapuErtelmezo`-t hívja,
-NEM indít Ollamát és nem hív modellt — a modellösszehasonlítás
-(`--ertelmezo llm`) az eldobható `spike/golden_futtato.py`-ban maradt,
-és ONNAN importálja ezt a modult, nem fordítva (a `spike/` eldobható
-kód, ez itt nem az — roadmap M-1: "A spike kódja eldobható", de a
-`--ertelmezo szabaly` mérési út kivétel, mert a valódi, tartós
-`assistant/interpreter/rule_based.py`-t méri).
+Ez a `python feladat.py golden` mögötti kód. Három értelmező közül lehet
+választani (`--ertelmezo szabaly|llm|kaszkad`, alapértelmezett: `szabaly`):
+
+- `szabaly` — `assistant/interpreter/rule_based.py::SzabalyAlapuErtelmezo`.
+  NEM indít Ollamát, nem hív modellt.
+- `llm` — `assistant/interpreter/llm_based.py::LLMErtelmezo`. Ollamát hív,
+  a modellnév `--modell`-ből vagy az `APRAJAFALVA_LLM_MODELL` környezeti
+  változóból jön.
+- `kaszkad` — `assistant/interpreter/kaszkad.py::KaszkadErtelmezo`. A
+  szabály-alapú fut előbb, az LLM csak akkor, ha az nem boldogul.
+
+A `spike/golden_futtato.py` ezt a modult importálja (nem fordítva) — a
+`spike/` eldobható kód (roadmap M-1: "A spike kódja eldobható"), ez itt
+nem az.
 
 Két teszteset-alak:
 
@@ -155,9 +161,13 @@ class EsetEredmeny:
     nyers_kimenet: dict | None = None
 
 
-def szabaly_hivo(ertelmezo) -> HivoFuggveny:
-    """`HivoFuggveny`-t ad a determinisztikus értelmezőhöz — sem Ollama,
-    sem hálózat, csak a `SzabalyAlapuErtelmezo.ertelmez()` hívása(i).
+def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
+    """`HivoFuggveny`-t ad TETSZŐLEGES `Ertelmezo`-protokollt megvalósító
+    objektumból — `SzabalyAlapuErtelmezo`, `LLMErtelmezo` vagy
+    `KaszkadErtelmezo` egyaránt (bármelyiknek van `.ertelmez(mondat, *,
+    most, kontextus)` metódusa, l. `assistant/interpreter/__init__.py`).
+    Önmagában sem Ollamát, sem hálózatot nem indít — az csak akkor
+    történik meg, ha a kapott `ertelmezo` maga hív ilyet.
 
     Egy- ÉS többfordulós esetet egyaránt kezel: a `bemenet` egy mondat
     vagy mondatlista, minden fordulót sorban futtat, a kontextust az
@@ -273,25 +283,70 @@ def jelent(cimke: str, meta: dict, eredmenyek: list[EsetEredmeny]) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`python feladat.py golden` belépési pontja — mindig a
-    determinisztikus értelmezőt futtatja (nincs Ollama-hívás), és
-    rétegenkénti bontást ír. Modell-összehasonlításhoz lásd
-    `spike/golden_futtato.py --ertelmezo llm`."""
-    from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
-
-    parser = argparse.ArgumentParser(
-        description="Golden set kiértékelő — a determinisztikus értelmezőt futtatja."
+    """`python feladat.py golden` belépési pontja. Alapértelmezetten
+    (`--ertelmezo szabaly`) a determinisztikus értelmezőt futtatja —
+    NINCS Ollama-hívás, hacsak explicit nem kéred `--ertelmezo llm`
+    vagy `--ertelmezo kaszkad` kapcsolóval. Rétegenkénti bontást ír."""
+    parser = argparse.ArgumentParser(description="Golden set kiértékelő.")
+    parser.add_argument(
+        "--ertelmezo",
+        choices=["szabaly", "llm", "kaszkad"],
+        default="szabaly",
+        help="szabaly: nincs Ollama-hívás (alapértelmezett). llm/kaszkad: Ollamát hív.",
+    )
+    parser.add_argument(
+        "--modell",
+        default=None,
+        help="Ollama modellnév (--ertelmezo llm/kaszkad mellett) — enélkül az "
+        "APRAJAFALVA_LLM_MODELL környezeti változóból jön.",
     )
     parser.add_argument("--json", type=Path, default=None, help="Eredmény mentése JSON-ba")
     args = parser.parse_args(argv)
 
     meta, esetek = betolt()
     print(f"Betöltve: {len(esetek)} eset, meta.most = {meta['most_alapertelmezett']}")
-    print("Értelmező: szabaly (SzabalyAlapuErtelmezo, nincs modellhívás, nincs Ollama)\n")
 
-    ertelmezo = SzabalyAlapuErtelmezo()
-    eredmenyek = fut(meta, esetek, szabaly_hivo(ertelmezo))
-    osszefoglalo = jelent("szabaly-alapu", meta, eredmenyek)
+    reteg_szamlalo: dict[str, int] = {}
+    if args.ertelmezo == "szabaly":
+        from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
+
+        print("Értelmező: szabaly (SzabalyAlapuErtelmezo, nincs modellhívás, nincs Ollama)\n")
+        hivo = ertelmezo_hivo(SzabalyAlapuErtelmezo())
+    else:
+        from assistant.interpreter.llm_based import LLMErtelmezo, LLMSzolgaltato
+
+        try:
+            szolgaltato = LLMSzolgaltato(modell=args.modell)
+        except ValueError as exc:
+            print(str(exc))
+            return 1
+        llm = LLMErtelmezo(szolgaltato)
+
+        if args.ertelmezo == "llm":
+            print(f"Értelmező: llm (modell={szolgaltato.modell})\n")
+            hivo = ertelmezo_hivo(llm)
+        else:
+            from assistant.interpreter.kaszkad import KaszkadErtelmezo
+            from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
+
+            print(f"Értelmező: kaszkad (modell={szolgaltato.modell})\n")
+            kaszkad = KaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
+            alap_hivo = ertelmezo_hivo(kaszkad)
+
+            def hivo(bemenet, most, _alap=alap_hivo, _kaszkad=kaszkad):
+                eredmeny = _alap(bemenet, most)
+                reteg_szamlalo[_kaszkad.utolso_reteg] = (
+                    reteg_szamlalo.get(_kaszkad.utolso_reteg, 0) + 1
+                )
+                return eredmeny
+
+    eredmenyek = fut(meta, esetek, hivo)
+    osszefoglalo = jelent(args.ertelmezo, meta, eredmenyek)
+    if reteg_szamlalo:
+        print(
+            "\nRéteg-megoszlás (melyik oldotta meg, utolsó forduló): "
+            + ", ".join(f"{r}={n}" for r, n in sorted(reteg_szamlalo.items()))
+        )
 
     if args.json:
         args.json.write_text(

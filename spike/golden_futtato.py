@@ -21,7 +21,7 @@ Két mód:
   dekódolással, egy Ollama-hívásonként) itt nem éri meg modellezni; a
   determinisztikus alapvonal (`--ertelmezo szabaly`) ezt támogatja.
 - `--ertelmezo szabaly`: nincs modellhívás — a `tests/golden/futtato.py::
-  szabaly_hivo`-t hívja, ami az `assistant/interpreter/
+  ertelmezo_hivo`-t hívja, ami az `assistant/interpreter/
   rule_based.py::SzabalyAlapuErtelmezo`-t futtatja közvetlenül, egy- és
   többfordulós esetekkel egyaránt. Ez adja meg, mit tud a rendszer LLM
   NÉLKÜL — ez az alapvonal, ami fölé egy jövőbeli LLM-es értelmezőnek
@@ -56,9 +56,9 @@ sys.path.insert(0, str(GYOKER))
 
 from tests.golden.futtato import (  # noqa: E402
     betolt,
+    ertelmezo_hivo,
     fut,
     jelent,
-    szabaly_hivo,
 )
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
@@ -225,7 +225,7 @@ def main() -> int:
         from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
         cimke = "szabaly-alapu"
-        hivo = szabaly_hivo(SzabalyAlapuErtelmezo())
+        hivo = ertelmezo_hivo(SzabalyAlapuErtelmezo())
         futtatando = esetek
     else:
         print(f"Modell: {args.modell}  (gondolkodás: {'ki' if args.nincs_gondolkodas else 'be'})\n")

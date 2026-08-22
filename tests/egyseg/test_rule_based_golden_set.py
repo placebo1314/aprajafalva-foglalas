@@ -13,12 +13,12 @@ küszöb-assertek, tiltott-minta ellenőrzés) — egy- ÉS többfordulós
 from __future__ import annotations
 
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
-from tests.golden.futtato import betolt, fut, szabaly_hivo
+from tests.golden.futtato import betolt, ertelmezo_hivo, fut
 
 
 def _futtat():
     meta, esetek = betolt()
-    eredmenyek = fut(meta, esetek, szabaly_hivo(SzabalyAlapuErtelmezo()))
+    eredmenyek = fut(meta, esetek, ertelmezo_hivo(SzabalyAlapuErtelmezo()))
     return meta, esetek, eredmenyek
 
 
