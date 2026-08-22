@@ -106,6 +106,36 @@ paraméternevekben, ezért a `varhato_kerdes_tipusa` mezőt is "kitalált
 árnak" minősítette. Teljes mezőnév-egyezésre javítva
 (`tests/golden/futtato.py`).
 
+### 4. Amit a golden set nem mér: fej nélküli végigjátszás
+
+`python feladat.py vegigjatszas` — a VALÓDI vásárlói felület, valódi
+modellel, Tkinter-eseményhurok nélkül. Három olyan hibát fogott meg,
+amit a golden set szerkezetileg nem tud mérni (mert az mondatokat mér,
+nem felületet):
+
+1. **A gombnyomásos út modellel használhatatlan volt.** A zárt kérdés
+   gombjai a `valaszthato_ertekek` egyik elemét küldik vissza új
+   fordulóként (`"torpilla"`) — a modell erre ÚJRA visszakérdezett a
+   boltra, végtelen körben. Az akadálymentes, koppintós út a felület
+   legfontosabb kisegítő eleme. Javítva: ha a mondat MAGA egy zárt
+   halmazbeli érték (teljes sztring-egyezés bolt-slugra vagy
+   bolt-névre), a determinisztikus réteg válaszol, modellhívás nélkül.
+2. **A modell árat olvastatott fel egy megjelenés-kérdésre.** A "Hogy
+   néz ki a Törpilla bolt?" kérdésre `mit: "ar"`-t adott, és a felület
+   az árat mondta be — pedig az ár a vásárlói csatornán NEM engedélyezett
+   tényválasz (blueprint 10., golden set `kapuor-02`). Javítva a kötött
+   dekódolás szintjén: az `"ar"` kikerült a modellnek adott `mit`
+   enumból. **Ez a legfontosabb tanulság a körből:** a zárt halmaz nem
+   csak arra való, hogy kitalált értéket zárjon ki, hanem arra is, hogy
+   a LÉTEZŐ, de ezen a csatornán nem engedélyezett értéket kizárja.
+3. **Nem volt mód friss beszélgetést kezdeni** a felületen — a szándék
+   kemény része szándékosan túléli a fordulókat, de próbálgatás közben
+   emiatt az előző próba boltja beleszólt a következőbe. Új gomb.
+
+Egyik sem a sorrend hibája volt; mindhárom akkor is előjött volna, ha az
+ADR-016 marad. De csak a modell éles útra állítása után váltak
+láthatóvá.
+
 ## A mérés
 
 45 eset, `qwen3.5:9b`, `most = 2026-08-17T09:00:00Z`, `temperature 0`,
@@ -210,10 +240,14 @@ Bármelyik **kettő** együtt visszaállítja az ADR-016 sorrendjét:
 - a hangcsatorna válaszidő-SLO-ja érvénybe lép, és a fordított felállás
   p95-e **> 2× a determinisztikus-előbb kaszkádé** (ma ez már igaz —
   ezért számít ez a feltétel élesnek, amint az SLO nem felfüggesztett);
-- a modell egy fordulóban zárt halmazon KÍVÜLI értéket ad, amit a
-  determinisztikus kapuk nem fognak meg (ma egy sem volt ilyen, de ez a
-  hibaosztály önmagában elég a visszafordulásra — a kiszámíthatóság
-  fontosabb a pontosságnál).
+- a modell olyan értéket ad, amit a determinisztikus kapuk nem fognak
+  meg, és a vásárló KÁRT szenved belőle (rossz foglalás, kitalált tény).
+  Zárt halmazon kívüli értékre a mérésen egy példa sem volt; a
+  végigjátszás viszont talált egy rokon esetet (`mit: "ar"` egy
+  megjelenés-kérdésre) — azt a `mit` enum szűkítése zárta ki. **Ez a
+  hibaosztály önmagában, egyetlen előfordulással is elég a
+  visszafordulásra**: a kiszámíthatóság fontosabb a pontosságnál
+  (CLAUDE.md alapelv).
 
 ## Váltás költsége
 

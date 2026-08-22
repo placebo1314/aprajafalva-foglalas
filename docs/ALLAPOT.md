@@ -163,6 +163,20 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   orchestrator.py` dokumentált hatókör-korlátja). Az áthelyezés a v1-ben
   mindig visszakérdez (nincs automatikus új-időpont-keresés egy
   mondatból).
+- **A modell-elsőbbségű út három ismert gyengéje** (ADR-018, "Amit
+  feladunk"): a **kapuőr** (50% — a "Mennyibe kerül?" kérdésre
+  visszakérdez, ahelyett hogy elhárítaná; nem talál ki árat, de
+  feleslegesen kérdez), az **áthelyezés-felismerés** (az "Át tudnám tenni
+  szerdára…" mondatot keresésnek érti), és a **bolt megjelenés szerinti
+  azonosítása** ("a csillagos kirakatú bolt" — a modell a szerkesztett
+  megjelenés-adatot nem látja, ezért visszakérdez). Az első kettőre a
+  determinisztikus réteg mintája már megvan; a modell ELÉ emelésük külön
+  ADR-t igényel, mert az már hibrid architektúra.
+- **Az ár a modell felé strukturálisan le van zárva.** A fej nélküli
+  végigjátszás megfogta, hogy a modell egy megjelenés-kérdésre
+  `mit: "ar"`-t adott, és a felület az árat olvasta fel. Az `"ar"` azóta
+  nincs benne a modellnek adott `mit` enumban (`llm_based.py`) — az
+  eszköz maga továbbra is tud árat adni admin-oldali használatra.
 - **A vásárlói felület a BEOSZTÁSHOZ horgonyoz, nem a rendszerórához.**
   A demóadat egy fix, 2026-12-21-gyel kezdődő hétre és EGYETLEN boltra
   (Törpilla) generál beosztást; a felület ezért a nap-választót és a
