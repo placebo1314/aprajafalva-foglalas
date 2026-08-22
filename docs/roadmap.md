@@ -180,6 +180,10 @@ ellenőrzés, bizalmi jelzés.
 - ~~koppintós út párhuzamos felületként~~ — kész (`ui/vasarlo.py`)
 - ~~szándék rétegzése (kemény/puha, alkudozás)~~ — kész (`assistant/orchestrator.py::kovetkezo_kontextus`)
 - ~~enumeráció-védelem és rate limiting (`foglalas_lekerdezes`)~~ — kész (`assistant/orchestrator.py::_foglalas_lekerdezes`)
+- rendszerprompt a lehető legrövidebb legyen, a ritkán használt
+  instrukciók feltételes ágba kerüljenek — csak az LLM-integrációval
+  együtt dől el, ma még nincs miből (`docs/PLATFORM_TANULSAGOK.md`,
+  Vapi-tanulság: "a prompt hossza latencia")
 
 **Kilépési feltétel:** a golden seten a szolgáltatás-azonosítás > 98%, és a
 **leggyengébb nyelvi rétegen is > 90%**.
@@ -193,6 +197,12 @@ ellenőrzés, bizalmi jelzés.
 - foglaláshoz fűzött megjegyzés (redaktált, zárt halmaz)
 - értesítések **előállítása** — küldés nélkül
 - opcionális értékelés a beszélgetés végén
+- **dev mód metrikái közé:** barge-in arány és válaszhossz
+  (`docs/PLATFORM_TANULSAGOK.md`, Vapi-tanulság — a magas barge-in arány
+  azt jelzi, hogy a rendszer túl hosszan beszél)
+- **felület:** prefetch + helyi szűrés a tablet-böngészéshez
+  (`docs/PLATFORM_TANULSAGOK.md`, Cal.com-tanulság — a heti slotlista
+  elfér a memóriában, a böngészés nulla hálózati kérés)
 
 ---
 
@@ -202,6 +212,12 @@ ellenőrzés, bizalmi jelzés.
 - rosszra értékelt beszélgetések előre sorolva
 - export, LoRA finomhangolás, mérés a golden seten
 - állandó mutatók: kiút aránya, félreértés rétegenként, no-show
+- **turn-detection idős beszédre hangolva** (`docs/PLATFORM_TANULSAGOK.md`,
+  Vapi-tanulság): hosszabb türelmi idő (`waitSeconds`), mint a Vapi
+  sales-alapértelmezései; „configure, do not build" elv a barge-inra —
+  a VAD/turn-detection a hangkeretrendszer (LiveKit/Pipecat) dolga, nem
+  saját fejlesztés; a háttércsatorna („ühüm") elkülönítve a valódi
+  közbevágástól, félbeszakításkor a szándékindex adata nem veszhet el
 
 ---
 
