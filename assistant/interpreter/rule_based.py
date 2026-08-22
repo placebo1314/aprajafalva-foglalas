@@ -267,7 +267,8 @@ class SzabalyAlapuErtelmezo:
         also = szoveg.lower()
 
         if _kapuor_talalat(also):
-            return {"eszkoz": "nincs", "parameterek": {}}
+            # A kapuőr pozitív mintaillesztés — determinisztikusan biztos.
+            return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {"eszkoz": 1.0}}
 
         bolt_info_mezo = _bolt_info_mezo(also)
         if bolt_info_mezo is not None:
@@ -276,13 +277,18 @@ class SzabalyAlapuErtelmezo:
         if _LEMONDAS_MINTA.search(also):
             kod = _foglalasi_kod(mondat)
             if kod:
-                return {"eszkoz": "foglalas_lemondas", "parameterek": {"foglalasi_kod": kod}}
+                return {
+                    "eszkoz": "foglalas_lemondas",
+                    "parameterek": {"foglalasi_kod": kod},
+                    "bizonyossag": {"eszkoz": 1.0, "foglalasi_kod": 1.0},
+                }
             return {
                 "eszkoz": "visszakerdez",
                 "parameterek": {
                     "hianyzo_mezo": "foglalasi_kod",
                     "varhato_kerdes_tipusa": "nyitott",
                 },
+                "bizonyossag": {"eszkoz": 1.0, "foglalasi_kod": None},
             }
 
         if _ATHELYEZES_MINTA.search(also):
@@ -295,6 +301,7 @@ class SzabalyAlapuErtelmezo:
                     "hianyzo_mezo": "foglalasi_kod",
                     "varhato_kerdes_tipusa": "nyitott",
                 },
+                "bizonyossag": {"eszkoz": 1.0, "foglalasi_kod": None},
             }
 
         return self._kereses(szoveg, also, most, kontextus)
@@ -314,7 +321,16 @@ class SzabalyAlapuErtelmezo:
         datum = _datum_csak_nap(szoveg, most)
         if datum:
             parameterek["datum"] = datum
-        return {"eszkoz": "bolt_info", "parameterek": parameterek}
+        return {
+            "eszkoz": "bolt_info",
+            "parameterek": parameterek,
+            "bizonyossag": {
+                "eszkoz": 1.0,
+                "bolt_id": 1.0,
+                "mit": 1.0,
+                "datum": 1.0 if datum else None,
+            },
+        }
 
     def _kereses(self, szoveg: str, also: str, most: str, kontextus: ErtelmezesKontextus) -> dict:
         # Szándék rétegzés (assistant/orchestrator.py::kovetkezo_kontextus
@@ -351,6 +367,26 @@ class SzabalyAlapuErtelmezo:
         if szolgaltatas_id:
             kinyert["szolgaltatas_id"] = szolgaltatas_id
 
+        # BIZONYOSSÁG (l. `assistant/interpreter/__init__.py::Ertelmezo`):
+        # 1.0 arra, amit szabályból ténylegesen KINYERTÜNK a mondatból
+        # (vagy a kontextusból, ami maga is így keletkezett), és None
+        # arra, amit csak alapértelmezésként töltünk ki. Ez a
+        # megkülönböztetés a lényeg: a `_altalanos_ablak()` tartalék-
+        # dátum és a "barmikor" napszak NEM tudás, hanem hiány pótlása —
+        # az orchestrator ebből tudja, hogy érdemes lehet rákérdezni.
+        kontextus_datum = "datum_tol" in kontextus.megorzott_parameterek
+        kontextus_napszak = "napszak" in kontextus.megorzott_parameterek
+        bizonyossag: dict[str, float | None] = {
+            # A keresés az ELIMINÁCIÓS ág (se kapuőr, se tényválasz, se
+            # lemondás/áthelyezés nem illeszkedett) — ezért csak akkor
+            # nevezzük biztosnak, ha van rá pozitív bizonyíték is:
+            # felismert bolt VAGY felismert dátum a mondatban.
+            "eszkoz": 1.0 if (uj_bolt or datum_tol) else None,
+            "bolt_id": 1.0 if bolt_id else None,
+            "datum": 1.0 if (datum_tol or kontextus_datum) else None,
+            "napszak": 1.0 if (napszak or kontextus_napszak) else None,
+        }
+
         if bolt_id is None:
             return {
                 "eszkoz": "visszakerdez",
@@ -361,6 +397,9 @@ class SzabalyAlapuErtelmezo:
                     **kontextus.megorzott_parameterek,
                     **kinyert,
                 },
+                # A visszakérdezés MAGA biztos döntés (hiányzik a bolt),
+                # akkor is, ha a hiányzó mezőről semmit nem tudunk.
+                "bizonyossag": {**bizonyossag, "eszkoz": 1.0},
             }
 
         vegleges = dict(kontextus.megorzott_parameterek)
@@ -377,4 +416,9 @@ class SzabalyAlapuErtelmezo:
             auto = katalogus.BOLT_EGYERTELMU_SZOLGALTATAS.get(bolt_id)
             if auto:
                 vegleges["szolgaltatas_id"] = auto
-        return {"eszkoz": "szabad_idopontok", "parameterek": vegleges}
+        bizonyossag["szolgaltatas_id"] = 1.0 if vegleges.get("szolgaltatas_id") else None
+        return {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": vegleges,
+            "bizonyossag": bizonyossag,
+        }

@@ -17,10 +17,20 @@ from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 _MOST = "2026-08-17T09:00:00Z"  # hétfő
 
 
-def _ertelmez(mondat: str, kontextus: ErtelmezesKontextus | None = None) -> dict:
+def _ertelmez_teljes(mondat: str, kontextus: ErtelmezesKontextus | None = None) -> dict:
+    """A NYERS értelmezés, a `bizonyossag` mezővel együtt."""
     return SzabalyAlapuErtelmezo().ertelmez(
         mondat, most=_MOST, kontextus=kontextus or ErtelmezesKontextus()
     )
+
+
+def _ertelmez(mondat: str, kontextus: ErtelmezesKontextus | None = None) -> dict:
+    """Csak az `eszkoz` + `parameterek` rész — a `bizonyossag`-ot
+    kihagyja, hogy az "mit ismert fel" tesztek egyetlen dologról
+    szóljanak. A bizonyosságnak saját, dedikált tesztjei vannak lent
+    ("bizonyosság" szakasz), `_ertelmez_teljes`-szel."""
+    eredmeny = _ertelmez_teljes(mondat, kontextus)
+    return {k: v for k, v in eredmeny.items() if k != "bizonyossag"}
 
 
 # --- kapuőr ---------------------------------------------------------
@@ -322,3 +332,71 @@ def test_kontextus_megorzott_parameterek_atadodik_a_kovetkezo_hivasnak():
     assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi"
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
     assert eredmeny["parameterek"]["napszak"] == "delelott"
+
+
+# --- bizonyosság: 1.0 amit szabályból tud, None amit nem -------------
+
+
+def test_bizonyossag_kapuor_dontese_biztos():
+    b = _ertelmez_teljes("Milyen idő lesz holnap?")["bizonyossag"]
+    assert b["eszkoz"] == 1.0
+
+
+def test_bizonyossag_explicit_datum_es_bolt_biztos():
+    b = _ertelmez_teljes("Petárdázni szeretnék kedden.")["bizonyossag"]
+    assert b["eszkoz"] == 1.0
+    assert b["bolt_id"] == 1.0
+    assert b["datum"] == 1.0
+
+
+def test_bizonyossag_alapertelmezett_datum_nem_tudas():
+    """A `_altalanos_ablak()` tartalék-dátum nem a mondatból származik —
+    a bizonyosság ezért None, nem 1.0. Ebből tudja az orchestrator, hogy
+    a dátumra érdemes lehet rákérdezni."""
+    eredmeny = _ertelmez_teljes("Petárdát kéne venni. Mikor mehetek?")
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert "datum_tol" in eredmeny["parameterek"], "a keresés attól még elindul"
+    assert eredmeny["bizonyossag"]["datum"] is None
+
+
+def test_bizonyossag_alapertelmezett_napszak_nem_tudas():
+    eredmeny = _ertelmez_teljes("Petárdázni szeretnék kedden.")
+    assert eredmeny["parameterek"]["napszak"] == "barmikor"
+    assert eredmeny["bizonyossag"]["napszak"] is None
+
+
+def test_bizonyossag_explicit_napszak_biztos():
+    eredmeny = _ertelmez_teljes("Petárdázni szeretnék kedden délelőtt.")
+    assert eredmeny["parameterek"]["napszak"] == "delelott"
+    assert eredmeny["bizonyossag"]["napszak"] == 1.0
+
+
+def test_bizonyossag_hianyzo_bolt_none_de_a_visszakerdezes_biztos():
+    b = _ertelmez_teljes("Szeretnék menni kedden valahova.")["bizonyossag"]
+    assert b["bolt_id"] is None
+    assert b["eszkoz"] == 1.0, "a visszakérdezés maga biztos döntés"
+
+
+def test_bizonyossag_eliminacios_keresesnel_nincs_pozitiv_bizonyitek():
+    """A keresés az eliminációs ág — ha sem boltot, sem dátumot nem
+    ismertünk fel a mondatból, az `eszkoz` sem biztos."""
+    eredmeny = _ertelmez_teljes(
+        "hát én csak azt szeretném hogy hogy mikor lehet menni",
+        ErtelmezesKontextus(megorzott_parameterek={"bolt_id": "ugyifogyi"}),
+    )
+    assert eredmeny["bizonyossag"]["eszkoz"] is None
+
+
+def test_bizonyossag_kontextusbol_orokolt_datum_is_tudas():
+    """A kontextusból hozott dátum korábban maga is szabályból
+    keletkezett — az nem alapértelmezés, hanem tudás."""
+    b = _ertelmez_teljes(
+        "a Törpillánál",
+        ErtelmezesKontextus(
+            megorzott_parameterek={
+                "datum_tol": "2026-08-18T00:00:00Z",
+                "datum_ig": "2026-08-18T23:59:59Z",
+            }
+        ),
+    )["bizonyossag"]
+    assert b["datum"] == 1.0

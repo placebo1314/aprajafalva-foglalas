@@ -43,7 +43,25 @@ class Ertelmezo(Protocol):
         rendszeróra szerint (a golden set esetei fagyasztott `most`-tal
         futnak, `golden-set` skill).
 
-        Visszatérési érték: `{"eszkoz": str, "parameterek": dict}`."""
+        Visszatérési érték:
+
+        ```python
+        {"eszkoz": str,
+         "parameterek": dict,
+         "bizonyossag": {"eszkoz": 0.9, "bolt_id": 0.6, "datum": 1.0}}
+        ```
+
+        A `bizonyossag` (blueprint 10. szakasz: "Bizalmi jelzés a kötött
+        dekódolás logprobjaiból, kritikus mezőkre") **opcionális** —
+        aki nem adja, azt az orchestrator ismeretlennek tekinti, és nem
+        von le belőle következtetést. Értékei `0.0`–`1.0` közti számok
+        VAGY `None`. A `None` jelentése "erről nem tudok nyilatkozni",
+        ami NEM ugyanaz, mint a `0.0` ("biztosan rossz") — a
+        determinisztikus értelmező pont ezt a különbséget használja:
+        `1.0`-t ad arra, amit szabályból tud, `None`-t arra, amit nem.
+
+        **A visszakérdezésről az orchestrator dönt, nem az értelmező**
+        (blueprint 10. szakasz) — az értelmező csak számot ad."""
         ...
 
 

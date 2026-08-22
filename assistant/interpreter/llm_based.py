@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import urllib.error
 import urllib.request
@@ -134,6 +135,118 @@ Lemondáshoz a foglalási kód kell — ha nincs a mondatban, visszakerdez \
 (hianyzo_mezo: foglalasi_kod)."""
 
 
+# Az a JSON-mezőkészlet, amire bizonyosságot számolunk. A kulcs a
+# `bizonyossag` dictben megjelenő név, az érték a JSON-ban keresett
+# mezőnév. A "datum" szándékosan a `datum_tol`-ra épül: a dátumablak
+# egyben mozog, nem érdemes a két végét külön mérni.
+_BIZONYOSSAG_MEZOK = {
+    "eszkoz": "eszkoz",
+    "bolt_id": "bolt_id",
+    "szolgaltatas_id": "szolgaltatas_id",
+    "datum": "datum_tol",
+    "napszak": "napszak",
+}
+
+
+def _ertek_karakter_tartomany(szoveg: str, mezonev: str) -> tuple[int, int] | None:
+    """A `"<mezonev>": <érték>` ÉRTÉK-részének karaktertartománya a nyers
+    JSON-szövegben, vagy `None`, ha a mező nincs benne. Karakterszinten
+    dolgozunk, mert a tokenhatárok nem esnek egybe a JSON-szintaxissal
+    (a tokenizáló szívesen összevonja az írásjelet a szomszédjával, pl.
+    `":` vagy `",` egyetlen tokenben) — token-mintázatra épülő szeletelés
+    ezért megbízhatatlan."""
+    kulcs = f'"{mezonev}"'
+    kulcs_pozicio = szoveg.find(kulcs)
+    if kulcs_pozicio < 0:
+        return None
+    kettospont = szoveg.find(":", kulcs_pozicio + len(kulcs))
+    if kettospont < 0:
+        return None
+
+    i = kettospont + 1
+    while i < len(szoveg) and szoveg[i] in " \t\n":
+        i += 1
+    if i >= len(szoveg):
+        return None
+
+    if szoveg[i] == '"':  # sztring érték: a záró idézőjelig
+        veg = szoveg.find('"', i + 1)
+        return (i, len(szoveg) if veg < 0 else veg + 1)
+    # szám/logikai érték: a következő elválasztóig
+    veg = i
+    while veg < len(szoveg) and szoveg[veg] not in ",}\n":
+        veg += 1
+    return (i, veg)
+
+
+def _mezo_bizonyossag(logprobs: list[dict], mezonev: str) -> float | None:
+    """Egy JSON-mező ÉRTÉKÉNEK bizonyossága a token-logprobokból.
+
+    **Nem a modell önbevallása** (nem kérdezzük meg tőle, mennyire
+    biztos — arra köztudottan rosszul kalibrált), hanem a tényleges
+    dekódolási valószínűség — blueprint 10. szakasz, "Bizalmi jelzés a
+    kötött dekódolás logprobjaiból".
+
+    Két tervezési döntés, mindkettő mérésből:
+
+    1. **Karaktertartomány, nem token-mintázat** (l.
+       `_ertek_karakter_tartomany`).
+    2. **Mértani közép, nem szorzat.** A tokenvalószínűségek szorzata a
+       hosszú értékeket önmagában bünteti: a három tokenre bomló
+       `"visszakerdez"` így akkor is bizonytalanabbnak látszana, mint az
+       egy tokenes `"nincs"`, ha a modell mindkettőben ugyanolyan biztos
+       volt. Az első mérésen ez 0,0001 nagyságrendű, használhatatlan
+       számokat adott. A tokenenkénti mértani közép ettől független: azt
+       méri, mennyire volt biztos a modell ÁTLAGOSAN egy token
+       megválasztásában.
+
+    `None`, ha a mező nem szerepel a kimenetben, vagy a szolgáltató nem
+    adott logprobokat — ez NEM 0.0: a "nem tudom megmondani" és a
+    "biztosan rossz" két különböző állítás."""
+    if not logprobs:
+        return None
+
+    # Token → karakter-tartomány leképezés a teljes kimeneten.
+    tartomanyok: list[tuple[int, int, float]] = []
+    pozicio = 0
+    szoveg_reszek = []
+    for tok in logprobs:
+        darab = tok.get("token", "")
+        szoveg_reszek.append(darab)
+        logprob = tok.get("logprob")
+        if logprob is not None and darab:
+            tartomanyok.append((pozicio, pozicio + len(darab), logprob))
+        pozicio += len(darab)
+    szoveg = "".join(szoveg_reszek)
+
+    ertek_tartomany = _ertek_karakter_tartomany(szoveg, mezonev)
+    if ertek_tartomany is None:
+        return None
+    ertek_kezdet, ertek_veg = ertek_tartomany
+
+    # Minden token, ami átfed az érték tartományával.
+    logprob_lista = [
+        logprob for kezdet, veg, logprob in tartomanyok if kezdet < ertek_veg and veg > ertek_kezdet
+    ]
+    if not logprob_lista:
+        return None
+
+    atlagos_logprob = sum(logprob_lista) / len(logprob_lista)
+    return round(math.exp(atlagos_logprob), 4)
+
+
+def bizonyossag_szamol(logprobs: list[dict] | None, ertelmezes: dict) -> dict[str, float | None]:
+    """A `bizonyossag` mező összeállítása a token-logprobokból — l.
+    `_mezo_bizonyossag`. Csak azokra a mezőkre ad számot, amik
+    ténylegesen szerepelnek a modell kimenetében."""
+    parameterek = ertelmezes.get("parameterek") or {}
+    eredmeny: dict[str, float | None] = {}
+    for nev, json_mezo in _BIZONYOSSAG_MEZOK.items():
+        jelen = json_mezo in ertelmezes or json_mezo in parameterek
+        eredmeny[nev] = _mezo_bizonyossag(logprobs or [], json_mezo) if jelen else None
+    return eredmeny
+
+
 @dataclass(frozen=True)
 class LLMSzolgaltato:
     """A modell mögötti absztrakció (ADR-013: "elsődleges modell
@@ -186,6 +299,10 @@ class LLMErtelmezo:
             "stream": False,
             "think": False,  # explicit — l. modul docstring
             "options": {"temperature": 0},
+            # A bizonyosság a TÉNYLEGES dekódolási valószínűségekből jön,
+            # nem a modell önbevallásából (`bizonyossag_szamol`).
+            "logprobs": True,
+            "top_logprobs": 1,
         }
         req = urllib.request.Request(
             self.szolgaltato.url,
@@ -199,7 +316,7 @@ class LLMErtelmezo:
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             self.utolso_hiba = f"Ollama nem elérhető: {exc}"
             _LOG.warning(self.utolso_hiba)
-            return {"eszkoz": "nincs", "parameterek": {}}
+            return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {}}
 
         tartalom = valasz.get("message", {}).get("content", "")
         try:
@@ -207,12 +324,13 @@ class LLMErtelmezo:
         except json.JSONDecodeError as exc:
             self.utolso_hiba = f"JSON parse hiba: {exc} — nyers: {tartalom[:200]!r}"
             _LOG.warning(self.utolso_hiba)
-            return {"eszkoz": "nincs", "parameterek": {}}
+            return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {}}
 
         if not isinstance(ertelmezes, dict) or "eszkoz" not in ertelmezes:
             self.utolso_hiba = f"Váratlan alak a modell válaszában: {ertelmezes!r}"
             _LOG.warning(self.utolso_hiba)
-            return {"eszkoz": "nincs", "parameterek": {}}
+            return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {}}
 
         ertelmezes.setdefault("parameterek", {})
+        ertelmezes["bizonyossag"] = bizonyossag_szamol(valasz.get("logprobs"), ertelmezes)
         return ertelmezes

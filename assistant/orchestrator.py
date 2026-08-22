@@ -41,6 +41,7 @@ from assistant.tools import (
     foglalas_letrehozas,
     szabad_idopontok,
 )
+from assistant.tools.katalogus import BOLT_SLUGOK
 from core.repo import foglalas_repo
 
 # Ha a mondatból nem oldható fel egy kritikus mező ennyi egymást követő
@@ -75,6 +76,34 @@ _ISMETLES_KUSZOB = 2
 # A kiútban felajánlott, zárt választási lehetőségek — azok a
 # dimenziók, amelyek mentén a vásárló ténylegesen tud lazítani.
 _KIUT_DIMENZIOK = ("bolt", "het", "napszak")
+
+
+@dataclass(frozen=True)
+class BizonyossagKuszobok:
+    """Konfigurálható bizonyossági küszöbök (blueprint 10. szakasz:
+    "Bizalmi jelzés ... kritikus mezőkre"; eszkoz-szerzodes skill).
+
+    **A visszakérdezésről az orchestrator dönt, nem az értelmező** — az
+    értelmező csak számot ad, a küszöb itt van. A `None` bizonyosság
+    ("nem tudok nyilatkozni") SOSEM esik küszöb alá: abból nem
+    következtetünk, mert a hiánya nem bizonytalanság-bizonyíték. A
+    determinisztikus értelmező pont ezt használja ki (1.0 vagy None,
+    köztes érték nincs) — így a küszöbrendszer bekapcsolása nem
+    változtatja meg a determinisztikus viselkedést."""
+
+    eszkoz: float = 0.7
+    kritikus_mezo: float = 0.6
+    # Ha a két legvalószínűbb szándék bizonyossága ennél közelebb van
+    # egymáshoz, zárt kérdéssel tisztázunk ("Lemondani szeretné, vagy
+    # áthelyezni?") ahelyett, hogy találgatnánk.
+    szandek_kozelseg: float = 0.15
+
+
+# Azok a mezők, amikre a `kritikus_mezo` küszöb vonatkozik — a
+# eszkoz-szerzodes skill "Bizalmi jelzés" táblázata szerint. A `napszak`
+# szándékosan KIMARAD: ott a skill is azt mondja, "mehet tovább, tág
+# értelmezéssel" — egy bizonytalan napszak nem indokol visszakérdezést.
+_KRITIKUS_MEZOK = ("bolt_id", "szolgaltatas_id", "datum")
 
 
 def kovetkezo_kontextus(elozo_megorzott: dict, ertelmezes: dict) -> dict:
@@ -158,10 +187,17 @@ class _SessionAllapot:
 
 
 class Orchestrator:
-    def __init__(self, conn, ertelmezo: Ertelmezo, org_id: str):
+    def __init__(
+        self,
+        conn,
+        ertelmezo: Ertelmezo,
+        org_id: str,
+        kuszobok: BizonyossagKuszobok | None = None,
+    ):
         self.conn = conn
         self.ertelmezo = ertelmezo
         self.org_id = org_id
+        self.kuszobok = kuszobok or BizonyossagKuszobok()
         self._sessionok: dict[str, _SessionAllapot] = {}
         # Az utolsó `fordulo()`-hívás nyers értelmezés-kimenete
         # ({eszkoz, parameterek}) — nem a válasz része, csak
@@ -188,6 +224,14 @@ class Orchestrator:
         self.utolso_ertelmezes = ertelmezes
         eszkoz = ertelmezes.get("eszkoz")
         parameterek = ertelmezes.get("parameterek") or {}
+
+        # BIZONYOSSÁG-KAPU: küszöb alatt nem találgatunk, hanem zárt
+        # kérdéssel tisztázunk. A döntés ITT van, nem az értelmezőben
+        # (blueprint 10. szakasz).
+        bizonytalan = self._bizonytalansag_kezel(ertelmezes)
+        if bizonytalan is not None:
+            allapot.sikertelen_ertelmezesek += 1
+            return bizonytalan
 
         if eszkoz == "nincs":
             allapot.sikertelen_ertelmezesek = 0
@@ -221,6 +265,61 @@ class Orchestrator:
         return self._visszakerdez(
             allapot, {"hianyzo_mezo": "eszkoz", "varhato_kerdes_tipusa": "zart"}
         )
+
+    def _bizonytalansag_kezel(self, ertelmezes: dict) -> dict | None:
+        """Zárt kérdést ad vissza, ha az értelmezés bizonyossága küszöb
+        alatt van — különben `None` (mehet tovább a szokásos úton).
+
+        Három eset, ebben a sorrendben:
+
+        1. **Két szándék közel van egymáshoz** (`szandek_kozelseg`) — ezt
+           az értelmező jelezheti egy `szandek_jeloltek` listával. Ilyenkor
+           nem választunk, hanem megkérdezzük: "Lemondani szeretné, vagy
+           áthelyezni?"
+        2. **Az eszközválasztás bizonytalan** (`eszkoz` küszöb alatt) —
+           zárt kérdés a szándékról.
+        3. **Egy kritikus mező bizonytalan** (`kritikus_mezo` küszöb
+           alatt) — zárt kérdés arra a mezőre.
+
+        A `None` bizonyosság SOSEM esik küszöb alá (l.
+        `BizonyossagKuszobok`)."""
+        bizonyossag = ertelmezes.get("bizonyossag") or {}
+
+        jeloltek = ertelmezes.get("szandek_jeloltek") or []
+        if len(jeloltek) >= 2:
+            rendezett = sorted(jeloltek, key=lambda j: j.get("bizonyossag") or 0.0, reverse=True)
+            elso, masodik = rendezett[0], rendezett[1]
+            kulonbseg = (elso.get("bizonyossag") or 0.0) - (masodik.get("bizonyossag") or 0.0)
+            if kulonbseg < self.kuszobok.szandek_kozelseg:
+                return {
+                    "tipus": "visszakerdezes",
+                    "hianyzo_mezo": "eszkoz",
+                    "kerdes_tipusa": "zart",
+                    "valaszthato_ertekek": [elso.get("eszkoz"), masodik.get("eszkoz")],
+                    "ok": "kozeli_szandekok",
+                }
+
+        eszkoz_bizonyossag = bizonyossag.get("eszkoz")
+        if eszkoz_bizonyossag is not None and eszkoz_bizonyossag < self.kuszobok.eszkoz:
+            return {
+                "tipus": "visszakerdezes",
+                "hianyzo_mezo": "eszkoz",
+                "kerdes_tipusa": "zart",
+                "valaszthato_ertekek": [],
+                "ok": "bizonytalan_szandek",
+            }
+
+        for mezo in _KRITIKUS_MEZOK:
+            ertek = bizonyossag.get(mezo)
+            if ertek is not None and ertek < self.kuszobok.kritikus_mezo:
+                return {
+                    "tipus": "visszakerdezes",
+                    "hianyzo_mezo": mezo,
+                    "kerdes_tipusa": "zart",
+                    "valaszthato_ertekek": (sorted(BOLT_SLUGOK) if mezo == "bolt_id" else []),
+                    "ok": "bizonytalan_mezo",
+                }
+        return None
 
     @staticmethod
     def _valasz_kulcs(valasz: dict) -> str | None:

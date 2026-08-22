@@ -12,7 +12,8 @@ import time
 
 from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
-from assistant.orchestrator import Orchestrator, kovetkezo_kontextus
+from assistant.orchestrator import BizonyossagKuszobok, Orchestrator, kovetkezo_kontextus
+from assistant.tools.katalogus import BOLT_SLUGOK
 from core.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo
 from core.slot import generator
 from core.slot.blokk import FixedBlock
@@ -799,3 +800,209 @@ def test_ismetles_sessionok_kozott_fuggetlen(tmp_path):
     masik_session = orch.fordulo("s2", "c", _MOST)
 
     assert masik_session["tipus"] == "visszakerdezes"
+
+
+# --- bizonyossági küszöbök (blueprint 10., "Bizalmi jelzés") ---------
+
+
+def test_bizonyossag_determinisztikus_ertelmezot_nem_erint(tmp_path):
+    """A determinisztikus értelmező 1.0-t vagy None-t ad — egyik sem esik
+    küszöb alá, tehát a küszöbrendszer bekapcsolása NEM változtat a
+    determinisztikus viselkedésen."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch = Orchestrator(conn, SzabalyAlapuErtelmezo(), org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "Petárdázni szeretnék kedden.", _MOST)
+
+    assert valasz["tipus"] == "ajanlat"
+
+
+def test_bizonyossag_alacsony_eszkoz_zart_kerdest_valt_ki(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {"bolt_id": "ugyifogyi"},
+                "bizonyossag": {"eszkoz": 0.4},
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "bizonytalan mondat", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
+    assert valasz["kerdes_tipusa"] == "zart"
+    assert valasz["ok"] == "bizonytalan_szandek"
+
+
+def test_bizonyossag_kuszob_feletti_eszkoz_atmegy(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                },
+                "bizonyossag": {"eszkoz": 0.95, "bolt_id": 0.9, "datum": 0.9},
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    assert orch.fordulo("s1", "petárdázni kedden", _MOST)["tipus"] == "ajanlat"
+
+
+def test_bizonyossag_alacsony_kritikus_mezo_arra_a_mezore_kerdez(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {"bolt_id": "ugyifogyi"},
+                "bizonyossag": {"eszkoz": 0.95, "bolt_id": 0.3},
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "valami boltba", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
+    assert valasz["hianyzo_mezo"] == "bolt_id"
+    assert valasz["ok"] == "bizonytalan_mezo"
+    assert valasz["valaszthato_ertekek"] == sorted(BOLT_SLUGOK)
+
+
+def test_bizonyossag_bizonytalan_napszak_nem_valt_ki_kerdest(tmp_path):
+    """A napszak nem kritikus mező — az eszkoz-szerzodes skill szerint
+    "mehet tovább, tág értelmezéssel"."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                },
+                "bizonyossag": {"eszkoz": 0.95, "bolt_id": 0.9, "napszak": 0.1},
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    assert orch.fordulo("s1", "petárdázni kedden", _MOST)["tipus"] == "ajanlat"
+
+
+def test_bizonyossag_none_sosem_esik_kuszob_ala(tmp_path):
+    """A None jelentése "nem tudok nyilatkozni", nem "biztosan rossz" —
+    ebből nem vonunk le következtetést."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                },
+                "bizonyossag": {"eszkoz": None, "bolt_id": None, "datum": None},
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    assert orch.fordulo("s1", "petárdázni kedden", _MOST)["tipus"] == "ajanlat"
+
+
+def test_bizonyossag_kozeli_szandekok_zart_kerdest_adnak(tmp_path):
+    """ "Lemondani szeretné, vagy áthelyezni?" — ha két szándék közel van
+    egymáshoz, nem választunk helyette."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "foglalas_lemondas",
+                "parameterek": {"foglalasi_kod": "X7K2M9QP"},
+                "bizonyossag": {"eszkoz": 0.9},
+                "szandek_jeloltek": [
+                    {"eszkoz": "foglalas_lemondas", "bizonyossag": 0.48},
+                    {"eszkoz": "foglalas_athelyezes", "bizonyossag": 0.44},
+                ],
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "a péntekit inkább ne", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
+    assert valasz["ok"] == "kozeli_szandekok"
+    assert set(valasz["valaszthato_ertekek"]) == {"foglalas_lemondas", "foglalas_athelyezes"}
+
+
+def test_bizonyossag_tavoli_szandekok_nem_kerdeznek_vissza(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "foglalas_lemondas",
+                "parameterek": {"foglalasi_kod": "NEMLETEZO"},
+                "bizonyossag": {"eszkoz": 0.9},
+                "szandek_jeloltek": [
+                    {"eszkoz": "foglalas_lemondas", "bizonyossag": 0.9},
+                    {"eszkoz": "foglalas_athelyezes", "bizonyossag": 0.05},
+                ],
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "le szeretném mondani", _MOST)
+
+    assert valasz.get("tipus") != "visszakerdezes"
+
+
+def test_bizonyossag_kuszobok_konfiguralhatok(tmp_path):
+    """Ugyanaz a 0.5-ös bizonyosság az alapértelmezett (0.7) küszöbnél
+    visszakérdez, egy megengedőbb (0.3) küszöbnél átmegy."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+
+    def _ertelmezo():
+        return _ScriptedErtelmezo(
+            [
+                {
+                    "eszkoz": "szabad_idopontok",
+                    "parameterek": {
+                        "bolt_id": "ugyifogyi",
+                        "datum_tol": "2026-08-18T00:00:00Z",
+                        "datum_ig": "2026-08-18T23:59:59Z",
+                    },
+                    "bizonyossag": {"eszkoz": 0.5},
+                }
+            ]
+        )
+
+    szigoru = Orchestrator(conn, _ertelmezo(), org_id=ctx["org_id"])
+    assert szigoru.fordulo("s1", "x", _MOST)["tipus"] == "visszakerdezes"
+
+    megengedo = Orchestrator(
+        conn, _ertelmezo(), org_id=ctx["org_id"], kuszobok=BizonyossagKuszobok(eszkoz=0.3)
+    )
+    assert megengedo.fordulo("s2", "x", _MOST)["tipus"] == "ajanlat"
