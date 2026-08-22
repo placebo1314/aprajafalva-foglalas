@@ -192,6 +192,11 @@ def test_teljes_ut_kereses_valasztas_megerosites_foglalas(tmp_path):
     ajanlat = orch.fordulo("session-1", "petárdázni szeretnék kedden", _MOST)
     assert ajanlat["tipus"] == "ajanlat"
     assert ajanlat["jeloltek"]
+    assert ajanlat["felismert_ablak"] == {
+        "bolt_id": "ugyifogyi",
+        "datum_tol": "2026-08-18T00:00:00Z",
+        "datum_ig": "2026-08-18T23:59:59Z",
+    }
     valasztott = ajanlat["jeloltek"][0]["slot_id"]
 
     megerosites_kerve = orch.valaszt("session-1", valasztott)

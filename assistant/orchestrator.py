@@ -143,9 +143,18 @@ class Orchestrator:
             **parameterek,
             "session_id": allapot.session_id,
         }
+        # Amit a hívó (`ui/vasarlo.py`) a nyugtázó sorhoz felolvashat,
+        # MIELŐTT a tényleges eredmény megvan — csak a felismert
+        # keresési ablak és a beazonosított bolt, a blueprint 7. szakasz
+        # "mondható" oszlopa szerint (docs/blueprint.md, "Kétlépcsős
+        # válasz"). Konkrét időpont vagy darabszám ide sosem kerül.
+        felismert_ablak = {
+            k: teljes[k] for k in ("bolt_id", "datum_tol", "datum_ig", "napszak") if k in teljes
+        }
+
         eredmeny = szabad_idopontok.hivas(self.conn, teljes, org_id=self.org_id)
         if not eredmeny["sikeres"]:
-            return {"tipus": "eszkoz_hiba", **eredmeny}
+            return {"tipus": "eszkoz_hiba", "felismert_ablak": felismert_ablak, **eredmeny}
 
         allapot.aktualis_jeloltek = eredmeny["jeloltek"]
         allapot.allapot = "valasztasra_var"
@@ -153,7 +162,11 @@ class Orchestrator:
         # paraméterek innentől feleslegesek (a következő kérés már új
         # keresés lenne, nem ugyanennek a folytatása).
         allapot.megorzott_parameterek = {}
-        return {"tipus": "ajanlat", "jeloltek": eredmeny["jeloltek"]}
+        return {
+            "tipus": "ajanlat",
+            "jeloltek": eredmeny["jeloltek"],
+            "felismert_ablak": felismert_ablak,
+        }
 
     def kereses_strukturaltan(self, session_id: str, parameterek: dict) -> dict:
         """A koppintós út belépési pontja (blueprint 10. szakasz,
