@@ -16,9 +16,10 @@
 
 Ennek az ADR-nek volt egy korábbi változata (2026-08-22), ami a
 fordított kaszkádot **megmérte és elvetette** (69,4% vs 86,1%). Ez a
-változat azt a döntést fordítja meg. A régi szöveg nincs elrejtve: a
-git-történetben megvan, és a "Mi változott a két mérés között" szakasz
-pontosan felsorolja, miért lettek mások a számok.
+változat azt a döntést fordítja meg. A régi szöveg nincs elrejtve — a
+git-történetben megvan (`git show df8895c -- docs/adr/`) —, és az "Amit
+a méréshez meg kellett csinálni" szakasz tételesen felsorolja, mi
+változott a két mérés között.
 
 ### Miért nyílt újra a kérdés
 
@@ -30,7 +31,7 @@ teljesül. Az három együttes feltételt írt elő:
 2. a determinisztikus réteg a leggyengébb rétegen **< 70%** — ez ma
    igaz (`elengedes` 0%), de a fenti halmazon kellene mérni;
 3. a modell konzisztensen **> 90%** — **nem teljesül** (a leggyengébb
-   réteg PLACEHOLDER_FORDITOTT_LEGGYENGEBB).
+   réteg `koznyelvi` 80,0%, `kapuor` 50,0%).
 
 A döntés tehát **nem azért fordul meg, mert a küszöb kigyulladt.** Azért
 fordul meg, mert **az ADR-016 bizonyítéka érvénytelen volt**:
@@ -110,11 +111,37 @@ paraméternevekben, ezért a `varhato_kerdes_tipusa` mezőt is "kitalált
 45 eset, `qwen3.5:9b`, `most = 2026-08-17T09:00:00Z`, `temperature 0`,
 `think: false`:
 
-PLACEHOLDER_FOTABLA
+| Értelmező | Összesített | Leggyengébb réteg | Válaszidő | Réteg-megoszlás |
+|---|---|---|---|---|
+| `szabaly` | 78,9% | `elengedes` 0% | ~0,00 s | — |
+| `llm` (kapuk nélkül) | PLACEHOLDER_LLM_SZAZALEK | PLACEHOLDER_LLM_RETEG | PLACEHOLDER_LLM_IDO | — |
+| `kaszkad` (ADR-016) | 83,3% | `valtozatossag` 40,0% | ~3,07 s | llm=6, szabaly=39 |
+| **`forditott` (ez az ADR)** | **88,9%** | **`koznyelvi` 80,0%** | ~7,83 s | llm=45 |
 
-Rétegenként, `szabaly` → `forditott`:
+Rétegenként (n = esetszám):
 
-PLACEHOLDER_RETEGTABLA
+| Réteg | n | `szabaly` | `kaszkad` | `forditott` |
+|---|---|---|---|---|
+| `alkudozas` | 6 | 100,0% | 100,0% | 100,0% |
+| `egyszerusitett` | 4 | 100,0% | 100,0% | 87,5% |
+| `elengedes` | 3 | 0,0% | 100,0% | 100,0% |
+| `kapuor` | 2 | 100,0% | 100,0% | **50,0%** |
+| `koznyelvi` | 5 | 100,0% | 100,0% | 80,0% |
+| `mintan_tul` | 9 | 72,2% | 72,2% | 83,3% |
+| `szleng` | 3 | 100,0% | 100,0% | 100,0% |
+| `tajszolas` | 4 | 100,0% | **50,0%** | 100,0% |
+| `toredekes` | 4 | 100,0% | 100,0% | 100,0% |
+| `valtozatossag` | 5 | 20,0% | 40,0% | 80,0% |
+
+**Fontos mérési figyelmeztetés — a szórás nem elhanyagolható.** A
+`forditott` `mintan_tul` rétege UGYANAZZAL a kóddal két futáson 94,4% és
+83,3% volt (`temperature: 0` mellett is — az Ollama kiszolgálása nem
+bitre determinisztikus). Egy 45 eses halmazon egyetlen eset 2,2
+százalékpont, tehát a fenti számok ±1 eset pontossággal olvasandók. Az
+5,6 pontos különbség (88,9% vs 83,3%) ennél nagyobb, de nem sokkal —
+**egy komolyabb döntést nagyobb halmazon és több futáson kellene
+megalapozni** (ADR-016 kiváltó feltétele pont ezt írta elő: 150-200
+eset).
 
 ## Döntés
 
@@ -129,9 +156,9 @@ Az ADR-016 sorrendje (`kaszkad.py`) a repóban marad,
 
 ## Miért
 
-- **Összesítetten jobb** (PLACEHOLDER_OSSZ_INDOK).
+- **Összesítetten jobb** (88,9% vs 83,3% a determinisztikus-előbb kaszkádnak, 78,9% a tisztán szabály-alapúnak).
 - **A leggyengébb réteg is jobb**, és ez a projekt hivatalos mérőszáma,
-  nem az átlag: PLACEHOLDER_LEGGYENGEBB_INDOK.
+  nem az átlag: `koznyelvi` 80,0% a `kaszkad` `valtozatossag` 40,0%-ával szemben. Ez a fontosabb szám: a `kaszkad` átlaga azért volt tisztes, mert a halmaz nagy részén a szabályok vitték a terhet — de ahol nem, ott mélyre esett.
 - **Ott javít, ahol az általánosítás mérhető**: a `mintan_tul` és az
   `elengedes` réteg épp azt méri, amit a mintaillesztés elvileg nem tud.
 - **A determinisztikus garanciák nem gyengültek.** A dátum, a zárt
@@ -141,11 +168,11 @@ Az ADR-016 sorrendje (`kaszkad.py`) a repóban marad,
 
 ## Amit feladunk
 
-- **Válaszidő**: PLACEHOLDER_LATENCIA. Ez akkor lesz valódi akadály,
+- **Válaszidő**: ~7,83 s/forduló a `kaszkad` ~3,07 s-ával szemben, és a fordított út MINDEN fordulóban hív modellt (réteg-megoszlás: llm=45/45), sőt az elengedés-kapu miatt egyes fordulókban kétszer. Ez akkor lesz valódi akadály,
   amikor a hangcsatorna SLO-ja (blueprint §12, ma felfüggesztve) érvénybe
   lép — ott ez az érték nem tartható. A determinisztikus út továbbra is
   ott van tartaléknak.
-- **Kapuőr**: PLACEHOLDER_KAPUOR. A blueprint 10. szakasza szerint a
+- **Kapuőr**: 100% → 50%. A hibázás módja szerencsére a kevésbé káros fajta: a rendszer nem talál ki árat, hanem feleslegesen visszakérdez ("Mennyibe kerül a nagy petárda?" → kérdés a boltra). A `tilos: kitalalt_ar` mintasértés egyszer sem fordult elő. A blueprint 10. szakasza szerint a
   témán belül tartás kifejezetten NEM múlhat a modell prompt-fegyelmén —
   ezt a mérés megerősíti, és ez a legfontosabb nyitott pont (l. lent).
 - **Áthelyezés-felismerés**: a modell a "Át tudnám tenni szerdára…"
