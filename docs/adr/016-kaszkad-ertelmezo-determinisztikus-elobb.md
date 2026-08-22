@@ -2,6 +2,10 @@
 
 - **Dátum:** 2026-08-22
 - **Állapot:** elfogadott
+- **Megjegyzés a számozáshoz:** a 015 szándékosan kimaradt — sem a
+  git-történetben, sem a repóban nem szerepelt korábban 015-ös ADR;
+  ellenőrizve (2026-08-22), a szám emiatt véglegesen kimarad, nem kerül
+  utólag felhasználásra (`adr` skill, "Számozás és hely").
 
 ## Kontextus
 

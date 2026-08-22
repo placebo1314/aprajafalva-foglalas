@@ -28,8 +28,10 @@ mérföldköveihez vannak jelölve, még nincs belőlük semmi megépítve.
 
 - **Tesztek:** 337 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
 - **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent).
-- **ADR-ek:** 15 elfogadva (001–014, 016 — **015 szám kimaradt**, nincs
-  hozzá fájl, ellenőrizni kell, hogy szándékos-e) + 1 sablon.
+- **ADR-ek:** 15 elfogadva (001–014, 016 — **a 015 szándékosan
+  kimaradt**: ellenőrizve, git-történetben és a repóban sosem létezett,
+  a szám emiatt véglegesen kimarad, l. ADR-016 fejléce és az `adr`
+  skill) + 1 sablon.
 - **Golden set — LLM-mel (M-1 mérés, 2026-08-16):** 22 nyelvi eset, öt
   rétegben. Legjobb mért eredmény — qwen3.5:9b, gondolkodással, javított
   séma-kényszerrel: **47,7%** összesített, legrosszabb réteg a szleng

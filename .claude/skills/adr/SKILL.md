@@ -116,6 +116,11 @@ A CI minden futásnál mindkét motoron végigviszi a teljes tesztkészletet
 - Sorszám soha nem használódik újra.
 - Felülírásnál a régi ADR **megmarad**, az állapota változik, és hivatkozik az
   újra. A történet része, hogy egyszer másképp gondoltuk.
+- **A 015 szándékosan kimaradt** (2026-08-22-i ellenőrzés: git-történetben
+  és a repóban sehol nem szerepelt korábban 015-ös ADR sem fájlként, sem
+  hivatkozásként — a 014 után a 016 lett kiadva, tévedésből vagy
+  párhuzamos munkából). Ez a bejegyzés a magyarázat, nem hiba: a szám
+  emiatt sem használódik fel utólag, ugyanúgy, mint egy felülírt ADR-é.
 
 ## Mikor kell ADR
 
