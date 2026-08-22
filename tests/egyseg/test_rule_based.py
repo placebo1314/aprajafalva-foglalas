@@ -7,6 +7,10 @@ körű mérés a golden runner `--ertelmezo szabaly` módja legyen
 
 from __future__ import annotations
 
+from datetime import datetime
+
+import pytest
+
 from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
@@ -220,6 +224,64 @@ def test_visszakerdez_a_heten_kifejezes():
     eredmeny = _ertelmez("Szeretnék… izé… hogy is mondjam… bemenni a boltba valamikor a héten.")
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-17T09:00:00Z"
     assert eredmeny["parameterek"]["datum_ig"] == "2026-08-23T23:59:59Z"
+
+
+# --- HÉT-kifejezések: a hétnek hét napot kell adnia ------------------
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    [
+        "Petárdázni szeretnék a következő héten.",
+        "Petárdázni szeretnék következő héten.",
+        "Petárdázni szeretnék a következő hétre.",
+        "Petárdázni szeretnék a következő hét folyamán.",
+        "Petárdázni szeretnék jövő héten.",
+        "Petárdázni szeretnék a jövő hétre.",
+        "Petárdázni szeretnék a jövő hét folyamán.",
+        "Szeretnék időpontot a petárdáshoz a következő hétre valamikor.",
+    ],
+)
+def test_kovetkezo_het_teljes_hetet_ad_nem_egy_napot(mondat):
+    """A "következő/jövő hét" MINDEN toldalékolt alakja a teljes
+    következő naptári hetet (hétfő–vasárnap, 7 nap) adja. Korábban a
+    `\\bhéten\\b` alak volt csak lefedve, ezért a "hétre"/"hét folyamán"
+    egy általános, 7 napos MAI ablakra esett vissza, a "következő" szót
+    pedig a dátumparser egyáltalán nem ismerte."""
+    parameterek = _ertelmez(mondat)["parameterek"]
+    assert parameterek["datum_tol"] == "2026-08-24T00:00:00Z"
+    assert parameterek["datum_ig"] == "2026-08-30T23:59:59Z"
+
+    kezdet = datetime.fromisoformat(parameterek["datum_tol"].replace("Z", "+00:00"))
+    veg = datetime.fromisoformat(parameterek["datum_ig"].replace("Z", "+00:00"))
+    assert (veg - kezdet).days == 6, "a hétnek hét naptári napot kell lefednie"
+    assert kezdet.weekday() == 0, "hétfőn kezdődik"
+    assert veg.weekday() == 6, "vasárnap ér véget"
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    ["Petárdázni szeretnék valamikor a héten.", "Petárdázni szeretnék ezen a héten."],
+)
+def test_ezen_a_heten_a_most_pillanatatol_a_het_vegeig(mondat):
+    """A FOLYÓ hét nem hétfőtől indul — az már részben eltelt, arra
+    visszamenőleg nem lehet foglalni."""
+    parameterek = _ertelmez(mondat)["parameterek"]
+    assert parameterek["datum_tol"] == "2026-08-17T09:00:00Z"
+    assert parameterek["datum_ig"] == "2026-08-23T23:59:59Z"
+
+
+@pytest.mark.parametrize(
+    "mondat", ["következő héten pénteken", "jövő héten pénteken", "jövő hét péntek"]
+)
+def test_konkret_nap_felulirja_a_het_ablakot(mondat):
+    """Ha a mondat a hét mellett konkrét napot is megnevez, a konkrétabb
+    nyer — nem az egész hetet adjuk vissza."""
+    parameterek = _ertelmez(
+        mondat, ErtelmezesKontextus(megorzott_parameterek={"bolt_id": "ugyifogyi"})
+    )["parameterek"]
+    assert parameterek["datum_tol"] == "2026-08-28T00:00:00Z"
+    assert parameterek["datum_ig"] == "2026-08-28T23:59:59Z"
 
 
 def test_visszakerdez_nem_talal_ki_datumot_mult_idobol():

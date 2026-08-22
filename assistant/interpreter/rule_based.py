@@ -55,6 +55,20 @@ _NAP_JELZO_MINTA = re.compile(
     r"\bma\b|\bholnap|hétf[őo]|\bkedd|szerd[áa]|csütörtök|péntek|szombat|vasárnap"
 )
 
+# HÉT-jelző: a "hét" főnév tetszőleges toldalékkal — héten, hétre, hetet,
+# hétig, hét folyamán, vagy toldalék nélkül. A magyar toldalékolás miatt
+# NEM elég a `\bhéten\b` alak (ezen bukott korábban a "jövő hétre" és a
+# "következő hét folyamán"), ezért itt a szótő + opcionális toldalék a
+# minta. A `hetven`/`hetes` típusú szavakat a toldaléklista zártsága
+# zárja ki, nem egy külön kivétel-lista.
+_HET_JELZO_MINTA = re.compile(r"\bh[ée]t(en|re|et|ig|b[őo]l|ben|nek|ünk)?\b")
+
+# "jövő"/"következő" + hét — a KÖVETKEZŐ naptári hétre mutat. Mindkét
+# jelző ugyanazt jelenti; a köztük álló szó (pl. "a") megengedett.
+_KOVETKEZO_HET_MINTA = re.compile(
+    r"(j[öo]v[őo]|k[öo]vetkez[őo])\s+(?:\w+\s+)?h[ée]t(en|re|et|ig|b[őo]l|ben|nek|ünk)?\b"
+)
+
 _BOLT_MINTAK: list[tuple[re.Pattern, str]] = [
     (re.compile(r"szundi|altat[óo]"), "szundi"),
     (re.compile(r"ügyifogyi|ugyifogyi|pet[áa]rd"), "ugyifogyi"),
@@ -127,14 +141,12 @@ def _het_vege(most_dt: datetime):
     return (most_dt + timedelta(days=napok_vasarnapig)).date()
 
 
-_JOVO_HETEN_MINTA = re.compile(r"j[öo]v[őo]\s*h[ée]ten\b")
-
-
 def _jovo_het_hatarok(most_dt: datetime) -> tuple[str, str]:
-    """A KÖVETKEZŐ naptári hét (hétfőtől vasárnapig) — a "jövő héten"
-    kifejezéshez (tágítás golden-set eset: "bármikor a jövő héten"). A
-    sima "a héten" (`_datum_ablak_explicit`) ettől eltérően a MOST
-    pillanatától a folyó hét végéig tart, nem hétfőtől."""
+    """A KÖVETKEZŐ naptári hét (hétfőtől vasárnapig), TELJES hét — hét
+    nap. A "jövő héten"/"következő hétre"/"következő hét folyamán"
+    kifejezésekhez. A sima "a héten" (`_datum_ablak_explicit`) ettől
+    eltérően a MOST pillanatától a folyó hét végéig tart, nem hétfőtől —
+    az már részben eltelt, arra nem lehet visszamenőleg foglalni."""
     het_eleje_folyo = most_dt.date() - timedelta(days=most_dt.weekday())
     het_eleje = het_eleje_folyo + timedelta(days=7)
     het_vege = het_eleje + timedelta(days=6)
@@ -169,12 +181,16 @@ def _datum_ablak_explicit(szoveg: str, most_iso: str) -> tuple[str | None, str |
     most_dt = datetime.fromisoformat(most_iso.replace("Z", "+00:00")).replace(tzinfo=None)
     also = szoveg.lower()
 
-    # "héten" (a héten / jövő héten) csak akkor rövidre zárt egész-heti
-    # ablak, ha a mondat NEM nevez meg emellett egy konkrét napot is
-    # ("jövő héten péntek" — itt a konkrét nap a pontosabb, azt kell a
-    # hun_date_parser-nek feloldania, nem az egész hetet lefedni).
-    if re.search(r"\bh[ée]ten\b", also) and not _NAP_JELZO_MINTA.search(also):
-        if _JOVO_HETEN_MINTA.search(also):
+    # HÉT-kifejezés (a héten / jövő hétre / következő hét folyamán) csak
+    # akkor rövidre zárt egész-heti ablak, ha a mondat NEM nevez meg
+    # emellett egy konkrét napot is ("jövő héten péntek" — itt a konkrét
+    # nap a pontosabb, azt kell a hun_date_parser-nek feloldania, nem az
+    # egész hetet lefedni). A "hét" toldalékolt alakjait a
+    # `_HET_JELZO_MINTA` fedi — a `hun_date_parser` ezek egy részét
+    # ("következő hét" bármelyik alakja) egyáltalán nem ismeri fel, ezért
+    # kell ez a saját ág.
+    if _HET_JELZO_MINTA.search(also) and not _NAP_JELZO_MINTA.search(also):
+        if _KOVETKEZO_HET_MINTA.search(also):
             return _jovo_het_hatarok(most_dt)
         # "a héten" — a `most` pillanatától a hét vasárnapjáig, NEM
         # naptári napkezdettől (eltérően az egynapos esetektől).

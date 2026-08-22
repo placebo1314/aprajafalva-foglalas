@@ -25,6 +25,12 @@ _SZOTAR: list[tuple[str, str]] = [
     (r"\bhun\b", "hol"),
     (r"\bahun\b", "ahol"),
     (r"\bárullyák\b", "árulják"),
+    # Szinonima, nem tájszólás: a `hun_date_parser` a "jövő" jelzőt
+    # ismeri, a vele azonos jelentésű "következő"-t NEM — emiatt a
+    # "következő héten pénteken" a FOLYÓ hét péntekjére oldódott fel.
+    # A csere itt (a dátumparser ELŐTT) általános: minden "következő
+    # <időegység>" szerkezetre hat, nem egy konkrét mondatra.
+    (r"\bk[öo]vetkez[őo]\b", "jövő"),
 ]
 
 _MINTAK = [(re.compile(minta, re.IGNORECASE), csere) for minta, csere in _SZOTAR]
