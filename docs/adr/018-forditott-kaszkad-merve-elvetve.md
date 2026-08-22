@@ -163,6 +163,12 @@ Rétegenként (n = esetszám):
 | `toredekes` | 4 | 100,0% | 37,5% | 100,0% | 100,0% |
 | `valtozatossag` | 5 | 20,0% | 40,0% | 40,0% | 80,0% |
 
+A `forditott` sort a végigjátszás javításai UTÁN megismételtük a végleges
+kódon: 88,9%, rétegenként karakterre ugyanaz, ~7,78 s. A hat nem tökéletes
+eset is ugyanaz (`koznyelvi-05`, `egyszerusitett-04`, `kapuor-02`,
+`valtozatossag-04`, `mintan_tul-01`, `mintan_tul-05`) — a fenti számok
+tehát a repóban lévő kódra érvényesek, nem egy közbenső állapotra.
+
 **Fontos mérési figyelmeztetés — a szórás nem elhanyagolható.** A
 `forditott` `mintan_tul` rétege UGYANAZZAL a kóddal két futáson 94,4% és
 83,3% volt (`temperature: 0` mellett is — az Ollama kiszolgálása nem

@@ -27,7 +27,7 @@ mérföldköveihez vannak jelölve, még nincs belőlük semmi megépítve.
 
 ## Konkrét számok
 
-- **Tesztek:** 460 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
+- **Tesztek:** 467 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
 - **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent).
 - **ADR-ek:** 17 dokumentum (001–014, 016–018) + 1 sablon. Ebből **16
   elfogadott**, **1 felülírva**: az ADR-016 (kaszkád sorrendje) —
