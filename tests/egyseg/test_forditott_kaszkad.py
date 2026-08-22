@@ -393,6 +393,18 @@ def test_a_modell_datuma_nyer_a_mondat_egesze_folott():
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-19T00:00:00Z"
 
 
+def test_preferalt_ora_a_mondatbol_potlodik_ha_a_modell_kihagyta():
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "ugyifogyi", "datum_kifejezes": "holnap"},
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "Van hely holnap délelőtt? Kb 10 körül lenne jó")
+
+    assert eredmeny["parameterek"]["preferalt_ora"] == 10
+
+
 def test_szolgaltatas_a_mondatbol_potlodik_ha_a_modell_kihagyta():
     """A méret zárt halmaz és determinisztikusan kinyerhető — a modell
     kihagyása nem jelenti, hogy nincs is a mondatban."""

@@ -102,6 +102,13 @@ _NAPSZAK_VEGORA = {"delelott": 11, "delutan": 17, "este": 22}
 
 _PREFERALT_ORA_MINTA = re.compile(r"\b(\d{1,2})\s*(?:óra|körül)")
 
+# Általános IDŐ-főnevek — kizárólag az `idobeli_jelzes()` használja, a
+# dátumablak feloldása NEM (ott hamis pozitívot adna: a "más napon"-ból
+# nem következik konkrét nap). L. `idobeli_jelzes` docstringjét.
+_IDO_FONEV_MINTA = re.compile(
+    r"\bnap(on|ot|ra|ok|ja|okon|ban)?\b|\bh[ée]t(en|re|et|ig)?\b|\bmikor\b|\bid[őo]pont"
+)
+
 
 def _kapuor_talalat(also: str) -> bool:
     return _KAPUOR_MINTAK.search(also) is not None
@@ -444,16 +451,26 @@ class SzabalyAlapuErtelmezo:
 
 
 def idobeli_jelzes(mondat: str, most: str) -> bool:
-    """Tartalmaz-e a mondat POZITÍV időbeli jelzést (feloldható dátumot
-    vagy napszakot)? Determinisztikus, ugyanazokkal a szabályokkal, mint
-    az értelmezés maga — nem külön kulcsszólista.
+    """Szól-e a mondat IDŐRŐL? Determinisztikus, ugyanazokkal a
+    szabályokkal, mint az értelmezés maga.
 
-    A kaszkád (`kaszkad.py`) ezzel dönti el, hogy egy mondat "időről
-    szól-e": ha igen, akkor a KEMÉNY rész (bolt, szolgáltatás) nem eshet
-    ki miatta, mert a mondat nem arról szólt."""
+    Mindkét kaszkád ezzel dönti el, hogy egy mondat "időről szól-e": ha
+    igen, akkor a KEMÉNY rész (bolt, szolgáltatás) nem eshet ki miatta,
+    mert a mondat nem arról szólt (`kaszkad.kemeny_reszt_vedd`).
+
+    **Tágabb, mint a dátumfeloldás.** A "van esetleg más napon?" nyilván
+    időről szól, de nem old fel belőle konkrét napot a parser — ha csak
+    a feloldható dátumot néznénk, ez a mondat "nem időbeli"-nek
+    minősülne, és a modell túl-elengedése elvihetné vele a boltot is.
+    Ezért a feloldható dátum és a napszak MELLETT az általános
+    idő-főnevek (nap, hét, időpont, mikor) is jelzésnek számítanak —
+    ez a kérdés ("időről szól-e") tágabb, mint az, hogy "ki tudjuk-e
+    számolni, melyik napról"."""
     szoveg = normalizal(mondat)
     datum_tol, _ = _datum_ablak_explicit(szoveg, most)
-    return bool(datum_tol) or _napszak_explicit(szoveg.lower()) is not None
+    if datum_tol or _napszak_explicit(szoveg.lower()) is not None:
+        return True
+    return _IDO_FONEV_MINTA.search(szoveg.lower()) is not None
 
 
 def datum_ablak_feloldas(kifejezes: str, most: str) -> tuple[str | None, str | None]:
@@ -469,6 +486,14 @@ def datum_ablak_feloldas(kifejezes: str, most: str) -> tuple[str | None, str | N
     if not kifejezes:
         return None, None
     return _datum_ablak_explicit(normalizal(kifejezes), most)
+
+
+def preferalt_ora_feloldas(mondat: str) -> int | None:
+    """A preferált óra kinyerése a mondatból ("kb 10 körül") —
+    nyilvános alak (`_preferalt_ora`). Ugyanaz az elv, mint a
+    `szolgaltatas_feloldas`-nál: amit determinisztikusan LÁTUNK a
+    mondatban, azt ne veszítsük el csak azért, mert a modell kihagyta."""
+    return _preferalt_ora(normalizal(mondat).lower())
 
 
 def bolt_feloldas(mondat: str) -> str | None:

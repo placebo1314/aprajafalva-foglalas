@@ -376,8 +376,14 @@ class ForditottKaszkadErtelmezo:
         )
         if szolgaltatas:
             vegleges["szolgaltatas_id"] = szolgaltatas
-        if "preferalt_ora" in parameterek:
-            vegleges["preferalt_ora"] = parameterek["preferalt_ora"]
+        # A preferált óra ("kb 10 körül") ugyanúgy determinisztikusan
+        # kinyerhető, mint a szolgáltatás — a modell kihagyása nem
+        # jelenti, hogy nincs is a mondatban.
+        preferalt_ora = parameterek.get("preferalt_ora")
+        if preferalt_ora is None:
+            preferalt_ora = rule_based.preferalt_ora_feloldas(mondat)
+        if preferalt_ora is not None:
+            vegleges["preferalt_ora"] = preferalt_ora
 
         return {
             "eszkoz": "szabad_idopontok",

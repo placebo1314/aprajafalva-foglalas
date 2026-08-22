@@ -36,9 +36,17 @@ A projekt natívan fut Windowson, macOS-en és Linuxon.
 ## Indulás
 
 ```
-python feladat.py seed        # demóadat: 3 bolt, Törpilla 3 pultja
-python feladat.py teszt       # tesztkészlet
+python feladat.py seed          # demóadat: 3 bolt, Törpilla 3 pultja
+python feladat.py teszt         # tesztkészlet
+python -m ui.vasarlo            # vásárlói felület (koppintós + szöveges út)
+python feladat.py vegigjatszas  # ugyanaz fej nélkül, végigjátszva
 ```
+
+A szöveges úthoz nem kötelező nyelvi modell: ha nincs beállítva
+`APRAJAFALVA_LLM_MODELL`, vagy nem fut az Ollama, a felület csendben a
+determinisztikus értelmezőre esik vissza. Hogy éppen melyik dolgozik, az
+ablak tetején és a próba-naplóban is látszik — l. `docs/TESZTELES.md`,
+"Beszélgetés-próba".
 
 ## Fejlesztői környezet
 
