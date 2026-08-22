@@ -35,6 +35,13 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "Ez a kérdés nem foglalással kapcsolatos, ebben nem tudok segíteni."
             ),
             "nincs_szabad_hely_az_ablakban": "Sajnos nincs szabad időpont ebben az ablakban.",
+            # NEM szűkösség — a bolt nem hirdetett meg beosztást. Ezt
+            # tévesen "megtelt"-ként fogalmazni félrevezetés lenne
+            # (blueprint 7. szakasz, "Szűkösség jelzése").
+            "nincs_meghirdetett_idopont": (
+                "Erre az időszakra a bolt még nem hirdetett meg időpontokat — "
+                "ez nem azt jelenti, hogy megtelt. Próbáld később, vagy nézz meg másik boltot."
+            ),
             "jeloltek_kozben_elfogytak": (
                 "Éppen lefoglalták előlünk ezeket az időpontokat — próbáld újra."
             ),
@@ -48,6 +55,8 @@ SABLONOK: dict[str, dict[str, object]] = {
             "uj_slot_elfogyott": "Az új időpontot közben elfoglalták.",
             "nem_ajanlott_jelolt": "Ez az időpont már nem szerepel az ajánlatban.",
             "nincs_folyamatban_levo_valasztas": "Előbb válassz egy időpontot.",
+            "nincs_korabbi_kereses": "Előbb keress időpontot, utána tudok alternatívát mutatni.",
+            "ervenytelen_alternativa": "Ezt az alternatívát most nem tudom megmutatni.",
             "ervenytelen_kod": "Nem találtam ilyen foglalási kódot.",
             "nincs_ilyen_foglalas": "Nem találtam ilyen foglalási kódot.",
             "mar_lemondva": "Ez a foglalás már le van mondva.",
@@ -70,6 +79,26 @@ SABLONOK: dict[str, dict[str, object]] = {
             "sikeres_foglalas": "Foglalás létrejött! Foglalási kód: {foglalasi_kod}",
             "elvetve": "Rendben, nem foglaltuk le. Kereshetsz újra.",
             "ajanlat_bevezetes": "Ezeket az időpontokat találtam — melyik jó?",
+        },
+        # ------------------------------------------------------------
+        # alternativa — "ha nincs hely, alternatíva jöjjön" (blueprint
+        # 1. szakasz, a vásárló 5. igénye). A `dimenzio` kulcs az
+        # `assistant/tools/szabad_idopontok.py::_alternativ_dimenzio`
+        # zárt kimenete: napszak | nap | het. A `gomb_*` a felületnek
+        # szóló, koppintható felajánlás felirata — nem a modell
+        # fogalmazza, sablon.
+        # ------------------------------------------------------------
+        "alternativa": {
+            "bevezetes": {
+                "napszak": "Ebben a napszakban nincs, de aznap más napszakban van szabad időpont.",
+                "nap": "Ezen a napon nincs, de a héten másik napon van szabad időpont.",
+                "het": "Ezen a héten nincs, de a következő héten van szabad időpont.",
+            },
+            "gomb": {
+                "napszak": "Mutasd az aznapi többi időpontot",
+                "nap": "Mutasd a hét többi napját",
+                "het": "Mutasd a következő hetet",
+            },
         },
         # ------------------------------------------------------------
         # zart_kerdes — a visszakérdezés mondata. `mezo_neve` a

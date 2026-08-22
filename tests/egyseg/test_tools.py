@@ -162,7 +162,11 @@ def test_szabad_idopontok_ervenytelen_parameter(tmp_path):
     assert eredmeny["ok"] == "ervenytelen_parameter"
 
 
-def test_szabad_idopontok_nincs_szabad_hely_az_ablakban(tmp_path):
+def test_szabad_idopontok_semmi_nincs_meghirdetve_nem_tunik_teltnek(tmp_path):
+    """A `_seed` egyetlen slotja 2026-08-18-án van; 2099-től nézve a
+    boltnak NINCS meghirdetett beosztása. A helyes válasz ezért NEM az,
+    hogy "nincs szabad hely" (az teltnek mutatná egy üres naptárat),
+    hanem hogy erre az időszakra nincs meghirdetve időpont."""
     conn = _conn(tmp_path)
     ctx = _seed(conn)
     eredmeny = szabad_idopontok.hivas(
@@ -175,11 +179,42 @@ def test_szabad_idopontok_nincs_szabad_hely_az_ablakban(tmp_path):
         },
         org_id=ctx["org_id"],
     )
-    # Se a napszak-, se a nap-, se a hét-tágítás nem hoz találatot — az
-    # egyetlen slot (`_seed`) 2026-08-18-án van, évekkel korábban.
     assert eredmeny == hiba.hiba_eredmeny(
-        hiba.Ok.NINCS_SZABAD_HELY, "nincs_szabad_hely_az_ablakban", alternativ_dimenzio=None
+        hiba.Ok.NINCS_MEGHIRDETETT_IDOPONT, "nincs_meghirdetett_idopont", alternativ_dimenzio=None
     )
+
+
+def test_szabad_idopontok_van_beosztas_de_betelt_szukosseget_jelez(tmp_path):
+    """A megkülönböztetés másik fele: ha VAN meghirdetett beosztás, csak
+    éppen minden hely elkelt, akkor az valódi szűkösség — ilyenkor a
+    "nincs szabad hely" a helyes (és igaz) válasz."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+
+    # Minden slotot lefoglalunk, hogy a beosztás LÉTEZZEN, de tele legyen.
+    slot_id_k = [sor[0] for sor in conn.execute("SELECT id FROM slot ORDER BY kezdet").fetchall()]
+    for i, slot_id in enumerate(slot_id_k):
+        foglalas_repo.booking_create(
+            conn,
+            slot_id=slot_id,
+            customer_key=f"{i:064d}",
+            idempotency_key=f"betelt-{i}",
+            session_id=f"betelt-session-{i}",
+        )
+
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["ok"] == "nincs_szabad_hely"
+    assert eredmeny["uzenet_kulcs"] == "nincs_szabad_hely_az_ablakban"
 
 
 def test_szabad_idopontok_alternativ_dimenzio_napszak(tmp_path):

@@ -38,6 +38,48 @@ def _het_vege_iso(datum_iso: str) -> str:
     return f"{vege.isoformat()}T23:59:59Z"
 
 
+# A három tágítási dimenzió, a kért ablakhoz legközelebbitől a
+# legtávolabbiig. A `napszak` a kért napon belül enged, a `nap` a
+# folyó héten belül, a `het` a következő hétre lép.
+TAGITASI_DIMENZIOK = ("napszak", "nap", "het")
+
+
+def tagitott_ablak(
+    dimenzio: str, *, datum_tol: str, datum_ig: str, napszak: str
+) -> dict[str, str] | None:
+    """Egy tágítási dimenzióhoz megadja a MEGFELELŐ keresési ablakot —
+    `{"datum_tol", "datum_ig", "napszak"}`, vagy `None`, ha ez a
+    tágítás ebben a helyzetben nem értelmezhető (pl. `napszak` tágítás,
+    amikor a kérés eleve "barmikor" volt).
+
+    **Egyetlen forrás**: ugyanezt használja az `_alternativ_dimenzio`
+    annak eldöntésére, hogy VAN-e alternatíva, és az orchestrator arra,
+    hogy a felajánlott gombra ténylegesen ugyanazt a keresést futtassa
+    le. Ha a kettő szétdriftelne, a gomb mást mutatna, mint amit a
+    rendszer ígért."""
+    if dimenzio == "napszak":
+        if napszak == "barmikor":
+            return None
+        return {"datum_tol": datum_tol, "datum_ig": datum_ig, "napszak": "barmikor"}
+
+    het_vege = _het_vege_iso(datum_tol)
+    if dimenzio == "nap":
+        if datum_ig >= het_vege:
+            return None
+        return {"datum_tol": datum_tol, "datum_ig": het_vege, "napszak": napszak}
+
+    if dimenzio == "het":
+        kovetkezo_vege_dt = datetime.fromisoformat(het_vege.replace("Z", "+00:00")).replace(
+            tzinfo=None
+        ) + timedelta(days=7)
+        return {
+            "datum_tol": het_vege,
+            "datum_ig": f"{kovetkezo_vege_dt.date().isoformat()}T23:59:59Z",
+            "napszak": napszak,
+        }
+    return None
+
+
 def _alternativ_dimenzio(
     conn,
     *,
@@ -86,22 +128,10 @@ def _alternativ_dimenzio(
             )
         )
 
-    if napszak != "barmikor" and van_jelolt(
-        datum_tol=datum_tol, datum_ig=datum_ig, napszak="barmikor"
-    ):
-        return "napszak"
-
-    het_vege = _het_vege_iso(datum_tol)
-    if datum_ig < het_vege and van_jelolt(datum_tol=datum_tol, datum_ig=het_vege, napszak=napszak):
-        return "nap"
-
-    kovetkezo_het_vege_dt = datetime.fromisoformat(het_vege.replace("Z", "+00:00")).replace(
-        tzinfo=None
-    ) + timedelta(days=7)
-    kovetkezo_het_ig = f"{kovetkezo_het_vege_dt.date().isoformat()}T23:59:59Z"
-    if van_jelolt(datum_tol=het_vege, datum_ig=kovetkezo_het_ig, napszak=napszak):
-        return "het"
-
+    for dimenzio in TAGITASI_DIMENZIOK:
+        ablak = tagitott_ablak(dimenzio, datum_tol=datum_tol, datum_ig=datum_ig, napszak=napszak)
+        if ablak is not None and van_jelolt(**ablak):
+            return dimenzio
     return None
 
 
@@ -140,6 +170,25 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
         datum_tol = parameterek["datum_tol"]
         datum_ig = parameterek["datum_ig"]
         napszak = parameterek.get("napszak", "barmikor")
+
+        # ŐSZINTESÉG-ÁG: ha a boltnak EGYÁLTALÁN nincs meghirdetett
+        # slotja, az nem szűkösség — a bolt nem vitte fel a beosztást.
+        # A kettő összemosása telinek mutatna egy üres naptárat
+        # (blueprint 7. szakasz, "Szűkösség jelzése": csak akkor
+        # jelezzünk szűkösséget, ha IGAZ).
+        if not foglalas_repo.published_slots_exist(
+            conn,
+            org_id=org_id,
+            shop_id=bolt_id,
+            service_id=szolgaltatas_id,
+            tol_iso=datum_tol,
+        ):
+            return hiba.hiba_eredmeny(
+                hiba.Ok.NINCS_MEGHIRDETETT_IDOPONT,
+                "nincs_meghirdetett_idopont",
+                alternativ_dimenzio=None,
+            )
+
         dimenzio = _alternativ_dimenzio(
             conn,
             org_id=org_id,

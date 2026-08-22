@@ -333,6 +333,29 @@ class VasarloApp(tk.Tk):
         self.szo_uzenet = ttk.Label(tab, text="", foreground="#a00", wraplength=700)
         self.szo_uzenet.pack(anchor="w")
 
+    def _alternativa_felajanl(self, dimenzio: str | None) -> None:
+        """Ha az eszköz talált alternatívát (`alternativ_dimenzio`),
+        felajánljuk KOPPINTHATÓ gombként — a vásárlónak nem kell újra
+        megfogalmaznia a kérést (blueprint 1. szakasz, 5. igény: "ha
+        nincs hely, alternatíva jöjjön"). A mondatot és a gombfeliratot
+        az `assistant/valasz/` adja, ez a modul nem fogalmaz."""
+        szovegek = valasz_szoveg.alternativa_szoveg(dimenzio)
+        if szovegek is None:
+            return
+        bevezetes, gomb_felirat = szovegek
+        self._naplo_ir("Rendszer", bevezetes)
+        ttk.Button(
+            self.szo_gombsor,
+            text=gomb_felirat,
+            command=lambda d=dimenzio: self._alternativa_kereses(d),
+        ).pack(side="left", padx=(0, 6))
+
+    def _alternativa_kereses(self, dimenzio: str) -> None:
+        for widget in self.szo_gombsor.winfo_children():
+            widget.destroy()
+        valasz = self.orchestrator.alternativa_kereses(self.session_id, dimenzio)
+        self._szoveges_valasz_kezel(valasz)
+
     def _naplo_ir(self, ki_be: str, szoveg: str) -> None:
         self.szo_naplo.config(state="normal")
         self.szo_naplo.insert("end", f"{ki_be}: {szoveg}\n")
@@ -395,6 +418,7 @@ class VasarloApp(tk.Tk):
                 self._naplo_ir("Rendszer", valasz_szoveg.nyugtazo_szoveg(valasz["felismert_ablak"]))
             kulcs = valasz.get("uzenet_kulcs", "")
             self._naplo_ir("Rendszer", valasz_szoveg.hiba_szoveg(kulcs))
+            self._alternativa_felajanl(valasz.get("alternativ_dimenzio"))
             return
 
         if valasz.get("sikeres"):

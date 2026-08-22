@@ -499,6 +499,77 @@ def test_fordulo_eszkoz_hiba_tartalmazza_az_alternativ_dimenziot(tmp_path):
     assert valasz["alternativ_dimenzio"] == "napszak"
 
 
+def test_alternativa_kereses_a_felajanlott_dimenzio_menten_talal(tmp_path):
+    """A felajánlott alternatíva elfogadása ténylegesen ajánlatot ad —
+    a vásárlónak nem kell újra elmondania, mit keresett. A `_seed`
+    slotjai délelőttiek (helyi 08:00–09:00), ezért az "este" kérés
+    üres, a "napszak" tágítás viszont megtalálja őket."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                    "napszak": "este",
+                },
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+    elutasitas = orch.fordulo("session-1", "petárdázni szeretnék kedden este", _MOST)
+    assert elutasitas["alternativ_dimenzio"] == "napszak"
+
+    ajanlat = orch.alternativa_kereses("session-1", "napszak")
+
+    assert ajanlat["tipus"] == "ajanlat"
+    assert ajanlat["jeloltek"]
+    # A bolt és a nap változatlan — csak a napszak-kötöttség engedett el.
+    assert ajanlat["felismert_ablak"]["bolt_id"] == "ugyifogyi"
+    assert ajanlat["felismert_ablak"]["napszak"] == "barmikor"
+    assert ajanlat["felismert_ablak"]["datum_tol"] == "2026-08-18T00:00:00Z"
+
+
+def test_alternativa_kereses_korabbi_kereses_nelkul_hibat_ad(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch = Orchestrator(conn, _ScriptedErtelmezo([]), org_id=ctx["org_id"])
+
+    valasz = orch.alternativa_kereses("uj-session", "napszak")
+
+    assert valasz == {"tipus": "hiba", "uzenet_kulcs": "nincs_korabbi_kereses"}
+
+
+def test_alternativa_kereses_ertelmezhetetlen_dimenziot_elutasit(tmp_path):
+    """A "napszak" tágítás nem értelmezhető, ha a kérés eleve
+    "barmikor" volt — ilyenkor a `tagitott_ablak` None-t ad, és az
+    orchestrator sem futtat félrevezető keresést."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-19T00:00:00Z",
+                    "datum_ig": "2026-08-19T23:59:59Z",
+                    "napszak": "barmikor",
+                },
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+    orch.fordulo("session-1", "petárdázni szeretnék szerdán", _MOST)
+
+    valasz = orch.alternativa_kereses("session-1", "napszak")
+
+    assert valasz == {"tipus": "hiba", "uzenet_kulcs": "ervenytelen_alternativa"}
+
+
 def test_fordulo_valodi_ertelmezovel_alkudozas_szukites_megorzi_a_boltot(tmp_path):
     """Végponttól végpontig, VALÓDI értelmezővel (nem szkriptelt) — a
     golden set "szűkítés" esetének (tests/golden/nyelvi_alap.yaml,

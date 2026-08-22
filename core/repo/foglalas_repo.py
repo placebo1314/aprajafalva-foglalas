@@ -477,6 +477,42 @@ def free_slots_search(
     return [(row[0], row[1], row[2]) for row in rows]
 
 
+def published_slots_exist(
+    conn: sqlite3.Connection,
+    *,
+    org_id: str,
+    shop_id: str | None = None,
+    service_id: str | None = None,
+    tol_iso: str | None = None,
+) -> bool:
+    """Van-e EGYÁLTALÁN meghirdetett (generált) slot — függetlenül attól,
+    hogy szabad-e. Ez különbözteti meg a "minden hely elkelt" és a
+    "nincs is meghirdetve időpont" esetet: az első szűkösség, a második
+    csak annyit jelent, hogy a bolt még nem vitte fel a beosztást.
+
+    A kettő összemosása félrevezető lenne — a vásárló telinek látná a
+    boltot, ami valójában csak nem hirdetett meg semmit (blueprint
+    7. szakasz, "Szűkösség jelzése": csak akkor jelezzünk szűkösséget,
+    ha IGAZ, konkrét küszöbszámból).
+
+    `tol_iso`: ettől az időponttól nézve. A hívó jellemzően a KÉRT ablak
+    kezdetét adja meg, nem a jelent — a kérdés az, hogy a vásárló által
+    kérdezett időszaktól kezdve van-e egyáltalán meghirdetett kínálat.
+    Így a válasz a kéréstől függ, nem a fali órától (ettől lesz a
+    viselkedés determinisztikus és tesztelhető). `None` esetén a jelen.
+    """
+    row = conn.execute(
+        "SELECT 1 FROM slot JOIN muszak ON muszak.id = slot.muszak_id "
+        "WHERE muszak.szervezet_id = ? "
+        "AND (? IS NULL OR muszak.bolt_id = ?) "
+        "AND (? IS NULL OR muszak.szolgaltatas_id = ?) "
+        "AND slot.kezdet >= ? "
+        "LIMIT 1",
+        (org_id, shop_id, shop_id, service_id, service_id, tol_iso or most_iso()),
+    ).fetchone()
+    return row is not None
+
+
 def slot_statuses_list(conn: sqlite3.Connection, *, shift_id: str) -> list[dict]:
     """Egy műszak slotjai, kezdet szerint rendezve, mindegyikhez az
     aktuális állapottal ('szabad' | 'holdolt' | 'foglalt') — a naptárnézet

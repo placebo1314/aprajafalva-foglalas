@@ -64,6 +64,22 @@ def ajanlat_bevezetes_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
     return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_bevezetes"]
 
 
+def alternativa_szoveg(
+    dimenzio: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT
+) -> tuple[str, str] | None:
+    """`(bevezető mondat, gombfelirat)` a felajánlott alternatívához,
+    vagy `None`, ha nincs mit felajánlani.
+
+    A `dimenzio` az `assistant/tools/szabad_idopontok.py::
+    _alternativ_dimenzio` zárt kimenete (`napszak` | `nap` | `het`) — ez
+    a függvény csak megfogalmazza, nem dönt: azt, hogy VAN-e alternatíva,
+    a determinisztikus eszköz állapította meg egy tényleges kereséssel."""
+    sablonok = SABLONOK[nyelv]["alternativa"]
+    if dimenzio not in sablonok["bevezetes"]:
+        return None
+    return sablonok["bevezetes"][dimenzio], sablonok["gomb"][dimenzio]
+
+
 def visszakerdezes_szoveg(hianyzo_mezo: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
     """A visszakérdezés mondata — a `hianyzo_mezo` (eszkoz-szerzodes skill
     mezőneve) emberi megfogalmazását illeszti a sablonba. Ismeretlen vagy

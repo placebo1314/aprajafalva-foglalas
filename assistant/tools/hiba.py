@@ -24,6 +24,10 @@ class Ok(Enum):
 
     MEGELOZTEK = "megeloztek"
     NINCS_SZABAD_HELY = "nincs_szabad_hely"
+    # Nem szűkösség: a boltnak egyáltalán nincs meghirdetett beosztása.
+    # Külön ok, mert a válasz is más — l. `szabad_idopontok.py`
+    # "ŐSZINTESÉG-ÁG".
+    NINCS_MEGHIRDETETT_IDOPONT = "nincs_meghirdetett_idopont"
     SZABALY_TILTJA = "szabaly_tiltja"
     HITELESITES_SZUKSEGES = "hitelesites_szukseges"
     ERVENYTELEN_KOD = "ervenytelen_kod"

@@ -138,6 +138,10 @@ class _SessionAllapot:
     aktualis_jeloltek: list[dict] = field(default_factory=list)
     valasztott_slot_id: str | None = None
     lekerdezesek_szama: int = 0
+    # Az utolsó tényleges keresés teljes paraméterei — ebből tágít az
+    # `alternativa_kereses()`, hogy a vásárlónak ne kelljen újra
+    # elmondania, mit keresett.
+    utolso_kereses: dict = field(default_factory=dict)
 
 
 class Orchestrator:
@@ -263,15 +267,46 @@ class Orchestrator:
         )
 
         if not eredmeny["sikeres"]:
+            # Az utolsó keresési ablakot megjegyezzük, hogy a felajánlott
+            # alternatívát (`alternativa_kereses`) ugyanarra a kérésre
+            # tudjuk kitágítani — a vásárlónak nem kell újra elmondania.
+            allapot.utolso_kereses = dict(teljes)
             return {"tipus": "eszkoz_hiba", "felismert_ablak": felismert_ablak, **eredmeny}
 
         allapot.aktualis_jeloltek = eredmeny["jeloltek"]
         allapot.allapot = "valasztasra_var"
+        allapot.utolso_kereses = dict(teljes)
         return {
             "tipus": "ajanlat",
             "jeloltek": eredmeny["jeloltek"],
             "felismert_ablak": felismert_ablak,
         }
+
+    def alternativa_kereses(self, session_id: str, dimenzio: str) -> dict:
+        """A felajánlott alternatíva ("mutasd a hét többi napját")
+        elfogadása — ugyanazt a keresést futtatja újra, a megadott
+        dimenzió mentén kitágított ablakkal.
+
+        A tágítás szabálya NEM itt van, hanem
+        `assistant/tools/szabad_idopontok.py::tagitott_ablak()`-ban —
+        ugyanaz a függvény, amivel az eszköz eldöntötte, hogy VAN
+        alternatíva. Így a gomb pontosan azt a keresést futtatja, amit a
+        rendszer ígért; ha a kettő külön élne, szétdriftelhetnének."""
+        allapot = self._allapot(session_id)
+        if not allapot.utolso_kereses:
+            return {"tipus": "hiba", "uzenet_kulcs": "nincs_korabbi_kereses"}
+
+        elozo = allapot.utolso_kereses
+        ablak = szabad_idopontok.tagitott_ablak(
+            dimenzio,
+            datum_tol=elozo["datum_tol"],
+            datum_ig=elozo["datum_ig"],
+            napszak=elozo.get("napszak", "barmikor"),
+        )
+        if ablak is None:
+            return {"tipus": "hiba", "uzenet_kulcs": "ervenytelen_alternativa"}
+
+        return self._szabad_idopontok(allapot, {**elozo, **ablak})
 
     def kereses_strukturaltan(self, session_id: str, parameterek: dict) -> dict:
         """A koppintós út belépési pontja (blueprint 10. szakasz,
