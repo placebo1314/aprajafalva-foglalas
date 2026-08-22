@@ -94,6 +94,7 @@ from assistant.interpreter.kaszkad import kemeny_reszt_vedd
 from assistant.interpreter.llm_based import LLMErtelmezo
 from assistant.interpreter.normalizalo import normalizal
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
+from assistant.tools import katalogus
 from assistant.tools.katalogus import (
     BOLT_EGYERTELMU_SZOLGALTATAS,
     BOLT_SLUGOK,
@@ -148,7 +149,7 @@ class ForditottKaszkadErtelmezo:
         normalizalt = normalizal(mondat)
         self.utolso_normalizalt = normalizalt
 
-        if self.llm is None:
+        if self.llm is None or self._zart_valasz_e(normalizalt):
             self.utolso_reteg = "szabaly"
             return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
 
@@ -250,6 +251,30 @@ class ForditottKaszkadErtelmezo:
             )
 
         return self._kereses_kapu(parameterek, nyers, mondat, most, kontextus, bizonyossag)
+
+    @staticmethod
+    def _zart_valasz_e(normalizalt: str) -> bool:
+        """A mondat MAGA egy zárt halmazbeli érték-e (bolt-slug vagy
+        bolt-név), és semmi más?
+
+        Ez egy zárt kérdésre adott gombnyomás: a felület a
+        `visszakerdez` `valaszthato_ertekek` listájából küld vissza egy
+        elemet új fordulóként (`ui/vasarlo.py::_szo_kuldes`). Az ilyen
+        válasz NEM szabad szöveg — egy zárt halmaz eleme —, ezért nincs
+        mit értelmeztetni rajta: a determinisztikus réteg pontosan
+        tudja, mit jelent.
+
+        **Miért kell külön kapu:** a fej nélküli végigjátszás megfogta,
+        hogy a modell a puszta `"torpilla"` szóra ÚJRA visszakérdezett a
+        boltra — vagyis a gombnyomásos, akadálymentes út (a felület
+        legfontosabb kisegítő eleme) modellel használhatatlan volt.
+        Teljes sztring-egyezés zárt halmazon, nem kulcsszólista."""
+        jelolt = normalizalt.strip().strip(".!?").lower()
+        if not jelolt:
+            return False
+        return jelolt in BOLT_SLUGOK or jelolt in {
+            nev.lower() for nev in katalogus.BOLT_NEVEK.values()
+        }
 
     @staticmethod
     def _ismert_bolt(parameterek: dict, kontextus: ErtelmezesKontextus) -> str | None:

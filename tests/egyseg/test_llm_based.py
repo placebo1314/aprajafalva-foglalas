@@ -290,3 +290,16 @@ def test_ertelmez_logprob_nelkuli_valasznal_ures_bizonyossag():
     ):
         eredmeny = ertelmezo.ertelmez("bármi", most=_MOST, kontextus=ErtelmezesKontextus())
     assert all(ertek is None for ertek in eredmeny["bizonyossag"].values())
+
+
+def test_a_mit_enumbol_hianyzik_az_ar():
+    """Az ár nem engedélyezett tényválasz a vásárlói csatornán
+    (blueprint 10., golden set `kapuor-02`). Nem utólagos szűréssel
+    védjük, hanem a kötött dekódolás szintjén: a modell nem tudja
+    kérni."""
+    from assistant.interpreter.llm_based import FORMAT_SEMA
+
+    mit = FORMAT_SEMA["properties"]["parameterek"]["properties"]["mit"]["enum"]
+    assert "ar" not in mit
+    assert "nyitvatartas" in mit
+    assert "megjelenes" in mit

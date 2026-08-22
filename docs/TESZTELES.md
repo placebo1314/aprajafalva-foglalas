@@ -8,7 +8,7 @@ a projekt egészéhez `docs/ALLAPOT.md`.
 
 | Parancs | Mit futtat | Kb. mennyi ideig tart | Ha elbukik |
 |---|---|---|---|
-| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `439 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
+| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `460 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
 | `python feladat.py teszt-mindketto` | Ugyanaz a tesztkészlet, előbb `sqlite`, utána `postgres` "motorral". | ~26 másodperc | **Figyelem:** a `postgres` ág ma ténylegesen ugyanazt a SQLite-ot futtatja újra (nincs Postgres-adapter, ADR-004) — ez a parancs ma nem bizonyít semmit Postgresen, csak kétszer futtatja le ugyanazt. |
 | `python feladat.py lint` | `ruff format --check .`, utána `ruff check .`. | néhány másodperc | Kiírja a formázási/lint hibás fájlokat és sorokat. `ruff format .` (a `--check` nélküli) automatikusan javítja a formázást; a `ruff check .` hibáit kézzel kell megnézni. |
 | `python feladat.py golden` | A golden set (`tests/golden/nyelvi_alap.yaml`, 45 eset) kiértékelése a **determinisztikus** értelmezővel — nem indít Ollamát. Rétegenkénti bontást ír. | néhány másodperc | Kilépőkód 1, ha egy réteg a küszöbe alatt van; a kimenet megnevezi, melyik. Ma három réteg van küszöb alatt (`elengedes`, `valtozatossag`, `mintan_tul`) — ezek `igenyel_llm` esetek, a determinisztikus úton szándékosan buknak, nem hiba. |
@@ -184,11 +184,14 @@ rendszerórához (részletesen lent, "Beszélgetés-próba").
    a megfelelő szerkesztett mezőt olvassa fel, **nem a modell generálja**
    (docs/blueprint.md 10. szakasz).
 6. **Ár — a kapuőr elutasítja.** *Írjon nekünk* fül → írd be:
-   `Mennyibe kerül a nagy petárda?`. **Mit kell látnod:** "Ez a kérdés
-   nem foglalással kapcsolatos, ebben nem tudok segíteni." — **ez a
-   helyes válasz**, nem hiba. Az ár a `bolt_info` sémájában lekérdezhető
-   adat, de a kapuőr ma is elutasítja, mielőtt odáig eljutna (golden set
-   `kapuor-02`).
+   `Mennyibe kerül a nagy petárda?`. **Amit látni SZERETNÉNK:** "Ez a
+   kérdés nem foglalással kapcsolatos, ebben nem tudok segíteni." — ez a
+   helyes válasz, nem hiba. **Amit modellel ma gyakran látsz helyette:**
+   a rendszer visszakérdez a boltra. Ez a fordított kaszkád ismert
+   gyengéje (kapuőr-réteg 50%, ADR-018) — **nem** kritikus, mert a
+   rendszer nem talál ki árat, csak feleslegesen kérdez. Modell nélkül
+   (determinisztikus kapuőr) a helyes elutasítás megy. **Ami valódi hiba
+   lenne:** bármilyen konkrét ár a válaszban.
 
 ### Beszélgetés-próba
 
@@ -239,14 +242,18 @@ válasz helyes, nem hiba.
 
 #### A tíz próba
 
-Mindegyik előtt érdemes friss ablakot nyitni (a beszélgetés kontextusa
-megmarad a fülön belül).
+**Mindegyik próba előtt nyomj "Új beszélgetés"-t** (a szöveges fül
+alján). A szándék kemény része (bolt, szolgáltatás) szándékosan túléli a
+fordulókat — ez kell az alkudozáshoz —, de próbálgatás közben ez azt
+jelentené, hogy az előző próba boltja beleszól a következőbe. A 6., 7.
+és 9. próba viszont TÖBB egymást követő fordulóból áll: azok közben ne
+nyomd meg.
 
 | # | Amit beírsz | Mit kell látnod | A hiba jele |
 |---|---|---|---|
 | 1 | `Törpillához mennék holnap` | Nyugtázó sor a felismert ablakkal, majd időpontok gombként. | Visszakérdezés a boltra (a mondat kimondta), vagy üres találat. |
 | 2 | `szeretnék menni valamikor` | Zárt kérdés + **három bolt-gomb**. Kattints a Törpillára → nyugtázó sor, majd időpontok. | Kitalált bolt vagy kitalált dátum: a helyes válasz itt a kérdés, nem a találgatás. |
-| 3 | `Mennyibe kerül a nagy petárda?` | "Ez a kérdés nem foglalással kapcsolatos…" | **Bármilyen ár** a válaszban, vagy foglalási ágra terelés. |
+| 3 | `Mennyibe kerül a nagy petárda?` | "Ez a kérdés nem foglalással kapcsolatos…" — **de modellel ma gyakran visszakérdez a boltra helyette** (ismert gyengeség, ADR-018, kapuőr 50%). | **Bármilyen ár** a válaszban. Az fordulna elő valódi hibaként; a felesleges visszakérdezés ma dokumentált korlát. |
 | 4 | `Hogy néz ki a Törpilla bolt?` | A szerkesztett megjelenés-szöveg (`seed/betolt.py`, vagy amit adminban átírtál). | Kitalált leírás — ezt a mezőt a modell sosem generálja. |
 | 5 | `Meddig van nyitva a Szundi szombaton?` | Nyitvatartás-mondat. | Foglalási ág, vagy találgatott nyitvatartás. |
 | 6 | Előbb `Törpillához mennék`, aztán **külön fordulóban** `inkább délután` | A második fordulóban a boltot **nem** kérdezi újra — délutáni időpontok jönnek. | Újra rákérdez a boltra: a szándék kemény része elveszett. |
@@ -261,7 +268,7 @@ A szöveges fül alján a **"Napló megnyitása"** gomb kiírja az eddigi
 fordulókat (`naplo/probak.jsonl`), fordulónként nyolc mezővel:
 
 ```
-3. [2026-12-21T10:04:12Z]
+3. [2026-08-23T00:41:07Z]          <- a VALÓDI óra (mikor próbáltad)
    bemenet:      'Törpillához mennék holnap'
    normalizált:  'Törpillához mennék holnap'
    réteg:        llm

@@ -494,11 +494,34 @@ class VasarloApp(tk.Tk):
         self.szo_allapot = ttk.Label(tab, text="", foreground="#555")
         self.szo_allapot.pack(anchor="w")
 
+        also_gombsor = ttk.Frame(tab, padding=(0, 6))
+        also_gombsor.pack(anchor="w")
         # Tesztelés közben ez mutatja meg, MI történt: melyik réteg
         # oldotta meg, minek értette, mennyire volt biztos benne.
-        ttk.Button(tab, text="Napló megnyitása", command=self._naplo_ablak).pack(
-            anchor="w", pady=(6, 0)
+        ttk.Button(also_gombsor, text="Napló megnyitása", command=self._naplo_ablak).pack(
+            side="left", padx=(0, 6)
         )
+        # A szándék kemény része (bolt, szolgáltatás) fordulók között
+        # ÉLETBEN MARAD (`orchestrator.kovetkezo_kontextus`) — ez a
+        # helyes viselkedés alkudozásnál, de próbálgatás közben azt
+        # jelenti, hogy az előző próba boltja beleszól a következőbe.
+        # Enélkül minden próbához újra kellene indítani az ablakot.
+        ttk.Button(also_gombsor, text="Új beszélgetés", command=self._uj_beszelgetes).pack(
+            side="left"
+        )
+
+    def _uj_beszelgetes(self) -> None:
+        """Friss session: a szándék kemény része sem öröklődik tovább.
+        A szöveges naplót is üríti, hogy látszódjon, hol kezdődik az új
+        próba."""
+        self.session_id = new_uuid()
+        for keret in (self.szo_gombsor, self.szo_jelolt_keret):
+            for widget in keret.winfo_children():
+                widget.destroy()
+        self.szo_uzenet.config(text="")
+        self.szo_naplo.config(state="normal")
+        self.szo_naplo.delete("1.0", "end")
+        self.szo_naplo.config(state="disabled")
 
     def _naplo_ablak(self) -> None:
         """A `naplo/probak.jsonl` eddigi próbái egy külön ablakban. A

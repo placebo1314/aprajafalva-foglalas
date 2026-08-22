@@ -539,3 +539,69 @@ def test_bolt_info_datum_csak_naptari_nap():
     eredmeny = _ertelmez(_kaszkad(llm), "Meddig van nyitva a Szundi szombaton?")
 
     assert eredmeny["parameterek"]["datum"] == "2026-08-22"
+
+
+# --- zárt kérdésre adott gombnyomás: nincs modellhívás ----------------
+
+
+def test_bolt_slug_onmagaban_nem_megy_a_modellhez():
+    """Zárt kérdésre adott gombnyomás (`ui/vasarlo.py` a
+    `valaszthato_ertekek` egyik elemét küldi vissza új fordulóként) —
+    ez zárt halmazbeli érték, nem szabad szöveg. A végigjátszás
+    megfogta, hogy a modell a puszta "torpilla" szóra ÚJRA
+    visszakérdezett a boltra, vagyis az akadálymentes gombos út
+    modellel használhatatlan volt."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        }
+    )
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = _ertelmez(kaszkad, "torpilla")
+
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert eredmeny["parameterek"]["bolt_id"] == "torpilla"
+    assert kaszkad.utolso_reteg == "szabaly"
+    assert llm.kapott_mondatok == []
+
+
+def test_bolt_nev_onmagaban_sem_megy_a_modellhez():
+    llm = _FakeLLM({"eszkoz": "nincs", "parameterek": {}})
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = _ertelmez(kaszkad, "Ügyifogyi")
+
+    assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi"
+    assert llm.kapott_mondatok == []
+
+
+def test_a_zart_valasz_kapu_megorzi_a_korabbi_datumot():
+    """A gombnyomás előtti fordulóban felismert dátum nem veszhet el —
+    a determinisztikus réteg a kontextusból viszi tovább."""
+    llm = _FakeLLM({"eszkoz": "nincs", "parameterek": {}})
+    eredmeny = _ertelmez(
+        _kaszkad(llm),
+        "torpilla",
+        megorzott={"datum_tol": "2026-08-18T00:00:00Z", "datum_ig": "2026-08-18T23:59:59Z"},
+    )
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
+
+
+def test_bolt_nev_mondatban_tovabbra_is_a_modellhez_megy():
+    """A kapu CSAK a teljes sztring-egyezésre szól — egy boltnevet
+    TARTALMAZÓ mondat továbbra is a modellé."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "torpilla", "datum_kifejezes": "holnap"},
+        }
+    )
+    kaszkad = _kaszkad(llm)
+
+    _ertelmez(kaszkad, "Törpillához mennék holnap")
+
+    assert kaszkad.utolso_reteg == "llm"
+    assert llm.kapott_mondatok

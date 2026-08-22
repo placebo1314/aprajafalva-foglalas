@@ -61,9 +61,20 @@ _LOG = logging.getLogger(__name__)
 ESZKOZOK = ["szabad_idopontok", "bolt_info", "foglalas_lemondas", "visszakerdez", "nincs"]
 
 _NAPSZAK_ENUM = semak.SEMAK["szabad_idopontok"]["v1"]["properties"]["napszak"]["enum"]
-_BOLT_INFO_MIT_ENUM = semak.SEMAK["bolt_info"][semak.legutobbi_verzio("bolt_info")]["properties"][
+_BOLT_INFO_MIT_TELJES = semak.SEMAK["bolt_info"][semak.legutobbi_verzio("bolt_info")]["properties"][
     "mit"
 ]["enum"]
+
+# Az ÁR nem engedélyezett tényválasz a vásárlói csatornán (blueprint 10.
+# szakasz; golden set `kapuor-02`: "Az ár NEM engedélyezett tényválasz —
+# csak nyitvatartás, cím, időtartam, megjelenés, termék"). Az eszköz
+# maga tud árat adni (admin-oldali használatra), a MODELL viszont ne
+# tudja kérni: a fej nélküli végigjátszás megfogta, hogy a "Hogy néz ki
+# a Törpilla bolt?" kérdésre `mit: "ar"`-t adott, és a felület az árat
+# olvasta fel egy megjelenés-kérdésre. Ezt nem utólagos szűréssel
+# javítjuk, hanem a KÖTÖTT DEKÓDOLÁS szintjén: ami nincs az enumban, az
+# strukturálisan nem születhet meg.
+_BOLT_INFO_MIT_ENUM = [ertek for ertek in _BOLT_INFO_MIT_TELJES if ertek != "ar"]
 
 FORMAT_SEMA = {
     "type": "object",
