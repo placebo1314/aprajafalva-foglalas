@@ -445,7 +445,16 @@ class ForditottKaszkadErtelmezo:
         bolt_id = parameterek.get("bolt_id")
         if bolt_id is None:
             return self._visszakerdez("bolt_id", "zart", bizonyossag)
-        vegleges = {"bolt_id": bolt_id, "mit": parameterek.get("mit") or "nyitvatartas"}
+        # A `mit` az EGYETLEN mező, ahol a szabály felülírja a modellt:
+        # a kérdéstípus zárt halmaz, és pozitív, nagy pontosságú
+        # mintaillesztéssel felismerhető ("hogy néz ki", "meddig van
+        # nyitva"). Egy rossz `mit` nem hiányzó adat, hanem MÁS KÉRDÉSRE
+        # adott válasz szerkesztett bolti adattal — a végigjátszás
+        # megfogta, hogy a "Hogy néz ki a Törpilla bolt?" kérdésre a
+        # címet olvasta fel. Ha a szabály nem ismeri fel a kérdést
+        # (`None`), akkor a modellé a döntés, ahogy máshol is.
+        mit = rule_based.bolt_info_mezo_feloldas(mondat) or parameterek.get("mit") or "nyitvatartas"
+        vegleges = {"bolt_id": bolt_id, "mit": mit}
         datum_tol, _, _ = self._datum_ablak(nyers, mondat, most)
         if datum_tol:
             # `bolt_info.datum` csak a naptári nap, idő nélkül.

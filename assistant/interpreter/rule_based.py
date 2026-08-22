@@ -488,6 +488,20 @@ def datum_ablak_feloldas(kifejezes: str, most: str) -> tuple[str | None, str | N
     return _datum_ablak_explicit(normalizal(kifejezes), most)
 
 
+def bolt_info_mezo_feloldas(mondat: str) -> str | None:
+    """Melyik TÉNYRE kérdez a mondat (`nyitvatartas` | `cim` |
+    `megjelenes` | `termek`), vagy `None`, ha nem tényválasz-kérdés —
+    nyilvános alak (`_bolt_info_mezo`).
+
+    Ezek POZITÍV, nagy pontosságú mintaillesztések ("hogy néz ki",
+    "meddig van nyitva", "hol van"), és a `mit` zárt halmaz. A fordított
+    kaszkád ezért ezt a mezőt a szabálytól veszi, ha van találat: egy
+    rossz `mit` azt jelenti, hogy a rendszer MÁS kérdésre válaszol
+    szerkesztett bolti adattal (a végigjátszás megfogta: a "Hogy néz ki
+    a Törpilla bolt?" kérdésre a címet olvasta fel)."""
+    return _bolt_info_mezo(normalizal(mondat).lower())
+
+
 def preferalt_ora_feloldas(mondat: str) -> int | None:
     """A preferált óra kinyerése a mondatból ("kb 10 körül") —
     nyilvános alak (`_preferalt_ora`). Ugyanaz az elv, mint a

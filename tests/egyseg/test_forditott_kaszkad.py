@@ -605,3 +605,23 @@ def test_bolt_nev_mondatban_tovabbra_is_a_modellhez_megy():
 
     assert kaszkad.utolso_reteg == "llm"
     assert llm.kapott_mondatok
+
+
+def test_a_bolt_info_kerdestipust_a_szabaly_dontheti_el():
+    """A `mit` az EGYETLEN mező, ahol a szabály felülírja a modellt: egy
+    rossz kérdéstípus nem hiányzó adat, hanem MÁS kérdésre adott válasz
+    szerkesztett bolti adattal. A végigjátszás megfogta, hogy a "Hogy
+    néz ki…" kérdésre előbb az árat, majd a címet olvasta fel."""
+    llm = _FakeLLM({"eszkoz": "bolt_info", "parameterek": {"bolt_id": "torpilla", "mit": "cim"}})
+    eredmeny = _ertelmez(_kaszkad(llm), "Hogy néz ki a Törpilla bolt?")
+
+    assert eredmeny["parameterek"]["mit"] == "megjelenes"
+
+
+def test_a_modell_mit_mezoje_marad_ha_a_szabaly_nem_ismeri_fel_a_kerdest():
+    """A felülírás CSAK pozitív szabály-találatra szól — ha a szabály
+    nem ismeri fel a kérdéstípust, a modellé a döntés."""
+    llm = _FakeLLM({"eszkoz": "bolt_info", "parameterek": {"bolt_id": "torpilla", "mit": "termek"}})
+    eredmeny = _ertelmez(_kaszkad(llm), "Na és a Törpillánál?")
+
+    assert eredmeny["parameterek"]["mit"] == "termek"
