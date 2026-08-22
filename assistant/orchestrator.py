@@ -53,6 +53,61 @@ _VISSZAKERDEZ_IRANYITASI_MEZOK = frozenset(
     {"hianyzo_mezo", "varhato_kerdes_tipusa", "valaszthato_ertekek"}
 )
 
+# Szándék rétegzés (blueprint 1. szakasz, "Kapjon őszinte választ... ha
+# nincs hely, alternatíva jöjjön"; roadmap M4): egy keresési szándéknak
+# van KEMÉNY (bolt, szolgáltatás — amit a vásárló egyszer kimond, és
+# alkudozás közben nem kell újra kimondania) és PUHA (dátum, napszak,
+# preferált óra — ez az, ami egy alkudozó fordulóban ténylegesen mozog:
+# szűkítés, tágítás, napszakváltás) része. Csak a kemény rész él túl egy
+# lezárt keresést (siker VAGY kudarc) a következő fordulóra — a puha rész
+# minden fordulóban frissen dől el, hogy "puha kívánságra ne maradjon
+# széles zár" (blueprint 5. szakasz, "Hold" — ugyanez az elv, csak itt a
+# kontextusra, nem a slot-zárolásra vetítve).
+_KEMENY_MEZOK = frozenset({"bolt_id", "szolgaltatas_id"})
+
+
+def kovetkezo_kontextus(elozo_megorzott: dict, ertelmezes: dict) -> dict:
+    """Tiszta, állapot nélküli függvény: az előző fordulóban megőrzött
+    paraméterekből és az AKTUÁLIS forduló értelmezés-kimenetéből
+    (`{eszkoz, parameterek}`) számolja ki, mit kell a KÖVETKEZŐ
+    fordulónak megőriznie a kontextusban.
+
+    Két eset:
+
+    - `visszakerdez`: minden ténylegesen kinyert (nem irányítási) mezőt
+      megőriz, a régiek fölé — ez a meglévő "ne kérdezz vissza olyat,
+      amit már tudsz" viselkedés (golden set, toredekes-03).
+    - `szabad_idopontok`: egy keresés LEFUTOTT (sikertől függetlenül —
+      a hívó dönti el, mit kezd a tényleges tool-eredménnyel) — innentől
+      csak a KEMÉNY mezők élnek túl a következő fordulóra, a puha rész
+      (dátum/napszak/óra) nem: egy alkudozó follow-up mindig frissen
+      dönti el a puhát, a `assistant/interpreter/rule_based.py`
+      `_kereses` ág pedig a hiányzó kemény mezőt ebből a kontextusból
+      tölti ki, ha a mondat nem mondja ki újra.
+
+    Minden más eszköznél (`nincs`, `bolt_info`, `foglalas_lemondas`,
+    `foglalas_athelyezes`, `foglalas_lekerdezes`) a kontextus
+    változatlan marad — ezek nem keresési szándékok, nem érintik a
+    szándék-rétegzést.
+
+    Ezt a függvényt az `Orchestrator` és a golden set kiértékelője
+    (`tests/golden/futtato.py`) is használja, hogy a mért viselkedés és
+    a valódi futásidejű viselkedés ne driftelhessen szét."""
+    eszkoz = ertelmezes.get("eszkoz")
+    parameterek = ertelmezes.get("parameterek") or {}
+
+    if eszkoz == "visszakerdez":
+        megorzendo = {
+            k: v for k, v in parameterek.items() if k not in _VISSZAKERDEZ_IRANYITASI_MEZOK
+        }
+        return {**elozo_megorzott, **megorzendo}
+
+    if eszkoz == "szabad_idopontok":
+        teljes = {**elozo_megorzott, **parameterek}
+        return {k: v for k, v in teljes.items() if k in _KEMENY_MEZOK}
+
+    return dict(elozo_megorzott)
+
 
 @dataclass
 class _SessionAllapot:
@@ -120,10 +175,9 @@ class Orchestrator:
 
     def _visszakerdez(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
         allapot.sikertelen_ertelmezesek += 1
-        megorzendo = {
-            k: v for k, v in parameterek.items() if k not in _VISSZAKERDEZ_IRANYITASI_MEZOK
-        }
-        allapot.megorzott_parameterek.update(megorzendo)
+        allapot.megorzott_parameterek = kovetkezo_kontextus(
+            allapot.megorzott_parameterek, {"eszkoz": "visszakerdez", "parameterek": parameterek}
+        )
 
         if allapot.sikertelen_ertelmezesek >= _SIKERTELEN_KUSZOB_ZART_KERDESHEZ:
             kerdes_tipusa = "zart"
@@ -153,15 +207,23 @@ class Orchestrator:
         }
 
         eredmeny = szabad_idopontok.hivas(self.conn, teljes, org_id=self.org_id)
+
+        # Szándék rétegzés (lásd `kovetkezo_kontextus` docstringje): a
+        # keresés kimenetelétől FÜGGETLENÜL a kemény rész (bolt,
+        # szolgáltatás) megmarad a következő fordulóra — ez teszi
+        # lehetővé az alkudozást (szűkítés/tágítás/napszakváltás) a
+        # kemény rész újramondása nélkül, ÉS az "elutasítás után
+        # alternatíva" menetet is: a bolt egy sikertelen keresés után
+        # sem vész el.
+        allapot.megorzott_parameterek = kovetkezo_kontextus(
+            allapot.megorzott_parameterek, {"eszkoz": "szabad_idopontok", "parameterek": teljes}
+        )
+
         if not eredmeny["sikeres"]:
             return {"tipus": "eszkoz_hiba", "felismert_ablak": felismert_ablak, **eredmeny}
 
         allapot.aktualis_jeloltek = eredmeny["jeloltek"]
         allapot.allapot = "valasztasra_var"
-        # A keresés sikerült — a session tudja, mit talált, a megőrzött
-        # paraméterek innentől feleslegesek (a következő kérés már új
-        # keresés lenne, nem ugyanennek a folytatása).
-        allapot.megorzott_parameterek = {}
         return {
             "tipus": "ajanlat",
             "jeloltek": eredmeny["jeloltek"],

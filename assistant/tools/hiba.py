@@ -41,13 +41,22 @@ def sikeres_eredmeny(**mezok: object) -> dict:
     return {"sikeres": True, **mezok}
 
 
-def hiba_eredmeny(ok: Ok, uzenet_kulcs: str, alternativak: list | None = None) -> dict:
+def hiba_eredmeny(
+    ok: Ok, uzenet_kulcs: str, alternativak: list | None = None, **tovabbi_mezok: object
+) -> dict:
     """`alternativak` majdnem mindig legyen nem-üres — a vesztes ág is
     legyen kellemes (eszkoz-szerzodes skill). Ahol a hívó ténylegesen nem
-    tud alternatívát ajánlani (pl. érvénytelen paraméter), üres listát ad."""
+    tud alternatívát ajánlani (pl. érvénytelen paraméter), üres listát ad.
+
+    `tovabbi_mezok`: eszközspecifikus kiegészítés a borítékhoz (pl.
+    `szabad_idopontok` `alternativ_dimenzio`-ja — blueprint 1. szakasz,
+    "Kapjon őszinte választ... ha nincs hely, alternatíva jöjjön": nem
+    elég azt mondani, hogy nincs hely, azt is meg kell mondani, MELYIK
+    dimenzióban van)."""
     return {
         "sikeres": False,
         "ok": ok.value,
         "uzenet_kulcs": uzenet_kulcs,
         "alternativak": alternativak or [],
+        **tovabbi_mezok,
     }

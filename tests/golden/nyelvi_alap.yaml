@@ -28,6 +28,7 @@ meta:
     toredekes: 0.90
     szleng: 0.92
     egyszerusitett: 0.90
+    alkudozas: 0.90
 
 esetek:
 
@@ -374,3 +375,133 @@ esetek:
     tilos:
       - kitalalt_ar
     cimkek: [kapuor, hatokoron_kivul, hallucinacio_csapda]
+
+# -----------------------------------------------------------------------
+# Alkudozás — többfordulós esetek (roadmap M4, "szándék rétegzése":
+# CLAUDE.md "Ha elakadsz" -> assistant/orchestrator.py::kovetkezo_kontextus).
+# `bemenet` itt fordulólista, `varhato` az UTOLSÓ fordulóra vonatkozik.
+# A kiértékelő (`tests/golden/futtato.py::szabaly_hivo`) fordulónként
+# újraértelmez, a kontextust `kovetkezo_kontextus()`-szal viszi tovább —
+# UGYANAZZAL a szabállyal, amit az orchestrator ténylegesen használ: a
+# KEMÉNY rész (bolt, szolgáltatás) egy lezárt kereséstől (siker vagy
+# kudarc) kezdve túléli a fordulót, a PUHA rész (dátum/napszak/óra)
+# minden fordulóban frissen dől el. Ez az a mechanizmus, ami miatt egy
+# alkudozó fordulóban a boltot nem kell újra kimondani.
+# -----------------------------------------------------------------------
+
+  - id: alkudozas-01-szukites
+    bemenet:
+      - "Szeretnék petárdázni valamikor a héten."
+      - "és jövő héten péntek délelőtt?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-28T00:00:00Z"
+        datum_ig: "2026-08-28T11:59:59Z"
+        napszak: delelott
+    megjegyzes: >
+      Szűkítés: az 1. forduló teljes (kemény: ugyifogyi, puha: ez a hét,
+      bármikor). A 2. forduló nem mondja ki újra a boltot — a kemény rész
+      a kontextusból jön, csak a puha (dátum: jövő hét péntek, napszak:
+      délelőtt) szűkül a mondatból.
+    cimkek: [alkudozas, szukites, tobbfordulos]
+
+  - id: alkudozas-02-tagitas
+    bemenet:
+      - "Szeretnék petárdázni kedden délelőtt."
+      - "bármikor a jövő héten"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-24T00:00:00Z"
+        datum_ig: "2026-08-30T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Tágítás: az 1. forduló egy konkrét napra (kedd) és napszakra
+      (délelőtt) szűkít. A 2. forduló ("bármikor a jövő héten") a puha
+      részt kitágítja az egész következő hétre — a kemény rész
+      (ugyifogyi) változatlan, nem hangzik el újra.
+    cimkek: [alkudozas, tagitas, tobbfordulos]
+
+  - id: alkudozas-03-visszalepes
+    bemenet:
+      - "Szeretnék petárdázni kedden."
+      - "és jövő héten péntek?"
+      - "mégis maradjunk a keddinél"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Visszalépés egy korábbi ajánlathoz: a 2. forduló elviszi a
+      keresést jövő hét péntekre, a 3. forduló szövegesen visszatér a
+      kedden kimondott naphoz. A kemény rész (bolt) a teljes menetben
+      egyszer sem hangzik el újra, mégis a végig helyes marad.
+    cimkek: [alkudozas, visszalepes, tobbfordulos]
+
+  - id: alkudozas-04-napszakvaltas
+    bemenet:
+      - "Szundihoz mennék valamikor a héten délelőtt."
+      - "inkább este"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-24T23:59:59Z"
+        napszak: este
+    megjegyzes: >
+      Napszakváltás: a 2. forduló ("inkább este") sem boltot, sem
+      dátumot nem mond — csak a napszakot. A kemény rész (szundi +
+      egyértelmű szolgáltatása, altato) megmarad; a dátum, mivel a 2.
+      forduló nem mond konkrét napot, az általános (most-tól +7 napos)
+      ablakra esik vissza — ez szándékos: a puha rész MINDEN fordulóban
+      frissen dől el, nem ragad be a korábbi szűk ablakra.
+    cimkek: [alkudozas, napszakvaltas, tobbfordulos]
+
+  - id: alkudozas-05-boltvaltas
+    bemenet:
+      - "Szundihoz mennék valamikor a héten."
+      - "inkább a Törpillához mennék"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-24T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Boltváltás: a 2. forduló EXPLICIT módon más boltot mond ki — ez
+      felülírja a kontextust (a kemény rész itt szándékosan MOZOG, mert
+      a mondat kimondja). A Szundihoz tartozó szolgáltatás nem öröklődik
+      a Törpillára — az új bolt egyértelmű szolgáltatása (nagy_orom)
+      töltődik be helyette, nem a régi bolt szolgáltatása marad rajta.
+    cimkek: [alkudozas, boltvaltas, tobbfordulos]
+
+  - id: alkudozas-06-elutasitas-utan-alternativa
+    bemenet:
+      - "Petárdázni szeretnék kedden."
+      - "van esetleg más napon?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-24T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Elutasítás után alternatíva: a valós menetben az 1. forduló
+      keresése kudarcot vallhat (nincs szabad hely kedden) — ez az
+      interpreter szintjén nem látszik (ő nem tudja, volt-e találat),
+      de az orchestrator ekkor is megőrzi a kemény részt (`assistant/
+      orchestrator.py::_szabad_idopontok`, kudarctól függetlenül), így a
+      2. forduló ("van esetleg más napon?") a boltot újramondás nélkül,
+      általános ablakkal folytathatja a keresést.
+    cimkek: [alkudozas, elutasitas_utan_alternativa, tobbfordulos]

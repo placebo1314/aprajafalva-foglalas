@@ -9,7 +9,8 @@ ugyanígy illeszkedne (`assistant/interpreter/__init__.py::Ertelmezo`)."""
 from __future__ import annotations
 
 from assistant.interpreter import ErtelmezesKontextus
-from assistant.orchestrator import Orchestrator
+from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
+from assistant.orchestrator import Orchestrator, kovetkezo_kontextus
 from core.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo
 from core.slot import generator
 from core.slot.blokk import FixedBlock
@@ -341,3 +342,162 @@ def test_fordulo_foglalas_lemondas_kozvetlenul_hivja_az_eszkozt(tmp_path):
 
     assert valasz["sikeres"] is False
     assert valasz["ok"] == "ervenytelen_kod"
+
+
+# --- szándék rétegzés: kemény/puha (roadmap M4) ---------------------
+
+
+def test_kovetkezo_kontextus_visszakerdez_megorzi_a_kinyert_mezoket():
+    """Az irányítási mezők (hianyzo_mezo, varhato_kerdes_tipusa,
+    valaszthato_ertekek) NEM kerülnek a kontextusba — csak a ténylegesen
+    kinyert adat."""
+    uj = kovetkezo_kontextus(
+        {},
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {
+                "hianyzo_mezo": "bolt_id",
+                "varhato_kerdes_tipusa": "zart",
+                "valaszthato_ertekek": ["szundi"],
+                "datum_tol": "2026-08-18T00:00:00Z",
+                "napszak": "delelott",
+            },
+        },
+    )
+    assert uj == {"datum_tol": "2026-08-18T00:00:00Z", "napszak": "delelott"}
+
+
+def test_kovetkezo_kontextus_szabad_idopontok_csak_a_kemeny_reszt_orzi_meg():
+    """Egy LEFUTOTT keresés (`szabad_idopontok`) után csak a kemény rész
+    (bolt, szolgáltatás) marad — a puha rész (dátum/napszak/session_id)
+    nem, azt egy alkudozó fordulónak frissen kell eldöntenie."""
+    uj = kovetkezo_kontextus(
+        {},
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "ugyifogyi",
+                "szolgaltatas_id": "nagy_petarda",
+                "datum_tol": "2026-08-18T00:00:00Z",
+                "datum_ig": "2026-08-18T23:59:59Z",
+                "napszak": "delelott",
+                "session_id": "session-1",
+            },
+        },
+    )
+    assert uj == {"bolt_id": "ugyifogyi", "szolgaltatas_id": "nagy_petarda"}
+
+
+def test_kovetkezo_kontextus_egyeb_eszkoznel_valtozatlan():
+    elozo = {"bolt_id": "ugyifogyi"}
+    uj = kovetkezo_kontextus(elozo, {"eszkoz": "bolt_info", "parameterek": {"bolt_id": "szundi"}})
+    assert uj == elozo
+    assert uj is not elozo  # másolat, nem ugyanaz az objektum
+
+
+def test_fordulo_sikeres_ajanlat_utan_csak_a_kemeny_resz_marad_a_kontextusban(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                    "napszak": "delelott",
+                },
+            },
+            {"eszkoz": "nincs", "parameterek": {}},
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    ajanlat = orch.fordulo("session-1", "petárdázni szeretnék kedden délelőtt", _MOST)
+    assert ajanlat["tipus"] == "ajanlat"
+
+    orch.fordulo("session-1", "és jövő héten péntek délelőtt?", _MOST)
+
+    masodik_kontextus = ertelmezo.hivasok[1][1]
+    assert masodik_kontextus == {"bolt_id": "ugyifogyi"}
+
+
+def test_fordulo_sikertelen_keresés_utan_is_megmarad_a_kemeny_resz(tmp_path):
+    """Elutasítás után alternatíva (3. pont, 6. eset): egy SIKERTELEN
+    keresés (nincs szabad hely) után is megmarad a kemény rész — a
+    következő forduló nem veszíti el a boltot."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2099-01-01T00:00:00Z",
+                    "datum_ig": "2099-01-02T00:00:00Z",
+                },
+            },
+            {"eszkoz": "nincs", "parameterek": {}},
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    elutasitas = orch.fordulo("session-1", "petárdázni szeretnék jövőre", _MOST)
+    assert elutasitas["tipus"] == "eszkoz_hiba"
+    assert elutasitas["sikeres"] is False
+
+    orch.fordulo("session-1", "van esetleg más napon?", _MOST)
+
+    masodik_kontextus = ertelmezo.hivasok[1][1]
+    assert masodik_kontextus == {"bolt_id": "ugyifogyi"}
+
+
+def test_fordulo_eszkoz_hiba_tartalmazza_az_alternativ_dimenziot(tmp_path):
+    """A `szabad_idopontok` `alternativ_dimenzio` mezője (assistant/
+    tools/szabad_idopontok.py) változatlanul átfut az orchestratoron —
+    az elutasítás megmondja, MELYIK dimenzióban van alternatíva, nem
+    csak azt, hogy nincs hely."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                    "napszak": "este",
+                },
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("session-1", "petárdázni szeretnék kedden este", _MOST)
+
+    assert valasz["tipus"] == "eszkoz_hiba"
+    assert valasz["alternativ_dimenzio"] == "napszak"
+
+
+def test_fordulo_valodi_ertelmezovel_alkudozas_szukites_megorzi_a_boltot(tmp_path):
+    """Végponttól végpontig, VALÓDI értelmezővel (nem szkriptelt) — a
+    golden set "szűkítés" esetének (tests/golden/nyelvi_alap.yaml,
+    alkudozas-01-szukites) orchestrator-szintű megfelelője: a bolt nem
+    hangzik el újra a 2. fordulóban, mégis megjelenik a felismert
+    ablakban, a dátum pedig helyesen szűkül jövő hét péntek délelőttre."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch = Orchestrator(conn, SzabalyAlapuErtelmezo(), org_id=ctx["org_id"])
+
+    orch.fordulo("session-1", "Szeretnék petárdázni valamikor a héten.", _MOST)
+    masodik = orch.fordulo("session-1", "és jövő héten péntek délelőtt?", _MOST)
+
+    assert masodik["felismert_ablak"] == {
+        "bolt_id": "ugyifogyi",
+        "datum_tol": "2026-08-28T00:00:00Z",
+        "datum_ig": "2026-08-28T11:59:59Z",
+        "napszak": "delelott",
+    }

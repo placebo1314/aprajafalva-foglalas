@@ -127,6 +127,20 @@ def _het_vege(most_dt: datetime):
     return (most_dt + timedelta(days=napok_vasarnapig)).date()
 
 
+_JOVO_HETEN_MINTA = re.compile(r"j[öo]v[őo]\s*h[ée]ten\b")
+
+
+def _jovo_het_hatarok(most_dt: datetime) -> tuple[str, str]:
+    """A KÖVETKEZŐ naptári hét (hétfőtől vasárnapig) — a "jövő héten"
+    kifejezéshez (tágítás golden-set eset: "bármikor a jövő héten"). A
+    sima "a héten" (`_datum_ablak_explicit`) ettől eltérően a MOST
+    pillanatától a folyó hét végéig tart, nem hétfőtől."""
+    het_eleje_folyo = most_dt.date() - timedelta(days=most_dt.weekday())
+    het_eleje = het_eleje_folyo + timedelta(days=7)
+    het_vege = het_eleje + timedelta(days=6)
+    return f"{het_eleje.isoformat()}T00:00:00Z", f"{het_vege.isoformat()}T23:59:59Z"
+
+
 def _datum_talalatok(szoveg: str, most_dt: datetime) -> list[dict]:
     """A `hun_date_parser` néha üres listát ad egy TELJES, zajos
     mondaton (pl. "Meddig van nyitva a Szundi bolt szombaton?"), pedig
@@ -153,8 +167,15 @@ def _datum_ablak_explicit(szoveg: str, most_iso: str) -> tuple[str | None, str |
     semmi nem oldható fel. NEM tartalmaz tartalék/alapértelmezett
     ablakot (azt a hívó adja hozzá, ha kell)."""
     most_dt = datetime.fromisoformat(most_iso.replace("Z", "+00:00")).replace(tzinfo=None)
+    also = szoveg.lower()
 
-    if re.search(r"\bh[ée]ten\b", szoveg.lower()):
+    # "héten" (a héten / jövő héten) csak akkor rövidre zárt egész-heti
+    # ablak, ha a mondat NEM nevez meg emellett egy konkrét napot is
+    # ("jövő héten péntek" — itt a konkrét nap a pontosabb, azt kell a
+    # hun_date_parser-nek feloldania, nem az egész hetet lefedni).
+    if re.search(r"\bh[ée]ten\b", also) and not _NAP_JELZO_MINTA.search(also):
+        if _JOVO_HETEN_MINTA.search(also):
+            return _jovo_het_hatarok(most_dt)
         # "a héten" — a `most` pillanatától a hét vasárnapjáig, NEM
         # naptári napkezdettől (eltérően az egynapos esetektől).
         return most_iso, f"{_het_vege(most_dt).isoformat()}T23:59:59Z"
@@ -280,8 +301,23 @@ class SzabalyAlapuErtelmezo:
         return {"eszkoz": "bolt_info", "parameterek": parameterek}
 
     def _kereses(self, szoveg: str, also: str, most: str, kontextus: ErtelmezesKontextus) -> dict:
-        bolt_id = _bolt_azonositas(also)
+        # Szándék rétegzés (assistant/orchestrator.py::kovetkezo_kontextus
+        # docstring, roadmap M4): a KEMÉNY rész (bolt, szolgáltatás) NEM
+        # kell, hogy a mondatban újra elhangozzon, ha a kontextus (egy
+        # korábbi, lezárt keresésből vagy visszakérdezésből) már ismeri —
+        # ez teszi lehetővé az alkudozást ("és jövő héten péntek
+        # délelőtt?") kemény rész nélkül. Ha a mondat MÉGIS kimond egy
+        # (más) boltot, az felülír — boltváltáskor a kontextusból örökölt
+        # szolgáltatás a RÉGI bolthoz tartozott, azt nem visszük át.
+        uj_bolt = _bolt_azonositas(also)
+        kontextus_bolt = kontextus.megorzott_parameterek.get("bolt_id")
+        bolt_valtott = uj_bolt is not None and uj_bolt != kontextus_bolt
+        bolt_id = uj_bolt or kontextus_bolt
+
         szolgaltatas_id = _szolgaltatas_azonositas(also, bolt_id)
+        if szolgaltatas_id is None and not bolt_valtott:
+            szolgaltatas_id = kontextus.megorzott_parameterek.get("szolgaltatas_id")
+
         datum_tol, datum_ig = _datum_ablak_explicit(szoveg, most)
         napszak = _napszak_explicit(also)
         if datum_tol and napszak:
@@ -311,7 +347,13 @@ class SzabalyAlapuErtelmezo:
                 },
             }
 
-        vegleges = {**kontextus.megorzott_parameterek, **kinyert, "bolt_id": bolt_id}
+        vegleges = dict(kontextus.megorzott_parameterek)
+        vegleges.update(kinyert)
+        vegleges["bolt_id"] = bolt_id
+        if szolgaltatas_id:
+            vegleges["szolgaltatas_id"] = szolgaltatas_id
+        elif bolt_valtott:
+            vegleges.pop("szolgaltatas_id", None)
         if "datum_tol" not in vegleges:
             vegleges["datum_tol"], vegleges["datum_ig"] = _altalanos_ablak(most)
         vegleges.setdefault("napszak", "barmikor")

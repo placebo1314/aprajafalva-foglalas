@@ -3,10 +3,14 @@
 
 python feladat.py teszt
 python feladat.py teszt-mindketto
-python feladat.py golden [--modell NEV]
+python feladat.py golden [--json UTVONAL]
 python feladat.py migracio "<leiras>"
 python feladat.py seed
 python feladat.py lint
+
+A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
+— nem indít Ollamát, nem hív modellt. Modell-összehasonlításhoz lásd az
+eldobható `spike/golden_futtato.py --ertelmezo llm --modell NEV`-et.
 """
 
 from __future__ import annotations

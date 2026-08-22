@@ -27,6 +27,77 @@ def _hold_lejar(most: datetime) -> str:
     return (most + timedelta(seconds=_HOLD_TTL_MASODPERC)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _het_vege_iso(datum_iso: str) -> str:
+    """A `datum_iso` naptári napját tartalmazó hét vasárnapjának napvégi
+    időpontja — ugyanaz a "hét vége" fogalom, mint `assistant/
+    interpreter/rule_based.py::_het_vege`, csak itt tetszőleges dátumra,
+    nem csak `most`-ra."""
+    dt = datetime.fromisoformat(datum_iso.replace("Z", "+00:00")).replace(tzinfo=None)
+    napok_vasarnapig = 6 - dt.weekday()
+    vege = (dt + timedelta(days=napok_vasarnapig)).date()
+    return f"{vege.isoformat()}T23:59:59Z"
+
+
+def _alternativ_dimenzio(
+    conn,
+    *,
+    org_id: str,
+    bolt_id: str,
+    szolgaltatas_id: str | None,
+    datum_tol: str,
+    datum_ig: str,
+    napszak: str,
+    session_id: str,
+) -> str | None:
+    """Ha a kért ablakra nincs jelölt, megmondja, MELYIK dimenzió
+    tágításával van — a blueprint 1. szakasz ("Kapjon őszinte választ —
+    ha nincs hely, alternatíva jöjjön") és a szándék-rétegzés
+    (`assistant/orchestrator.py::kovetkezo_kontextus`) közös nevezője:
+    nem elég azt mondani, hogy nincs hely, azt is meg kell mondani, min
+    érdemes lazítani. Csak PRÓBÁL (`find_candidates`, hold nélkül) — nem
+    foglal le és nem zárol semmit.
+
+    Sorrend, a kért ablakhoz legközelebbitől a legtávolabbiig:
+    `napszak` (ugyanaz a nap/ablak, más napszak) → `nap` (ugyanazon a
+    héten, más nap) → `het` (a következő héten). `None`, ha egyik
+    tágítás sem hoz találatot — ekkor tényleg nincs mit ajánlani."""
+
+    def van_jelolt(*, datum_tol: str, datum_ig: str, napszak: str) -> bool:
+        return bool(
+            ajanlatpontozo.find_candidates(
+                conn,
+                org_id=org_id,
+                shop_id=bolt_id,
+                service_id=szolgaltatas_id,
+                datum_tol=datum_tol,
+                datum_ig=datum_ig,
+                napszak=napszak,
+                session_id=session_id,
+                limit=1,
+            )
+        )
+
+    if napszak != "barmikor" and van_jelolt(
+        datum_tol=datum_tol, datum_ig=datum_ig, napszak="barmikor"
+    ):
+        return "napszak"
+
+    het_vege = _het_vege_iso(datum_tol)
+    if datum_ig < het_vege and van_jelolt(
+        datum_tol=datum_tol, datum_ig=het_vege, napszak="barmikor"
+    ):
+        return "nap"
+
+    kovetkezo_het_vege_dt = datetime.fromisoformat(het_vege.replace("Z", "+00:00")).replace(
+        tzinfo=None
+    ) + timedelta(days=7)
+    kovetkezo_het_ig = f"{kovetkezo_het_vege_dt.date().isoformat()}T23:59:59Z"
+    if van_jelolt(datum_tol=het_vege, datum_ig=kovetkezo_het_ig, napszak="barmikor"):
+        return "het"
+
+    return None
+
+
 def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
     """`org_id`: melyik szervezetben keresünk — ezt a hívó (orchestrator)
     adja meg, nem az eszköz sémájának paramétere: a v1 hatókör egyetlen
@@ -59,7 +130,24 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
         session_id=parameterek["session_id"],
     )
     if not jeloltek:
-        return hiba.hiba_eredmeny(hiba.Ok.NINCS_SZABAD_HELY, "nincs_szabad_hely_az_ablakban")
+        datum_tol = parameterek["datum_tol"]
+        datum_ig = parameterek["datum_ig"]
+        napszak = parameterek.get("napszak", "barmikor")
+        dimenzio = _alternativ_dimenzio(
+            conn,
+            org_id=org_id,
+            bolt_id=bolt_id,
+            szolgaltatas_id=szolgaltatas_id,
+            datum_tol=datum_tol,
+            datum_ig=datum_ig,
+            napszak=napszak,
+            session_id=parameterek["session_id"],
+        )
+        return hiba.hiba_eredmeny(
+            hiba.Ok.NINCS_SZABAD_HELY,
+            "nincs_szabad_hely_az_ablakban",
+            alternativ_dimenzio=dimenzio,
+        )
 
     lejar = _hold_lejar(datetime.now(UTC))
     holdolt = []

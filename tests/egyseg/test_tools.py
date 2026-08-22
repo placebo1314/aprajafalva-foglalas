@@ -175,9 +175,73 @@ def test_szabad_idopontok_nincs_szabad_hely_az_ablakban(tmp_path):
         },
         org_id=ctx["org_id"],
     )
+    # Se a napszak-, se a nap-, se a hét-tágítás nem hoz találatot — az
+    # egyetlen slot (`_seed`) 2026-08-18-án van, évekkel korábban.
     assert eredmeny == hiba.hiba_eredmeny(
-        hiba.Ok.NINCS_SZABAD_HELY, "nincs_szabad_hely_az_ablakban"
+        hiba.Ok.NINCS_SZABAD_HELY, "nincs_szabad_hely_az_ablakban", alternativ_dimenzio=None
     )
+
+
+def test_szabad_idopontok_alternativ_dimenzio_napszak(tmp_path):
+    """A kért ablakban (2026-08-18, csak "este") nincs jelölt — az
+    egyetlen slot ezen a napon van, de "barmikor" napszakkal
+    megtalálható: az alternatíva dimenziója "napszak"."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+            "napszak": "este",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["alternativ_dimenzio"] == "napszak"
+
+
+def test_szabad_idopontok_alternativ_dimenzio_nap(tmp_path):
+    """A kért napon (2026-08-17, kedd ELŐTTI nap) nincs semmi, de a
+    slot ugyanazon a héten (2026-08-18) van — az alternatíva
+    dimenziója "nap", nem "napszak" (a "barmikor" napszak sem segítene
+    az eredeti napon)."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-17T00:00:00Z",
+            "datum_ig": "2026-08-17T23:59:59Z",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["alternativ_dimenzio"] == "nap"
+
+
+def test_szabad_idopontok_alternativ_dimenzio_het(tmp_path):
+    """A kért hét (2026-08-10 - 2026-08-16) teljesen üres, de a
+    KÖVETKEZŐ héten (2026-08-18) van a slot — az alternatíva
+    dimenziója "het"."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-10T00:00:00Z",
+            "datum_ig": "2026-08-16T23:59:59Z",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["alternativ_dimenzio"] == "het"
 
 
 def test_szabad_idopontok_ismeretlen_szolgaltatas(tmp_path):
