@@ -471,6 +471,15 @@ def datum_ablak_feloldas(kifejezes: str, most: str) -> tuple[str | None, str | N
     return _datum_ablak_explicit(normalizal(kifejezes), most)
 
 
+def bolt_feloldas(mondat: str) -> str | None:
+    """A bolt kinyerése a mondatból, ZÁRT halmazon — nyilvános alak
+    (`_bolt_azonositas`). A fordított kaszkád ezzel dönti el, hogy a
+    mondat KIMONDJA-e a boltot (ilyenkor nincs mit elengedni), vagy a
+    bolt csak a kontextusból jön (ilyenkor érdemes megkérdezni a
+    modelltől, hogy a mondat nem veti-e el)."""
+    return _bolt_azonositas(normalizal(mondat).lower())
+
+
 def szolgaltatas_feloldas(mondat: str, bolt_id: str | None) -> str | None:
     """A szolgáltatás (méret) kinyerése a mondatból, ZÁRT halmazon —
     nyilvános alak (`_szolgaltatas_azonositas`), hogy a fordított kaszkád

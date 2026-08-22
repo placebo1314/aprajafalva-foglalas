@@ -121,7 +121,15 @@ FORMAT_SEMA = {
                 # eszköz sémájából jönnek (azoknak nincs "visszakerdez"
                 # nevű eszközük), hanem az Ertelmezo protokoll saját
                 # szerződése (assistant/orchestrator.py::_visszakerdez).
-                "hianyzo_mezo": {"type": "string"},
+                # ZÁRT halmaz: csak ezekre a mezőkre van értelme
+                # visszakérdezni. Enum nélkül a modell olyan mezőnevet is
+                # adott ("datum_kifejezes", "termek"), amit a vásárlónak
+                # feltéve értelmetlen kérdés lenne — a kötött dekódolás
+                # ezt strukturálisan zárja ki.
+                "hianyzo_mezo": {
+                    "type": "string",
+                    "enum": ["bolt_id", "szolgaltatas_id", "foglalasi_kod"],
+                },
                 "varhato_kerdes_tipusa": {"type": "string", "enum": ["zart", "nyitott"]},
             },
             "additionalProperties": False,

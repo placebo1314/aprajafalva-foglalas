@@ -67,6 +67,7 @@ from __future__ import annotations
 import logging
 
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, rule_based
+from assistant.interpreter.kaszkad import kemeny_reszt_vedd
 from assistant.interpreter.llm_based import LLMErtelmezo
 from assistant.interpreter.normalizalo import normalizal
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
@@ -82,6 +83,17 @@ _LOG = logging.getLogger(__name__)
 # kell jönnie (a dátumkifejezés csak nyersanyag a parsernek, a
 # session_id az orchestratoré).
 _MODELLTOL_NEM_FOGADOTT = frozenset({"datum_kifejezes", "datum_kifejezes_2", "session_id"})
+
+# Amire ÉRDEMES visszakérdezni: enélkül a művelet nem indítható el. A
+# szolgáltatás (méret) szándékosan NEM ilyen — a keresés elindulhat a
+# bolt szintjén, a pontosítás jöhet az ajánlat után (golden set,
+# egyszerusitett-04 megjegyzése), és a determinisztikus réteg sem kérdez
+# rá soha.
+_BLOKKOLO_MEZOK = frozenset({"bolt_id", "foglalasi_kod"})
+
+# A szándék KEMÉNY része (ADR-016) — az elengedés-kapu ezt veszi ki a
+# kontextusból, ha a mondat elveti a boltot.
+_KEMENY_MEZOK = frozenset({"bolt_id", "szolgaltatas_id"})
 
 
 class ForditottKaszkadErtelmezo:
@@ -163,16 +175,48 @@ class ForditottKaszkadErtelmezo:
                 "bizonyossag": bizonyossag,
             }
 
+        # ELENGEDÉS-KAPU (csak a keresési ágon): a mondat elvetheti a
+        # korábbi fordulókból örökölt boltot ("és bármelyik másik
+        # boltban?"). Ezt a modell FŐ hívása gyakran elmulasztja, mert a
+        # kontextus-sortól inkább megtartásra hajlik — ezért egy külön,
+        # SZIGORÚAN ZÁRT kérdést teszünk fel neki (`valtozas_elemzes`:
+        # csak mezőneveket ad vissza, értéket soha), ugyanazzal a
+        # védőhálóval, amit az ADR-016 kaszkád használ.
+        if self._elenged_e_boltot(mondat, most, kontextus):
+            _LOG.info("kaszkád: a mondat elengedi a kontextusból örökölt boltot")
+            szukitett = ErtelmezesKontextus(
+                megorzott_parameterek={
+                    k: v
+                    for k, v in kontextus.megorzott_parameterek.items()
+                    if k not in _KEMENY_MEZOK
+                }
+            )
+            parameterek.pop("bolt_id", None)
+            parameterek.pop("szolgaltatas_id", None)
+            return self._kereses_kapu(parameterek, nyers, mondat, most, szukitett, bizonyossag)
+
         if eszkoz == "visszakerdez":
             hianyzo = parameterek.get("hianyzo_mezo") or "bolt_id"
-            # KONTEXTUS-KAPU: a modell minden fordulót nulláról értelmez,
-            # ezért egy alkudozó follow-up mondatra ("talán jövő héten")
-            # a boltra kérdezne rá — arra, amit a beszélgetés két
-            # mondattal korábban már tisztázott, és ami itt, a
-            # kontextusban ott is van. Amit determinisztikusan tudunk,
-            # arra nem kérdezünk vissza (a vásárló 6. igénye: javítás, ne
-            # újrakezdés).
+            if hianyzo not in _BLOKKOLO_MEZOK:
+                # A szolgáltatás (méret) NEM blokkoló mező: a keresés
+                # elindulhat a bolt szintjén, a pontosítás jöhet az
+                # ajánlat után — a determinisztikus réteg sem kérdez rá
+                # soha. Ha a modell mégis erre kérdezne, azt keresésre
+                # fordítjuk, ÉS eldobjuk a saját szolgáltatás-értékét:
+                # ha ő maga mondja, hogy ez a mező hiányzik, akkor az
+                # értéke sem használható.
+                _LOG.info("kaszkád: nem blokkoló mezőre kérdezne (%s) — keresés megy", hianyzo)
+                parameterek.pop("szolgaltatas_id", None)
+                return self._kereses_kapu(parameterek, nyers, mondat, most, kontextus, bizonyossag)
             if hianyzo == "bolt_id" and self._ismert_bolt(parameterek, kontextus):
+                # KONTEXTUS-KAPU: a modell minden fordulót nulláról
+                # értelmez, ezért egy alkudozó follow-up mondatra ("talán
+                # jövő héten") a boltra kérdezne rá — arra, amit a
+                # beszélgetés két mondattal korábban már tisztázott, és
+                # ami itt, a kontextusban ott is van. Amit
+                # determinisztikusan tudunk, arra nem kérdezünk vissza (a
+                # vásárló 6. igénye: javítás, ne újrakezdés). Az
+                # elengedés esetét a fenti kapu már kiszűrte.
                 _LOG.info("kaszkád: a modell a boltra kérdezne, de a kontextus ismeri — keresés")
                 return self._kereses_kapu(parameterek, nyers, mondat, most, kontextus, bizonyossag)
             return self._visszakerdez(
@@ -195,6 +239,28 @@ class ForditottKaszkadErtelmezo:
             if jelolt in BOLT_SLUGOK:
                 return jelolt
         return None
+
+    def _elenged_e_boltot(self, mondat: str, most: str, kontextus: ErtelmezesKontextus) -> bool:
+        """Elveti-e a mondat a KONTEXTUSBÓL örökölt boltot?
+
+        Csak akkor kérdezünk rá egyáltalán, ha érdemes: van örökölt bolt,
+        ÉS a mondat determinisztikusan NEM nevez meg boltot (ha megnevez,
+        nincs mit elengedni — az felülír). Ez a szűrés tartja a plusz
+        modellhívást a valóban kétes fordulókra.
+
+        A kérdés a modellnek szigorúan zárt: mezőneveket ad vissza, soha
+        nem értéket (`LLMErtelmezo.valtozas_elemzes`) — és a válaszát a
+        `kaszkad.kemeny_reszt_vedd` védőháló szűri, ami a kemény részt
+        megvédi, ha a mondat POZITÍV időbeli jelzést hordoz (akkor a
+        mondat időről szól, nem a boltról)."""
+        if kontextus.megorzott_parameterek.get("bolt_id") is None:
+            return False
+        if rule_based.bolt_feloldas(mondat) is not None:
+            return False
+        valtozas = self.llm.valtozas_elemzes(mondat, kontextus.megorzott_parameterek)
+        if not valtozas or not valtozas.get("elenged"):
+            return False
+        return "bolt_id" in kemeny_reszt_vedd(mondat, most, valtozas["elenged"])
 
     # -- dátum-kapu ----------------------------------------------------
 

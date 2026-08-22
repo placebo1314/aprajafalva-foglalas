@@ -17,7 +17,6 @@ from ui.vasarlo import (
     _idopont_cimke,
     _proba_naplo_ir,
     horgony_most,
-    idoszak_szoveg,
     proba_naplo_olvas,
     proba_naplo_szoveg,
 )
@@ -53,34 +52,6 @@ def test_horgony_a_napszakot_megtartja():
     """A nap változik, az óra/perc nem — este próbálgatva az "este"
     napszak-szűrő is értelmes maradjon."""
     assert horgony_most(_IDOSZAK, "2026-08-22T19:45:12Z")[11:] == "19:45:12Z"
-
-
-# --- idoszak_szoveg: az indító sor ------------------------------------
-
-
-def test_idoszak_szoveg_kiirja_az_idoszakot_es_a_ma_jelenteset():
-    szoveg = idoszak_szoveg(_IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z")
-    assert "2026-12-21 – 2026-12-27" in szoveg
-    assert "2026-12-21" in szoveg
-    assert "2026-08-22" in szoveg
-
-
-def test_idoszak_szoveg_ha_a_ma_beleesik_nem_beszel_eltolasrol():
-    szoveg = idoszak_szoveg(_IDOSZAK, "2026-12-23T09:00:00Z", "2026-12-23T09:00:00Z")
-    assert "2026-12-21 – 2026-12-27" in szoveg
-    assert "kívül esik" not in szoveg
-
-
-def test_idoszak_szoveg_megmondja_melyik_boltban_van_beosztas():
-    """A demóadat EGYETLEN boltra generál — a másik kettőben minden
-    keresés helyesen, de megtévesztően üres. Ezt ki kell mondani."""
-    szoveg = idoszak_szoveg(_IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z")
-    assert "Törpilla" in szoveg
-
-
-def test_idoszak_szoveg_beosztas_nelkul_a_seedre_mutat():
-    szoveg = idoszak_szoveg(None, "2026-08-22T09:00:00Z", "2026-08-22T09:00:00Z")
-    assert "seed" in szoveg
 
 
 # --- _proba_naplo_ir -------------------------------------------------

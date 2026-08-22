@@ -255,3 +255,55 @@ def test_nyugtazo_szoveg_minden_valtozat_a_deklaralt_sablonok_kozul_kerul_ki():
             for sablon in SABLONOK["hu"]["nyugtazo"]["ablakkal"]
         }
         assert szoveg in elvart
+
+
+# --- rendszersor_szoveg ------------------------------------------------
+#
+# Az ablak tetején álló tájékoztató sor (`ui/vasarlo.py`). Nem a
+# vásárlónak szóló válasz, hanem a próbálgatónak szóló helyzetjelentés —
+# de ugyanúgy magyar mondat, ezért ugyanúgy ITT keletkezik, nem a
+# felületen (`docs/TESZTELES.md`, "Beszélgetés-próba").
+
+_IDOSZAK = {"elso_nap": "2026-12-21", "utolso_nap": "2026-12-27", "boltok": ["Törpilla"]}
+
+
+def test_rendszersor_kiirja_az_idoszakot_es_a_ma_jelenteset():
+    szoveg = valasz.rendszersor_szoveg(_IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z")
+
+    assert "2026-12-21 – 2026-12-27" in szoveg
+    assert "2026-08-22" in szoveg  # a valódi mai nap
+    assert "2026-12-21" in szoveg  # amit a "ma" itt jelent
+
+
+def test_rendszersor_megmondja_melyik_boltban_van_beosztas():
+    """A demóadat EGYETLEN boltra generál — a másik kettőben minden
+    keresés helyesen, de megtévesztően üres. Ezt ki kell mondani."""
+    assert "Törpilla" in valasz.rendszersor_szoveg(
+        _IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z"
+    )
+
+
+def test_rendszersor_ha_a_ma_beleesik_nem_beszel_eltolasrol():
+    szoveg = valasz.rendszersor_szoveg(_IDOSZAK, "2026-12-23T09:00:00Z", "2026-12-23T09:00:00Z")
+
+    assert "kívül esik" not in szoveg
+
+
+def test_rendszersor_beosztas_nelkul_a_seedre_mutat():
+    szoveg = valasz.rendszersor_szoveg(None, "2026-08-22T09:00:00Z", "2026-08-22T09:00:00Z")
+
+    assert "seed" in szoveg
+
+
+def test_rendszersor_megmondja_melyik_ertelmezo_dolgozik():
+    """A modell nélküli futás nem hibaüzenet, hanem néma visszaesés — de
+    látszania kell, hogy melyik eset áll fenn."""
+    modellel = valasz.rendszersor_szoveg(
+        _IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z", "qwen3.5:9b"
+    )
+    modell_nelkul = valasz.rendszersor_szoveg(
+        _IDOSZAK, "2026-12-21T09:00:00Z", "2026-08-22T09:00:00Z", None
+    )
+
+    assert "qwen3.5:9b" in modellel
+    assert "APRAJAFALVA_LLM_MODELL" in modell_nelkul

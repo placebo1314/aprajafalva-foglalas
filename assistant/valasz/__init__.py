@@ -146,6 +146,55 @@ def _ablak_datum_szoveg(datum_tol: str, datum_ig: str, napszak: str) -> str:
     return f"{alap} {nap_resz}".strip()
 
 
+def rendszersor_szoveg(
+    idoszak: dict | None,
+    horgony: str,
+    valodi_most: str,
+    modell_nev: str | None = None,
+    *,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+) -> str:
+    """Az ablak tetején álló tájékoztató sor: melyik időszakra és melyik
+    boltba van beosztás, mit jelent itt a "ma", és melyik értelmező
+    dolgozik.
+
+    Ez nem a vásárlónak szóló válasz, hanem a **próbálgatónak szóló
+    helyzetjelentés** (`docs/TESZTELES.md`, "Beszélgetés-próba") — de
+    ugyanúgy magyar mondat, ezért ugyanúgy sablonból jön, nem a
+    felületen fogalmazódik meg.
+
+    `idoszak`: a `core/repo/muszak_repo.py::slot_range` kimenete vagy
+    `None`. `horgony`/`valodi_most`: teljes ISO-8601 UTC időbélyeg.
+    `modell_nev`: a konfigurált modell neve vagy `None`."""
+    sablonok = SABLONOK[nyelv]["rendszersor"]
+    if idoszak is None:
+        return sablonok["nincs_beosztas"]
+
+    boltok = idoszak.get("boltok") or []
+    if boltok:
+        szoveg = sablonok["idoszak_boltokkal"].format(
+            elso_nap=idoszak["elso_nap"],
+            utolso_nap=idoszak["utolso_nap"],
+            boltok=", ".join(boltok),
+        )
+    else:
+        szoveg = sablonok["idoszak"].format(
+            elso_nap=idoszak["elso_nap"], utolso_nap=idoszak["utolso_nap"]
+        )
+    szoveg += "."
+
+    if horgony[:10] == valodi_most[:10]:
+        szoveg += sablonok["ma_bent"]
+    else:
+        szoveg += sablonok["ma_kint"].format(ma=valodi_most[:10], horgony_nap=horgony[:10])
+
+    if modell_nev:
+        szoveg += sablonok["ertelmezo_modell"].format(modell=modell_nev)
+    else:
+        szoveg += sablonok["ertelmezo_szabaly"]
+    return szoveg
+
+
 def nyugtazo_szoveg(
     felismert_ablak: dict,
     *,

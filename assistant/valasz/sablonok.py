@@ -156,6 +156,38 @@ SABLONOK: dict[str, dict[str, object]] = {
         # közülük, hogy szöveges naplóban átfutva vagy hangban egymás
         # után hallva ne legyen feltűnő az ismétlődés.
         # ------------------------------------------------------------
+        # ------------------------------------------------------------
+        # rendszersor — az ablak tetején álló, TÁJÉKOZTATÓ sor: melyik
+        # időszakra és melyik boltba van beosztás, mit jelent itt a "ma",
+        # és melyik értelmező dolgozik. Nem a vásárlónak szóló válasz,
+        # hanem a próbálgatónak szóló helyzetjelentés — de ugyanúgy
+        # magyar mondat, ezért ugyanúgy ITT van, nem a felületen
+        # (`ui/vasarlo.py` docstring: "a felület sosem fogalmaz").
+        # ------------------------------------------------------------
+        "rendszersor": {
+            "nincs_beosztas": "Nincs betöltött beosztás — futtasd: python feladat.py seed",
+            "idoszak": "A demóadat {elso_nap} – {utolso_nap} hetére szól",
+            "idoszak_boltokkal": (
+                "A demóadat {elso_nap} – {utolso_nap} hetére szól, "
+                "beosztás ezekben a boltokban van: {boltok}"
+            ),
+            "ma_bent": " A mai nap ebbe az időszakba esik.",
+            "ma_kint": (
+                " A mai nap ({ma}) kívül esik ezen, ezért a „ma” ezen a felületen "
+                "{horgony_nap}-t jelent — nem kell dátumot fejben tartanod."
+            ),
+            "ertelmezo_modell": " Értelmező: {modell} (ha nem fut, csendben szabály-alapú).",
+            "ertelmezo_szabaly": (
+                " Értelmező: szabály-alapú (nincs APRAJAFALVA_LLM_MODELL beállítva)."
+            ),
+        },
+        # ------------------------------------------------------------
+        # nyugtazo — a hangcsatorna töltelékmondatai (blueprint 7.
+        # szakasz, "Kétlépcsős válasz"). TÖBB változat soronként — a
+        # `__init__.py::nyugtazo_szoveg()` `random.choice()`-csal választ
+        # közülük, hogy szöveges naplóban átfutva vagy hangban egymás
+        # után hallva ne legyen feltűnő az ismétlődés.
+        # ------------------------------------------------------------
         "nyugtazo": {
             "altalanos": [
                 "Egy pillanat, nézem…",

@@ -65,6 +65,23 @@ class Ertelmezo(Protocol):
         ...
 
 
+def aktiv_modell_neve() -> str | None:
+    """A konfigurált modell neve (`APRAJAFALVA_LLM_MODELL`), vagy `None`,
+    ha nincs beállítva — ilyenkor az `alapertelmezett_ertelmezo()`
+    tisztán determinisztikus értelmezőt épít.
+
+    **Nem** azt mondja meg, hogy a háttérszolgáltatás fut-e: azt csak egy
+    tényleges hívás derítené ki, és ez a függvény nem hív semmit. A
+    hívók (`ui/vasarlo.py` indító sora) ezt így is fogalmazzák meg —
+    a ténylegesen dolgozó réteget a próba-napló `reteg` mezője mutatja."""
+    from assistant.interpreter.llm_based import LLMSzolgaltato
+
+    try:
+        return LLMSzolgaltato().modell
+    except ValueError:
+        return None
+
+
 def alapertelmezett_ertelmezo() -> Ertelmezo:
     """A projekt SZABVÁNYOS értelmezője — a kaszkád (`kaszkad.py`,
     ADR-016), csendes (hiba nélküli) visszaeséssel a tisztán

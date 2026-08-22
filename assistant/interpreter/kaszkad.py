@@ -76,8 +76,39 @@ _LOG = logging.getLogger(__name__)
 _KIEGESZITHETO_MEZOK = frozenset({"bolt_id"})
 
 # A szándék KEMÉNY része (ADR-016, `orchestrator.kovetkezo_kontextus`) —
-# ezt egy időről szóló mondat nem engedheti el, l. `_kemeny_reszt_vedd`.
+# ezt egy időről szóló mondat nem engedheti el, l. `kemeny_reszt_vedd`.
 _KEMENY_MEZOK = frozenset({"bolt_id", "szolgaltatas_id"})
+
+
+def kemeny_reszt_vedd(mondat: str, most: str, elenged: list[str]) -> list[str]:
+    """Védőháló a modell túl-elengedése ellen: ha a mondat POZITÍV
+    időbeli jelzést tartalmaz (a determinisztikus parser dátumot vagy
+    napszakot old fel belőle), akkor a mondat IDŐRŐL szól — ilyenkor a
+    KEMÉNY rész (bolt, szolgáltatás) nem eshet ki miatta.
+
+    Ez nem kulcsszólista és nem a mérési halmazhoz igazítás: a
+    szándék-rétegzés doktrínájának (ADR-016,
+    `orchestrator.kovetkezo_kontextus`) közvetlen alkalmazása — a kemény
+    rész csak akkor mozdul, ha a mondat POZITÍVAN mást állít róla, nem
+    pusztán attól, hogy nem említi.
+
+    Miért kell: három különböző promptmegfogalmazással mérve a
+    qwen3.5:9b vagy MINDENT elengedett (a "bármikor a jövő héten"
+    mondatra a boltot is), vagy semmit — a "melyik adatnak mond ellent a
+    mondat" osztályozás ezen a modellméreten önmagában nem megbízható. A
+    védőháló azt a hibaosztályt zárja ki, ami a determinisztikus
+    alapvonalat RONTANÁ.
+
+    Modul szintű függvény, mert MINDKÉT kaszkád használja: az ADR-016
+    sorrendű `KaszkadErtelmezo` és a fordított `ForditottKaszkadErtelmezo`
+    is (ott az elengedés-ellenőrzés ugyanezt a védőhálót kapja) — egy
+    másolat helyett egy hely."""
+    if not rule_based.idobeli_jelzes(mondat, most):
+        return list(elenged)
+    szurt = [m for m in elenged if m not in _KEMENY_MEZOK]
+    if szurt != list(elenged):
+        _LOG.info("kaszkád: a kemény rész védve (a mondat időről szól)")
+    return szurt
 
 
 class KaszkadErtelmezo:
@@ -181,7 +212,7 @@ class KaszkadErtelmezo:
             _LOG.info("kaszkád: réteg=szabaly (a modell szerint semmi nem esik ki)")
             return szabaly_eredmeny
 
-        elenged = self._kemeny_reszt_vedd(mondat, most, valtozas["elenged"])
+        elenged = kemeny_reszt_vedd(mondat, most, valtozas["elenged"])
         if not elenged:
             _LOG.info("kaszkád: réteg=szabaly (a javasolt elengedést a védőháló kiszűrte)")
             return szabaly_eredmeny
@@ -199,29 +230,3 @@ class KaszkadErtelmezo:
         self.utolso_reteg = "llm"
         _LOG.info("kaszkád: réteg=llm (elengedve: %s)", elenged)
         return vegleges
-
-    @staticmethod
-    def _kemeny_reszt_vedd(mondat: str, most: str, elenged: list[str]) -> list[str]:
-        """Védőháló a modell túl-elengedése ellen: ha a mondat POZITÍV
-        időbeli jelzést tartalmaz (a determinisztikus parser dátumot vagy
-        napszakot old fel belőle), akkor a mondat IDŐRŐL szól — ilyenkor
-        a KEMÉNY rész (bolt, szolgáltatás) nem eshet ki miatta.
-
-        Ez nem kulcsszólista és nem a mérési halmazhoz igazítás: a
-        szándék-rétegzés doktrínájának (ADR-016,
-        `orchestrator.kovetkezo_kontextus`) közvetlen alkalmazása — a
-        kemény rész csak akkor mozdul, ha a mondat POZITÍVAN mást állít
-        róla, nem pusztán attól, hogy nem említi.
-
-        Miért kell: három különböző promptmegfogalmazással mérve a
-        qwen3.5:9b vagy MINDENT elengedett (a "bármikor a jövő héten"
-        mondatra a boltot is), vagy semmit — a "melyik adatnak mond
-        ellent a mondat" osztályozás ezen a modellméreten önmagában nem
-        megbízható. A védőháló azt a hibaosztályt zárja ki, ami a
-        determinisztikus alapvonalat RONTANÁ."""
-        if not rule_based.idobeli_jelzes(mondat, most):
-            return list(elenged)
-        szurt = [m for m in elenged if m not in _KEMENY_MEZOK]
-        if szurt != list(elenged):
-            _LOG.info("kaszkád: a kemény rész védve (a mondat időről szól)")
-        return szurt

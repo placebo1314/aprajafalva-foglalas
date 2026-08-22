@@ -84,7 +84,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from assistant import valasz as valasz_szoveg  # noqa: E402
-from assistant.interpreter import alapertelmezett_ertelmezo  # noqa: E402
+from assistant.interpreter import aktiv_modell_neve, alapertelmezett_ertelmezo  # noqa: E402
 from assistant.orchestrator import Orchestrator  # noqa: E402
 from assistant.tools import katalogus  # noqa: E402
 from core.azonosito import new_uuid  # noqa: E402
@@ -133,26 +133,6 @@ def horgony_most(idoszak: dict | None, valodi_most: str) -> str:
     if idoszak["elso_nap"] <= ma <= idoszak["utolso_nap"]:
         return valodi_most
     return f"{idoszak['elso_nap']}T{valodi_most[11:]}"
-
-
-def idoszak_szoveg(idoszak: dict | None, horgony: str, valodi_most: str) -> str:
-    """Az indító sor: melyik időszakra van beosztás, és mit jelent ma a
-    "ma". Egyetlen sor — l. `docs/TESZTELES.md`."""
-    if idoszak is None:
-        return "Nincs betöltött beosztás — futtasd: python feladat.py seed"
-    alap = f"A demóadat {idoszak['elso_nap']} – {idoszak['utolso_nap']} hetére szól"
-    boltok = idoszak.get("boltok") or []
-    if boltok:
-        # A demóadat ma EGYETLEN boltra generál beosztást — a másik két
-        # boltban minden keresés helyesen, de megtévesztően üres.
-        alap += f", beosztás ezekben a boltokban van: {', '.join(boltok)}"
-    alap += "."
-    if horgony[:10] == valodi_most[:10]:
-        return f"{alap} A mai nap ebbe az időszakba esik."
-    return (
-        f"{alap} A mai nap ({valodi_most[:10]}) kívül esik ezen, ezért a "
-        f'"ma" ezen a felületen {horgony[:10]}-t jelent — nem kell dátumot fejben tartanod.'
-    )
 
 
 def _idopont_cimke(kezdet_iso: str, veg_iso: str) -> str:
@@ -294,7 +274,9 @@ class VasarloApp(tk.Tk):
         # enélkül a demóadat távoli hete néma kudarcnak látszana.
         self.idoszak_cimke = ttk.Label(
             self,
-            text=idoszak_szoveg(self.idoszak, self._most_iso(), _most_iso()),
+            text=valasz_szoveg.rendszersor_szoveg(
+                self.idoszak, self._most_iso(), _most_iso(), aktiv_modell_neve()
+            ),
             padding=(12, 8),
             foreground="#046",
             wraplength=780,
