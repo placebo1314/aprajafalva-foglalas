@@ -86,6 +86,79 @@ def _idopont_cimke(kezdet_iso: str, veg_iso: str) -> str:
     return f"{kezdet.strftime('%Y-%m-%d %H:%M')}–{veg.strftime('%H:%M')} (UTC)"
 
 
+_NAPSZAK_SZOVEG = {"delelott": "délelőtt", "delutan": "délután", "este": "este"}
+
+
+def _ablak_datum_szoveg(datum_tol: str, datum_ig: str, napszak: str) -> str:
+    nap_resz = _NAPSZAK_SZOVEG.get(napszak, "")
+    if datum_tol[:10] == datum_ig[:10]:
+        alap = datum_tol[:10]
+    else:
+        alap = f"{datum_tol[:10]} és {datum_ig[:10]} között"
+    return f"{alap} {nap_resz}".strip()
+
+
+def nyugtazo_szoveg(felismert_ablak: dict) -> str:
+    """A keresés elindítása UTÁN, az eredmény megérkezése ELŐTT
+    felolvasható sor — a hangcsatorna töltelékmondatának (docs/
+    blueprint.md 7. szakasz, "Kétlépcsős válasz") szöveges próbája.
+
+    Csak azt mondja, amit MÁR biztosan tud — a blueprint 7. szakasz
+    "mondható" oszlopa szerint: a felismert dátumablakot (a
+    dátumparserből) és a zárt halmazból beazonosított boltot. Konkrét
+    szabad időpontot vagy darabszámot SOSEM tartalmaz, mert azok csak a
+    tényleges keresés lefutása után derülnek ki."""
+    if not felismert_ablak:
+        return "Egy pillanat, nézem…"
+
+    reszek = []
+    bolt_slug = felismert_ablak.get("bolt_id")
+    if bolt_slug:
+        reszek.append(f"a(z) {katalogus.BOLT_NEVEK.get(bolt_slug, bolt_slug)} boltban")
+    datum_tol = felismert_ablak.get("datum_tol")
+    datum_ig = felismert_ablak.get("datum_ig")
+    if datum_tol and datum_ig:
+        reszek.append(
+            _ablak_datum_szoveg(datum_tol, datum_ig, felismert_ablak.get("napszak", "barmikor"))
+        )
+
+    if not reszek:
+        return "Egy pillanat, nézem…"
+    return "Nézem, mi van " + ", ".join(reszek) + "…"
+
+
+def tenyvalasz_szoveg(valasz: dict) -> str:
+    """A `bolt_info` sikeres válaszát olvasható mondatba fogalmazza —
+    IDEIGLENES, amíg a `valasz` modul (M5) nincs megírva. A tényt maga a
+    `bolt_info` kereste ki egy szerkesztett mezőből (docs/blueprint.md
+    10. szakasz, "Bolti tudás") — ez a függvény csak megfogalmazza,
+    nem generál új tartalmat."""
+    mezok = {k: v for k, v in valasz.items() if k != "sikeres"}
+
+    if "nyitvatartas" in mezok:
+        return f"Nyitvatartás: {mezok['nyitvatartas'] or 'ezt még nem adtuk meg'}"
+    if "cim" in mezok:
+        return f"Cím: {mezok['cim'] or 'ezt még nem adtuk meg'}"
+    if "megjelenes" in mezok:
+        return mezok["megjelenes"] or "Erről még nincs leírásunk."
+    if "szolgaltatasok" in mezok:
+        szolgaltatasok = mezok["szolgaltatasok"]
+        if not szolgaltatasok:
+            return "Erről nincs adatunk."
+        sorok = []
+        for sz in szolgaltatasok:
+            reszek = [sz["nev"]]
+            if sz.get("termekleiras"):
+                reszek.append(sz["termekleiras"])
+            if sz.get("ar"):
+                reszek.append(f"({sz['ar']})")
+            if "idotartam_perc" in sz:
+                reszek.append(f"{sz['idotartam_perc']} perc")
+            sorok.append(" — ".join(reszek))
+        return "; ".join(sorok)
+    return str(mezok)
+
+
 class VasarloApp(tk.Tk):
     def __init__(self, db_path: str | None = None) -> None:
         super().__init__()
@@ -169,11 +242,18 @@ class VasarloApp(tk.Tk):
             row=3, column=0, columnspan=2, sticky="w", pady=(10, 0)
         )
 
+        # A nyugtázó sor — a hangcsatorna töltelékmondatának szöveges
+        # próbája (docs/blueprint.md 7. szakasz, "Kétlépcsős válasz").
+        # Külön mező a hibaüzenettől (`kop_uzenet`), más színnel, hogy a
+        # kettő ne keveredjen.
+        self.kop_nyugtazo = ttk.Label(tab, text="", foreground="#555", wraplength=700)
+        self.kop_nyugtazo.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+
         self.kop_uzenet = ttk.Label(tab, text="", foreground="#a00", wraplength=700)
-        self.kop_uzenet.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.kop_uzenet.grid(row=5, column=0, columnspan=2, sticky="w")
 
         self.kop_tartalom = ttk.Frame(tab, padding=(0, 10))
-        self.kop_tartalom.grid(row=5, column=0, columnspan=2, sticky="w")
+        self.kop_tartalom.grid(row=6, column=0, columnspan=2, sticky="w")
 
     def _kop_kereses(self) -> None:
         bolt_slug = self._kop_bolt_nev_map.get(self.kop_bolt_valto.get())
@@ -189,6 +269,12 @@ class VasarloApp(tk.Tk):
             "datum_ig": f"{nap}T23:59:59Z",
             "napszak": self.kop_napszak_valto.get(),
         }
+        # A koppintós úton a felismert ablak megegyezik a gombokkal
+        # kiválasztott paraméterekkel — nincs szükség parszolásra, de a
+        # nyugtázó sor elve ugyanaz, mint a szöveges úton.
+        self.kop_nyugtazo.config(text=nyugtazo_szoveg(parameterek))
+        self.update_idletasks()
+
         valasz = self.orchestrator.kereses_strukturaltan(self.session_id, parameterek)
         self._eredmeny_render(self.kop_tartalom, valasz, self.kop_uzenet)
 
@@ -217,9 +303,7 @@ class VasarloApp(tk.Tk):
             return
 
         # Egyéb sikeres eszközválasz (bolt_info, foglalas_lemondas, ...)
-        ttk.Label(keret, text=str({k: v for k, v in valasz.items() if k != "sikeres"})).pack(
-            anchor="w"
-        )
+        ttk.Label(keret, text=tenyvalasz_szoveg(valasz), wraplength=680).pack(anchor="w")
 
     def _jelolt_valaszt(self, keret: ttk.Frame, slot_id: str, uzenet_label: ttk.Label) -> None:
         valasz = self.orchestrator.valaszt(self.session_id, slot_id)
@@ -339,17 +423,23 @@ class VasarloApp(tk.Tk):
             return
 
         if tipus == "ajanlat":
+            # A nyugtázó sor — a hangcsatorna töltelékmondatának szöveges
+            # próbája (docs/blueprint.md 7. szakasz) — külön naplósorban,
+            # MIELŐTT a tényleges (tartalmi) eredmény megjelenik.
+            self._naplo_ir("Rendszer", nyugtazo_szoveg(valasz.get("felismert_ablak", {})))
             self._naplo_ir("Rendszer", "Ezeket az időpontokat találtam — melyik jó?")
             self._eredmeny_render(self.szo_jelolt_keret, valasz, self.szo_uzenet)
             return
 
         if tipus == "eszkoz_hiba" or not valasz.get("sikeres", True):
+            if valasz.get("felismert_ablak"):
+                self._naplo_ir("Rendszer", nyugtazo_szoveg(valasz["felismert_ablak"]))
             kulcs = valasz.get("uzenet_kulcs", "")
             self._naplo_ir("Rendszer", _UZENET_KULCS_SZOVEG.get(kulcs, f"Hiba: {kulcs}"))
             return
 
         if valasz.get("sikeres"):
-            self._naplo_ir("Rendszer", str({k: v for k, v in valasz.items() if k != "sikeres"}))
+            self._naplo_ir("Rendszer", tenyvalasz_szoveg(valasz))
             return
 
         self._naplo_ir("Rendszer", "Nem értettem, próbáld másképp megfogalmazni.")
