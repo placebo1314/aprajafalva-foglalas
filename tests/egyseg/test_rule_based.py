@@ -53,6 +53,48 @@ def test_bolt_info_cim_tajszolassal():
     assert eredmeny == {"eszkoz": "bolt_info", "parameterek": {"bolt_id": "torpilla", "mit": "cim"}}
 
 
+def test_bolt_info_megjelenes_kozvetlen_forma():
+    eredmeny = _ertelmez("Hogy néz ki a Törpilla bolt?")
+    assert eredmeny == {
+        "eszkoz": "bolt_info",
+        "parameterek": {"bolt_id": "torpilla", "mit": "megjelenes"},
+    }
+
+
+def test_bolt_info_megjelenes_szetvalasztott_milyen_forma():
+    """A "milyen" és a tárgyszó (kirakat/bolt/...) nem feltétlenül
+    szomszédos a mondatban — a boltnév közéjük ékelődhet."""
+    eredmeny = _ertelmez("Milyen a Szundi kirakata?")
+    assert eredmeny == {
+        "eszkoz": "bolt_info",
+        "parameterek": {"bolt_id": "szundi", "mit": "megjelenes"},
+    }
+
+
+def test_bolt_info_termek():
+    eredmeny = _ertelmez("Mit árulnak az Ügyifogyiban?")
+    assert eredmeny == {
+        "eszkoz": "bolt_info",
+        "parameterek": {"bolt_id": "ugyifogyi", "mit": "termek"},
+    }
+
+
+def test_bolt_info_termek_milyen_forma():
+    eredmeny = _ertelmez("Milyen termékeik vannak a Törpillánál?")
+    assert eredmeny == {
+        "eszkoz": "bolt_info",
+        "parameterek": {"bolt_id": "torpilla", "mit": "termek"},
+    }
+
+
+def test_bolt_info_ar_kapuornel_akad_el_nem_jut_el_bolt_infoig():
+    """Az "ar" séma-szinten (bolt_info v2) lekérdezhető, de a kapuőr ma
+    is elutasítja — a golden set kapuor-02 esete (docs/blueprint.md
+    10. szakasz, "Bolti tudás")."""
+    eredmeny = _ertelmez("Mennyibe kerül a nagy petárda?")
+    assert eredmeny == {"eszkoz": "nincs", "parameterek": {}}
+
+
 def test_bolt_info_bolt_nelkul_visszakerdez():
     eredmeny = _ertelmez("Hol van az üzlet?")
     assert eredmeny["eszkoz"] == "visszakerdez"

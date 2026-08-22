@@ -8,7 +8,9 @@ mihez mérni (roadmap M4: "modellválasztás méréssel"). A golden set
 A feldolgozás sorrendje (mindegyik az előzőt kizárva):
 
 1. kapuőr — nem foglalással kapcsolatos kérés (időjárás, ár) → `nincs`
-2. tényválasz-szándék (nyitvatartás/cím) → `bolt_info`
+2. tényválasz-szándék (nyitvatartás/cím/megjelenés/termék) → `bolt_info`
+   ("ár" a séma szintjén létezik, de ide sosem jut el — a kapuőr korábban
+   elkapja, l. 1. pont)
 3. lemondás-szándék → `foglalas_lemondas`, vagy `visszakerdez` kód nélkül
 4. áthelyezés-szándék → `visszakerdez` (a v1 nem keres új időpontot
    automatikusan egy mondatból — lásd `assistant/orchestrator.py`
@@ -35,6 +37,12 @@ from assistant.tools import katalogus
 _KAPUOR_MINTAK = re.compile(r"milyen id[őo]\b|id[őo]j[áa]r[áa]s|mennyibe ker[üu]l|mibe ker[üu]l")
 _NYITVATARTAS_MINTA = re.compile(r"nyitva|nyitvatart[áa]s|mikor nyit|mikor z[áa]r")
 _CIM_MINTA = re.compile(r"\bhol van\b|merre van|\bc[íi]m\b")
+_MEGJELENES_KOZVETLEN_MINTA = re.compile(r"n[ée]z\s*ki|ismerem\s*fel|ismerni\s*fel")
+_MEGJELENES_MILYEN_MINTA = re.compile(r"\bmilyen\b")
+_MEGJELENES_TARGY_MINTA = re.compile(r"bolt|kirakat|c[ée]g[ée]r|homlokzat")
+_TERMEK_MINTA = re.compile(
+    r"mit\s*[áa]rul|milyen\s*term[ée]k|mit\s*lehet\s*kapni|mit\s*lehet\s*venni|mit\s*kapni"
+)
 _LEMONDAS_MINTA = re.compile(r"le\s*szeretn[ée]m\s*mondani|\blemond")
 _ATHELYEZES_MINTA = re.compile(r"[áa]thelyez|[áa]t\s*tudn[áa]m\s*tenni|[áa]ttenni|[áa]t\s*tenni")
 _KOD_MINTA = re.compile(r"\b[A-Z0-9]{6,10}\b")
@@ -71,11 +79,24 @@ def _kapuor_talalat(also: str) -> bool:
     return _KAPUOR_MINTAK.search(also) is not None
 
 
+def _megjelenes_kerdes(also: str) -> bool:
+    if _MEGJELENES_KOZVETLEN_MINTA.search(also):
+        return True
+    # "milyen" és a tárgy (bolt/kirakat/...) nem feltétlenül szomszédos
+    # szavak ("Milyen a Szundi kirakata?") — külön keresett, nem egy
+    # összefüggő mintaként.
+    return bool(_MEGJELENES_MILYEN_MINTA.search(also) and _MEGJELENES_TARGY_MINTA.search(also))
+
+
 def _bolt_info_mezo(also: str) -> str | None:
     if _NYITVATARTAS_MINTA.search(also):
         return "nyitvatartas"
     if _CIM_MINTA.search(also):
         return "cim"
+    if _megjelenes_kerdes(also):
+        return "megjelenes"
+    if _TERMEK_MINTA.search(also):
+        return "termek"
     return None
 
 
