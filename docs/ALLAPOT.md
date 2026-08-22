@@ -1,4 +1,5 @@
-# Állapot — 2026-08-21 (frissítve: M2 + M4 determinisztikus fele)
+# Állapot — 2026-08-22 (frissítve: M4 determinisztikus fele — szándék
+rétegzés, `valasz` modul, golden futtató, enumeráció-védelem)
 
 Egy oldalas pillanatkép: hol tartunk. A terv és a "miért" a
 `docs/blueprint.md`-ben és a `docs/roadmap.md`-ben van, ez itt nem
@@ -12,14 +13,14 @@ ismétli meg őket, csak rájuk mutat és számol.
 | M0 — Foglalási mag | **kész** | Séma, migrációk, slotgenerátor, hold, foglalás, áthelyezés, lemondás, mentés+helyreállítás, CLI, konkurencia-tesztek — mind megvan és tesztelt. |
 | M1 — Admin beosztásszerkesztő | **részben kész** | Naptárnézet, műszak felvitele, sablon-műszakok, hét másolása, törzsadat-szerkesztés, ütközéslista megvan. A törzsadat-szerkesztés kibővült a "Bolti tudás" mezőkkel (megjelenés/termékleírás/ár, `core/api/adminszolgaltatas.py::shop_description_update`/`service_description_update`) — a `bolt_info` eszköz ezeket olvassa vissza. Ami hiányzik: lásd lent. |
 | M2 — Eszközszerződés | **kész** | A hat eszköz (`assistant/tools/`) megvan: JSON-séma v1-gyel, `additionalProperties: false`, egységes hiba-formátummal, LLM nélkül hívható és tesztelt (23 teszt). |
-| M3 — Golden set és értékelő | **részben kész** | A nyelvi golden set megvan (22 eset, öt réteg, `tests/golden/nyelvi_alap.yaml`), de a roadmap 150-200 esetet ír elő kilépési feltételként — ez messze nincs meg. A szituációs esetek (naptárállapot → ajánlás) egyáltalán nincsenek felvéve. **A `python feladat.py golden` parancs ma hibával áll le** — a `tests/golden/futtato.py` értékelő script még nincs megírva, csak az esetfájl létezik. A 22 esetet most két másik út futtatja: `spike/golden_futtato.py --ertelmezo szabaly` (eldobható spike-kód, méréshez) és `tests/egyseg/test_rule_based_golden_set.py` (tartós regressziós védőháló, ez fut minden `python feladat.py teszt`-nél). |
-| M4 — Asszisztens | **részben kész** | A **determinisztikus fele kész**: `assistant/orchestrator.py` (ADR-007 állapotgép), `assistant/interpreter/` (`Ertelmezo` protokoll + `rule_based.py`, hun-date-parser-rel), `assistant/tools/katalogus.py` (szándékindex is: `core/api/szandekindex.py`). Ez a golden set látható 22 esetén **100%-ot** ad — ez egy erre a fixtúrára épített szabályrendszer eredménye, NEM általánosítási mutató (lásd lent). A koppintós út (M4 terv 7. pontja) is megvan: `ui/vasarlo.py`, két egyenrangú úttal (koppintós + szöveges) egy ablakban, mindkettő ténylegesen végigjátszható (keresés → jelölt-választás → "biztosan lefoglaljam?" → foglalási kód). A blueprint most explicit rögzíti a "Bolti tudás" elvet (10. szakasz): a bolt-szintű tény szerkesztett adat, a modell sosem generálja — a `bolt_info` eszköz `v2` sémát kapott (`megjelenes`/`termek`/`ar`, `migrations/0004_bolt_szolgaltatas_tudas.sql`), az értelmező felismeri ezeket a kérdéseket, és a felület olvashatóan (nem nyers dict-ként) jeleníti meg (`ui/vasarlo.py::tenyvalasz_szoveg`). A "nyugtázó sor" (blueprint 7. szakasz, "Kétlépcsős válasz") is megvan: a keresés elindulásakor a felismert ablakot (bolt + dátum) írja ki, mielőtt a tényleges találatok megjönnének (`ui/vasarlo.py::nyugtazo_szoveg`) — ez a hangcsatorna töltelékmondatának szöveges próbája. **Hiányzik**: tényleges LLM-integráció, kötött dekódolás (GBNF/XGrammar), önkonzisztencia-ellenőrzés, bizalmi jelzés logprobokból, a `valasz` modul (magyar mondatgenerálás — ma egy ideiglenes szótár, `ui/vasarlo.py::_UZENET_KULCS_SZOVEG`). |
+| M3 — Golden set és értékelő | **részben kész** | A nyelvi golden set 28 esetre nőtt (22 egyfordulós, öt réteg + 6 többfordulós "alkudozás" eset, `tests/golden/nyelvi_alap.yaml`), de a roadmap 150-200 esetet ír elő kilépési feltételként — ez messze nincs meg. A szituációs esetek (naptárállapot → ajánlás) egyáltalán nincsenek felvéve. **A `python feladat.py golden` parancs mostantól fut** — a kiértékelő logika egy tartós modulba került (`tests/golden/futtato.py`), a determinisztikus értelmezőt futtatja (nincs Ollama-hívás), rétegenkénti bontást ír. A `spike/golden_futtato.py` (`--ertelmezo llm`, modellméréshez) és a `tests/egyseg/test_rule_based_golden_set.py` (regressziós védőháló) ugyanezt a modult hívja, nincs többé két másolat. |
+| M4 — Asszisztens | **részben kész** | A **determinisztikus fele kész**: `assistant/orchestrator.py` (ADR-007 állapotgép), `assistant/interpreter/` (`Ertelmezo` protokoll + `rule_based.py`, hun-date-parser-rel), `assistant/tools/katalogus.py` (szándékindex is: `core/api/szandekindex.py`). Ez a golden set látható 28 esetén **100%-ot** ad — ez egy erre a fixtúrára épített szabályrendszer eredménye, NEM általánosítási mutató (lásd lent). A koppintós út (M4 terv 7. pontja) is megvan: `ui/vasarlo.py`, két egyenrangú úttal (koppintós + szöveges) egy ablakban, mindkettő ténylegesen végigjátszható (keresés → jelölt-választás → "biztosan lefoglaljam?" → foglalási kód). A blueprint most explicit rögzíti a "Bolti tudás" elvet (10. szakasz): a bolt-szintű tény szerkesztett adat, a modell sosem generálja — a `bolt_info` eszköz `v2` sémát kapott (`megjelenes`/`termek`/`ar`, `migrations/0004_bolt_szolgaltatas_tudas.sql`), az értelmező felismeri ezeket a kérdéseket, és a felület olvashatóan (nem nyers dict-ként) jeleníti meg (`assistant/valasz/::tenyvalasz_szoveg`). A **`valasz` modul elkészült** (`assistant/valasz/`): öt kategóriájú magyar mondatsablon, nyelvkulcs alatt (`sablonok.py`), a nyugtázó sablonokból több változat véletlenszerű választással — `ui/vasarlo.py` (és a jövőbeli hangréteg) innentől semmilyen mondatot nem fogalmaz meg helyben. A "nyugtázó sor" (blueprint 7. szakasz, "Kétlépcsős válasz") is megvan: a keresés elindulásakor a felismert ablakot (bolt + dátum) írja ki, mielőtt a tényleges találatok megjönnének — ez a hangcsatorna töltelékmondatának szöveges próbája. **Szándék rétegzés** (`assistant/orchestrator.py::kovetkezo_kontextus`): egy lezárt keresés (siker vagy kudarc) után a kemény rész (bolt, szolgáltatás) megmarad a következő fordulóra, a puha rész (dátum/napszak/óra) nem — ez teszi lehetővé az alkudozást (szűkítés, tágítás, napszak-/boltváltás, visszalépés korábbi ajánlathoz, elutasítás-után-alternatíva) a kemény rész újramondása nélkül; az elutasítás azt is megmondja, melyik dimenzióban (napszak/nap/hét) van alternatíva (`assistant/tools/szabad_idopontok.py::_alternativ_dimenzio`). **Enumeráció-védelem és rate limiting** a `foglalas_lekerdezes` ágon (`assistant/orchestrator.py::_foglalas_lekerdezes`): session-szintű kérésszám-korlát, azonos válaszidő létező/nem létező azonosítóra. **Hiányzik**: tényleges LLM-integráció, kötött dekódolás (GBNF/XGrammar), önkonzisztencia-ellenőrzés, bizalmi jelzés logprobokból. |
 | M5 — Dolgozói nézet | **nem kezdődött el** | — |
 | M6 — Dev mód és finomhangolás | **nem kezdődött el** | — |
 
 ## Konkrét számok
 
-- **Tesztek:** 294 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
+- **Tesztek:** 316 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
 - **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent).
 - **ADR-ek:** 14 elfogadva (001–014) + 1 sablon.
 - **Golden set — LLM-mel (M-1 mérés):** 22 nyelvi eset, öt rétegben.
@@ -27,13 +28,16 @@ ismétli meg őket, csak rájuk mutat és számol.
   séma-kényszerrel: **47,7%** összesített, legrosszabb réteg a szleng
   (16,7%). **Egyik réteg sem éri el a saját küszöbét** — a kapuőr réteg
   (nem valós foglalási kérés felismerése) az egyetlen, ami 100%-on áll.
-  Részletek és módszertan: `spike/EREDMENY.md`.
-- **Golden set — determinisztikus alapvonallal:** ugyanaz a 22 eset,
+  Részletek és módszertan: `spike/EREDMENY.md`. (A `--ertelmezo llm` mód
+  a mai 6 többfordulós/alkudozás esetet nem futtatja — l. lent.)
+- **Golden set — determinisztikus alapvonallal:** 28 eset (22
+  egyfordulós + 6 többfordulós, alkudozás),
   `assistant/interpreter/rule_based.py`-vel: **100,0%**, minden réteg
-  tartja a küszöbét (`spike/eredmeny_szabaly_alapu.json`,
+  tartja a küszöbét, `python feladat.py golden`-nel közvetlenül
+  futtatható (`tests/golden/futtato.py`,
   `tests/egyseg/test_rule_based_golden_set.py`). **Ez nem
-  általánosítási mutató** — ezt a szabályrendszert erre a pontos 22
-  esetre építettük, kézzel egyeztetve mindegyikkel, szemben az
+  általánosítási mutató** — ezt a szabályrendszert erre a pontos
+  esethalmazra építettük, kézzel egyeztetve mindegyikkel, szemben az
   LLM-mel, ami sosem látta őket tanításkor. A valódi próba egy jövőbeli,
   bővebb (150-200 eses) golden seten dől el (M3 kilépési feltétel).
 
@@ -109,3 +113,11 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   a demóadat viszont egy fix, 2026-12-21-gyel kezdődő hétre generál
   beosztást — kézi kipróbáláskor ezért más dátumot kell választani,
   mint a mai nap (`ui/vasarlo.py` dokumentálja).
+- **A `foglalas_lekerdezes` rate limit (5 kérés/session) és a
+  válaszidő-padding (0,1 s) dokumentált, de tetszőlegesen választott
+  érték** (`assistant/orchestrator.py::_LEKERDEZES_RATE_LIMIT`,
+  `_LEKERDEZES_VALASZIDO_PADDING_MASODPERC`) — nincs mögötte mérés
+  (pl. mennyi a valós lekérdezés p95 ideje), és a korlát csak
+  memóriabeli, session-újraindításkor nullázódik. Éles bevezetés előtt
+  ezt érdemes megmérni és/vagy tartós (nem memóriabeli) számlálóra
+  cserélni, ha a session valaha túléli a folyamat-újraindítást.

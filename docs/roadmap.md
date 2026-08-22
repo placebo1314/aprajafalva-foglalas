@@ -143,6 +143,13 @@ kognitívan egyszerűsített. Mindegyik külön küszöbbel.
 Az induló készlet kézzel készül, és tudottan hiányos. A valós adat a dev mód
 hurkából jön — ezért kell a trace-rögzítés az első naptól.
 
+**2026-08-22:** a `python feladat.py golden` fut (`tests/golden/futtato.py`,
+tartós modul — a spike korábban ezt nem tudta futtatni, csak
+`spike/golden_futtato.py`-val lehetett mérni). A nyelvi készlet 28 esetre nőtt
+(22 egyfordulós + 6 többfordulós, alkudozás — szűkítés, tágítás, visszalépés,
+napszak-/boltváltás, elutasítás-után-alternatíva). Ez még messze a
+kilépési feltétel alatt van; a szituációs esetek egyáltalán nincsenek felvéve.
+
 **Kilépési feltétel:** 150-200 eset, futtatható értékelő, két modell
 összehasonlítható.
 
@@ -151,24 +158,28 @@ hurkából jön — ezért kell a trace-rögzítés az első naptól.
 ## M4 — Asszisztens
 
 **Állapot: RÉSZBEN KÉSZ — a determinisztikus fele elkészült
-(2026-08-21).** `assistant/orchestrator.py` (ADR-007 állapotgép),
-`assistant/interpreter/` (`Ertelmezo` protokoll + a szabály-alapú
-`rule_based.py`, `hun-date-parser`-integrációval), `core/api/
-szandekindex.py`, `ui/vasarlo.py` (koppintós út). Ez a golden set
-látható 22 esetén 100%-ot ad — ez az **alapvonal**, ami fölé egy
-tényleges LLM-es értelmezőnek kell kerülnie, NEM maga a kilépési
-feltétel teljesülése (lásd lent — ehhez valódi modell és bővebb
-golden set kell). **Hiányzik**: maga a modellválasztás/LLM-integráció,
-kötött dekódolás, önkonzisztencia-ellenőrzés, bizalmi jelzés, a
-`valasz` modul (ma egy ideiglenes szótár).
+(2026-08-22-ig).** `assistant/orchestrator.py` (ADR-007 állapotgép,
+szándék-rétegzéssel: `kovetkezo_kontextus()`), `assistant/interpreter/`
+(`Ertelmezo` protokoll + a szabály-alapú `rule_based.py`,
+`hun-date-parser`-integrációval), `assistant/valasz/` (magyar
+mondatsablonok, nyelvkulcs alatt), `core/api/szandekindex.py`,
+`ui/vasarlo.py` (koppintós út). Ez a golden set látható 28 esetén
+(22 egyfordulós + 6 többfordulós alkudozás) 100%-ot ad — ez az
+**alapvonal**, ami fölé egy tényleges LLM-es értelmezőnek kell
+kerülnie, NEM maga a kilépési feltétel teljesülése (lásd lent — ehhez
+valódi modell és bővebb golden set kell). **Hiányzik**: maga a
+modellválasztás/LLM-integráció, kötött dekódolás, önkonzisztencia-
+ellenőrzés, bizalmi jelzés.
 
 - modellválasztás **méréssel** (Apache-2.0 jelölt + Racka ellenőrzőként)
 - ~~normalizáló réteg (tájszólás, szleng, elgépelés)~~ — kész, szabály-alapú
 - ~~dátumparser (`hun-date-parser` + saját kiegészítés)~~ — kész
-- kapuőr (kész, szabály-alapú), kötött dekódolás (LLM-specifikus, hiányzik), válaszsablonok (hiányzik, `valasz` modul)
+- kapuőr (kész, szabály-alapú), kötött dekódolás (LLM-specifikus, hiányzik), ~~válaszsablonok~~ — kész (`assistant/valasz/`)
 - ~~szándékindex~~ — kész (`core/api/szandekindex.py`), ~~orchestrator állapotgép~~ — kész (`assistant/orchestrator.py`)
 - ~~**zárt kérdésre váltás**~~ — kész; visszaolvasásos megerősítés (részben — "biztosan lefoglaljam?" megvan, teljes visszaolvasás nincs)
 - ~~koppintós út párhuzamos felületként~~ — kész (`ui/vasarlo.py`)
+- ~~szándék rétegzése (kemény/puha, alkudozás)~~ — kész (`assistant/orchestrator.py::kovetkezo_kontextus`)
+- ~~enumeráció-védelem és rate limiting (`foglalas_lekerdezes`)~~ — kész (`assistant/orchestrator.py::_foglalas_lekerdezes`)
 
 **Kilépési feltétel:** a golden seten a szolgáltatás-azonosítás > 98%, és a
 **leggyengébb nyelvi rétegen is > 90%**.
