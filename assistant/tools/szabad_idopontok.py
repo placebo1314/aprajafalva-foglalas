@@ -51,16 +51,25 @@ def _alternativ_dimenzio(
 ) -> str | None:
     """Ha a kért ablakra nincs jelölt, megmondja, MELYIK dimenzió
     tágításával van — a blueprint 1. szakasz ("Kapjon őszinte választ —
-    ha nincs hely, alternatíva jöjjön") és a szándék-rétegzés
-    (`assistant/orchestrator.py::kovetkezo_kontextus`) közös nevezője:
-    nem elég azt mondani, hogy nincs hely, azt is meg kell mondani, min
-    érdemes lazítani. Csak PRÓBÁL (`find_candidates`, hold nélkül) — nem
-    foglal le és nem zárol semmit.
+    ha nincs hely, alternatíva jöjjön") és a szándék-rétegzés közös
+    nevezője: nem elég azt mondani, hogy nincs hely, azt is meg kell
+    mondani, min érdemes lazítani. Csak PRÓBÁL (`find_candidates`, hold
+    nélkül) — nem foglal le és nem zárol semmit.
+
+    A három dimenzió **nem egyenrangú** — a `nap` és a `het` próba a
+    kért `napszak`-ot VÁLTOZATLANUL hagyja, csak a dátumablakot tágítja
+    (pl. "péntek délelőtt jövő héten": a napszak — délelőtt — itt kemény,
+    csak a hét puha, l. blueprint 5. szakasz). Csak a `napszak` dimenzió
+    próbája engedi el magát a napszak-kötöttséget. Anélkül ez a
+    megkülönböztetés hamis pozitívot adna: egy máshol, más napszakban
+    szabad időpontot "nap"/"het" alternatívaként ajánlana, holott az a
+    vásárló tényleges (napszak-)kérésének nem felel meg.
 
     Sorrend, a kért ablakhoz legközelebbitől a legtávolabbiig:
     `napszak` (ugyanaz a nap/ablak, más napszak) → `nap` (ugyanazon a
-    héten, más nap) → `het` (a következő héten). `None`, ha egyik
-    tágítás sem hoz találatot — ekkor tényleg nincs mit ajánlani."""
+    héten, más nap, UGYANAZ a napszak) → `het` (a következő héten,
+    UGYANAZ a napszak). `None`, ha egyik tágítás sem hoz találatot —
+    ekkor tényleg nincs mit ajánlani."""
 
     def van_jelolt(*, datum_tol: str, datum_ig: str, napszak: str) -> bool:
         return bool(
@@ -83,16 +92,14 @@ def _alternativ_dimenzio(
         return "napszak"
 
     het_vege = _het_vege_iso(datum_tol)
-    if datum_ig < het_vege and van_jelolt(
-        datum_tol=datum_tol, datum_ig=het_vege, napszak="barmikor"
-    ):
+    if datum_ig < het_vege and van_jelolt(datum_tol=datum_tol, datum_ig=het_vege, napszak=napszak):
         return "nap"
 
     kovetkezo_het_vege_dt = datetime.fromisoformat(het_vege.replace("Z", "+00:00")).replace(
         tzinfo=None
     ) + timedelta(days=7)
     kovetkezo_het_ig = f"{kovetkezo_het_vege_dt.date().isoformat()}T23:59:59Z"
-    if van_jelolt(datum_tol=het_vege, datum_ig=kovetkezo_het_ig, napszak="barmikor"):
+    if van_jelolt(datum_tol=het_vege, datum_ig=kovetkezo_het_ig, napszak=napszak):
         return "het"
 
     return None

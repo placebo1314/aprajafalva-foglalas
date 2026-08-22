@@ -244,6 +244,69 @@ def test_szabad_idopontok_alternativ_dimenzio_het(tmp_path):
     assert eredmeny["alternativ_dimenzio"] == "het"
 
 
+def test_szabad_idopontok_alternativ_dimenzio_nap_megorzi_a_kert_napszakot(tmp_path):
+    """A 'nap' (és 'het') dimenzió próbája a kért napszakot VÁLTOZATLANUL
+    hagyja — blueprint 5. szakasz: "péntek délelőtt jövő héten", a
+    napszak kemény, csak a hét puha. Egy másik napon, de MÁS napszakban
+    szabad időpont nem számít 'nap' alternatívának — különben hamis
+    pozitívot adna, olyat ajánlva, ami a vásárló tényleges kérésének
+    (itt: délelőtt) nem felel meg."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)  # 2026-08-18 (kedd), helyi 08:00-09:00 (délelőtt)
+
+    # Második műszak UGYANAZON a héten (2026-08-20, csütörtök), de ESTE
+    # (helyi 20:00-21:00, UTC 18:00-19:00 nyáron/CEST) — a régi (javítás
+    # előtti) kód ezt tévesen 'nap' alternatívaként ajánlotta volna.
+    counter_id = torzsadat_repo.counter_create(
+        conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name="Pult 2"
+    )
+    employee_id = torzsadat_repo.employee_create(
+        conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name="Ügyifogyi Este"
+    )
+    shift_id = muszak_repo.shift_create(
+        conn,
+        org_id=ctx["org_id"],
+        shop_id=ctx["shop_id"],
+        counter_id=counter_id,
+        employee_id=employee_id,
+        service_id=ctx["service_id"],
+        start="2026-08-20T18:00:00Z",
+        end="2026-08-20T19:00:00Z",
+        duration_minute=15,
+        buffer_after_minute=0,
+        min_grid_minute=15,
+        bookable_ratio=1.0,
+        block_rule={"szunetek": []},
+    )
+    shift = muszak_repo.shift_load(conn, shift_id)
+    eredmeny_generalas = generator.generate(shift, FixedBlock())
+    muszak_repo.blocks_slots_save(
+        conn,
+        shift_id=shift_id,
+        org_id=ctx["org_id"],
+        blocks=eredmeny_generalas.blocks,
+        slots=eredmeny_generalas.slots,
+    )
+
+    # A kért nap (2026-08-19, szerda) üres — sem a délelőtti (08-18),
+    # sem az esti (08-20) slot nincs ezen a napon.
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-19T00:00:00Z",
+            "datum_ig": "2026-08-19T23:59:59Z",
+            "napszak": "delelott",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny["sikeres"] is False
+    # NEM "nap" — az egyetlen másik napi (08-20) slot este van, nem
+    # délelőtt, tehát nem valódi alternatíva erre a kérésre.
+    assert eredmeny["alternativ_dimenzio"] is None
+
+
 def test_szabad_idopontok_ismeretlen_szolgaltatas(tmp_path):
     conn = _conn(tmp_path)
     ctx = _seed(conn)
