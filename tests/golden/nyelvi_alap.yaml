@@ -34,6 +34,8 @@ meta:
     # `igenyel_llm: true` jelölés (l. a réteg fejlécét lent).
     elengedes: 0.90
     valtozatossag: 0.90
+    # Mintaillesztésen túl — l. a réteg fejlécét a fájl végén.
+    mintan_tul: 0.90
 
 esetek:
 
@@ -674,3 +676,218 @@ esetek:
       elrontania: ez a réteg regressziós horgonya, ami azt méri, hogy a
       modell nem kezd el kitalálni.
     cimkek: [valtozatossag, ures_keres]
+
+# -----------------------------------------------------------------------
+# Mintaillesztésen túl (`mintan_tul`) — mondattani ALAKZATOK, nem nehezebb
+# szavak. Mindegyik esetben a mondat két, egyenrangúnak LÁTSZÓ értéket
+# tartalmaz (két időpont, két napszak, két kérés), és a SZERKEZET dönti
+# el, melyik a kért — nem az, hogy melyik szó szerepel benne. Egy
+# szólistás/regexes réteg elvileg nem tud különbséget tenni köztük: a
+# szólista mindkét szót megtalálja, és mindig ugyanazt választja.
+#
+# `igenyel_llm: true` mindegyiken — a determinisztikus regressziós
+# védőháló (`tests/egyseg/test_rule_based_golden_set.py`) kihagyja őket,
+# a `python feladat.py golden` MINDEN értelmezőre jelenti.
+#
+# **Őszinte megjegyzés a réteg erejéről:** a kilenc esetből a
+# determinisztikus réteg többet is megold — nem azért, mert érti a
+# szerkezetet, hanem mert VÉLETLENÜL jó irányba dől el (pl. a "28-án"
+# beleesik a "jövő hét" ablakába; a napszak-minták sorrendje éppen a
+# kért napszakot adja). A 04. és a 09. eset egymás TÜKRE, pontosan ezért:
+# a szerkezet ugyanaz, csak a két napszak fel van cserélve — a
+# mintaillesztés mindkettőre ugyanazt (`delelott`) adja, tehát az egyiket
+# szükségszerűen elrontja. A réteg értéke ebben a párban van, nem az
+# egyes esetek nehézségében.
+# -----------------------------------------------------------------------
+
+  - id: mintan_tul-01-vagylagos
+    bemenet:
+      - "Petárdázni szeretnék."
+      - "jövő héten, vagy 28-án tudok menni?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-24T00:00:00Z"
+        datum_ig: "2026-08-30T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Vagylagos időpont: a vásárló KÉT lehetőséget ad. A helyes ablak
+      mindkettőt lefedi — itt a 28-a amúgy is a jövő héten van, ezért az
+      unió maga a jövő hét. A determinisztikus réteg ezt VÉLETLENÜL
+      eltalálja (a "héten" szóra rövidre zár, a második lehetőséget meg
+      sem nézi); ha a második dátum a hét ablakán kívülre esne (l.
+      valtozatossag-01: "szeptember 4-én"), csendben elveszítené.
+    cimkek: [mintan_tul, vagylagos, tobbfordulos]
+
+  - id: mintan_tul-02-ures-szandek
+    bemenet: "Valamikor mennék, ha lehet."
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    megjegyzes: >
+      Üres szándék: felismerhető, hogy menni akar, de semmi konkrétum
+      nincs. A helyes válasz zárt kérdés, NEM találgatás. A
+      valtozatossag-05 ("Valamikor mennék.") ennek a csupasz ikerpárja —
+      szándékosan maradt külön rétegben, hogy ez a réteg is hordozzon
+      egy horgonyt arra, hogy a modell nem kezd el kitalálni.
+    cimkek: [mintan_tul, ures_szandek]
+
+  - id: mintan_tul-03-felteteles
+    bemenet:
+      - "Szeretnék időpontot a Szundiba."
+      - "ha van hely szerdán, akkor az jó, ha nincs, akkor csütörtök"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-19T00:00:00Z"
+        datum_ig: "2026-08-20T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Feltételes szerkezet: a mondat egy ELSŐDLEGES és egy TARTALÉK napot
+      ad meg. A helyes ablak mindkettőt lefedi (szerda 00:00 – csütörtök
+      23:59), mert a pontozó úgyis a ténylegesen szabad slotokból választ,
+      és a sorrendet az ajánlat rendezése adja vissza — nem a szűrés. A
+      determinisztikus réteg a `hun_date_parser` ELSŐ találatát veszi
+      (szerda), a csütörtököt elveszíti.
+    cimkek: [mintan_tul, felteteles, tobbfordulos]
+
+  - id: mintan_tul-04-indoklas
+    bemenet: "Azért kellene délelőtt, mert délután dolgozom."
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+      megorzott_parameterek:
+        napszak: delelott
+    megjegyzes: >
+      Indoklás mellékmondattal: a mellékmondat napszaka ("délután") az,
+      amit a vásárló KIZÁR. A bolt hiányzik, ezért zárt kérdés a helyes
+      válasz — de a felismert napszakot át kell vinni, nem szabad újra
+      megkérdezni. A mintaillesztés ezt eltalálja, mert a
+      `_NAPSZAK_MINTAK` listájában a "délelőtt" áll elöl — nem azért,
+      mert érti a mondatot. A tükörpárja (09.) ugyanezt a szerkezetet
+      fordítva méri, és ott ez a sorrend elrontja.
+    tilos:
+      - kitalalt_datum
+    cimkek: [mintan_tul, indoklas_mellekmondattal]
+
+  - id: mintan_tul-05-kettos-keres
+    bemenet: "A Törpillánál mikor van nyitva, és tudok-e ma menni?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-17T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Két kérés egy mondatban: egy ténykérdés (nyitvatartás) és egy
+      foglalási szándék (ma). Egy fordulóban egy eszköz hívható, tehát
+      választani KELL. A keresés a helyes választás, mert az ajánlott
+      időpontok maguk is a nyitvatartáson belül vannak — a keresés
+      válasza tehát implicit módon a ténykérdésre is válaszol, fordítva
+      viszont nem. A tényválasz (`bolt_info`) ezért nem hiba, csak
+      gyengébb: fél pontot ér. A determinisztikus réteg a "nyitva" szóra
+      illeszkedik előbb, ezért mindig a gyengébbet választja.
+    reszleges_elfogadas:
+      eszkoz: bolt_info
+      pontszam: 0.5
+    cimkek: [mintan_tul, kettos_keres]
+
+  - id: mintan_tul-06-visszavonas
+    bemenet:
+      - "Petárdázni szeretnék kedden."
+      - "és jövő héten péntek?"
+      - "mégsem, inkább maradjunk a keddnél"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Visszavonás: a 3. forduló ELVETI a 2. fordulót, és visszatér az
+      1.-hez. A "mégsem" önmagában nem hordoz dátumot — a "keddnél"
+      viszont igen, ezért ez az eset a mintaillesztésnek is megoldható.
+      Azért van benne, mert a visszavonás a leggyakoribb valós alkudozó
+      lépés, és a modellnek NEM szabad elrontania (regressziós horgony,
+      az alkudozas-03 párja más megfogalmazással).
+    cimkek: [mintan_tul, visszavonas, tobbfordulos]
+
+  - id: mintan_tul-07-bizonytalan
+    bemenet:
+      - "Szundihoz mennék."
+      - "talán jövő héten, még nem tudom biztosan"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-24T00:00:00Z"
+        datum_ig: "2026-08-30T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Bizonytalanság: a "talán" és a "még nem tudom biztosan" NEM ok a
+      visszakérdezésre — a mondat egy használható ablakot ad meg (jövő
+      hét), a keresésnek el kell indulnia. A hibás viselkedés az lenne,
+      ha a bizonytalanság szavaitól a rendszer maga is bizonytalanná
+      válna, és zárt kérdéssel válaszolna egy már megválaszolt kérdésre.
+    cimkek: [mintan_tul, bizonytalansag_jelzese, tobbfordulos]
+
+  - id: mintan_tul-08-koznyelvi-toltelek
+    bemenet:
+      - "Törpillához mennék."
+      - "hát izé, valamikor a jövő hét elején lenne jó"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-24T00:00:00Z"
+        datum_ig: "2026-08-30T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Köznyelvi töltelék ("hát izé", "valamikor") egy egyébként
+      használható időmegjelölés körül. A töltelék nem hordoz jelentést,
+      de nem is szabad elakadni rajta. **Ismert korlát:** a "hét eleje"
+      (hétfő–szerda) szűkítést ma egyik réteg sem modellezi — a várt
+      érték ezért a teljes jövő hét. Ez tudatos v1 döntés, nem a
+      helyes viselkedés meghamisítása: a szűkebb ablak megépítése külön
+      lépés lenne, és amíg nincs meg, nem mérünk rá.
+    cimkek: [mintan_tul, toltelekszo, tobbfordulos]
+
+  - id: mintan_tul-09-indoklas-tukor
+    bemenet: "A petárdáshoz azért délután mennék holnap, mert délelőtt dolgozom."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T17:59:59Z"
+        napszak: delutan
+    megjegyzes: >
+      A 04. eset TÜKRE: ugyanaz a szerkezet, a két napszak felcserélve.
+      Itt a kért napszak a "délután", a kizárt a "délelőtt". A
+      determinisztikus réteg a `_NAPSZAK_MINTAK` sorrendje miatt itt is
+      "délelőtt"-öt ad — ez a bizonyíték arra, hogy a 04. esetet nem
+      megértette, hanem eltalálta. Egy szólistás réteg ezt a párt
+      elvileg nem tudja EGYSZERRE megoldani: a szerkezet, nem a
+      szókészlet dönti el, melyik napszak a kért.
+    cimkek: [mintan_tul, indoklas_mellekmondattal]
