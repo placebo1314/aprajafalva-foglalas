@@ -12,6 +12,13 @@ tájszólás, töredékes, szleng, kognitívan egyszerűsített) mindegyikből
 szerepel egy pár, plusz a két kapuőr-kategória és a visszakérdezés.
 Így a példakészlet nem egy stílusra tanít rá.
 
+**Két SZERKEZETI példa is van** (vagylagos időpont, indoklás
+mellékmondattal) — ezek nem egy nyelvi réteget, hanem egy mondattani
+alakzatot mutatnak be, amit a mintaillesztés elvileg nem tud kezelni
+(mindkét alakzatban két, egyenrangúnak LÁTSZÓ érték szerepel, és a
+szerkezet dönti el, melyik a kért). A mondatok itt is másak, mint a
+golden set esetei.
+
 **A példák NEM a golden set esetei.** Szándékosan más mondatok, más
 boltokkal és napokkal — ha a golden set eseteit másolnánk ide, a mérés
 önmagát mérné (golden-set skill: "Ne a modell kimenetéből írj
@@ -79,6 +86,35 @@ PELDAK: list[tuple[str, dict]] = [
         {
             "eszkoz": "visszakerdez",
             "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        },
+    ),
+    # vagylagos/feltételes időpont — KÉT dátumkifejezés egy mondatban.
+    # A modell mindkettőt IDÉZI; az ablakot a determinisztikus dátum-kapu
+    # vonja össze (`forditott_kaszkad.py::_datum_ablak`), nem a modell.
+    (
+        "Hétfőn, vagy ha nem megy, akkor kedden mennék a Szundihoz.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "datum_kifejezes": "hétfőn",
+                "datum_kifejezes_2": "kedden",
+            },
+        },
+    ),
+    # indoklás mellékmondattal — a mellékmondatban szereplő napszak az,
+    # amit a vásárló KIZÁR, nem amit kér. Ezt egy szólistás illesztés
+    # elvileg nem tudja megkülönböztetni (mindkét napszak-szó ott van a
+    # mondatban); a példa a szerkezetre tanít, nem egy konkrét mondatra.
+    (
+        "A Törpillához délután mennék csütörtökön, mert délelőtt dolgozom.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "torpilla",
+                "datum_kifejezes": "csütörtökön",
+                "napszak": "delutan",
+            },
         },
     ),
     # lemondás — a kód a mondatban van

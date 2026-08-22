@@ -63,6 +63,20 @@ _NAP_JELZO_MINTA = re.compile(
 # zárja ki, nem egy külön kivétel-lista.
 _HET_JELZO_MINTA = re.compile(r"\bh[ée]t(en|re|et|ig|b[őo]l|ben|nek|ünk)?\b")
 
+# NAPTÁRI DÁTUM-jelző: hónapnév vagy sorszámozott nap ("szeptember 4-én",
+# "28-án", "2026-09-04"). A `_NAP_JELZO_MINTA` párja: az ott felsorolt
+# napnevek mellett ez a másik fajta POZITÍV bizonyíték arra, hogy a
+# mondat tényleg tartalmaz dátumot, és a `hun_date_parser` találata nem
+# egy önmagában álló napszak-szóból alapértelmezett mai nap
+# (l. `_datum_ablak_explicit`). Szándékosan szűk: a puszta szám ("10
+# körül" — az preferált óra, nem dátum) NEM elég, kell a nap-rag vagy a
+# hónapnév.
+_DATUM_JELZO_MINTA = re.compile(
+    r"\b\d{1,2}-[áaéeő]n\b|\b\d{4}-\d{2}-\d{2}\b|"
+    r"janu[áa]r|febru[áa]r|m[áa]rcius|[áa]prilis|m[áa]jus|j[úu]nius|j[úu]lius|"
+    r"augusztus|szeptember|okt[óo]ber|november|december"
+)
+
 # "jövő"/"következő" + hét — a KÖVETKEZŐ naptári hétre mutat. Mindkét
 # jelző ugyanazt jelenti; a köztük álló szó (pl. "a") megengedett.
 _KOVETKEZO_HET_MINTA = re.compile(
@@ -199,12 +213,17 @@ def _datum_ablak_explicit(szoveg: str, most_iso: str) -> tuple[str | None, str |
     talalatok = _datum_talalatok(szoveg, most_dt)
     if not talalatok:
         return None, None
-    if not _NAP_JELZO_MINTA.search(szoveg.lower()):
+    if not (_NAP_JELZO_MINTA.search(also) or _DATUM_JELZO_MINTA.search(also)):
         # A hun_date_parser egy ÖNMAGÁBAN álló napszak-kifejezést (pl.
         # bare "délelőtt") hallgatólagosan MÁRA alapértelmez — ez hamis
         # pozitív, ha a mondatban nincs tényleges nap-jelző szó (golden
         # set, egyszerusitett-03: "Az délelőtt volt" MÚLT idejű utalás
         # egy korábbi látogatásra, nem kérés — "tilos: kitalalt_datum").
+        # A naptári dátum (`_DATUM_JELZO_MINTA`: "szeptember 4-én",
+        # "28-án") ugyanolyan érvényes pozitív bizonyíték, mint a napnév —
+        # enélkül a `datum_ablak_feloldas()` (a fordított kaszkád
+        # dátum-kapuja) egy tisztán naptári kifejezést sem tudna
+        # feloldani.
         return None, None
     elso = talalatok[0]
     start = elso.get("start_date")

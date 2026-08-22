@@ -78,6 +78,20 @@ def test_ollama_hiba_eseten_szabaly_alapu_tartalek_hiba_nelkul():
     assert kaszkad.utolso_reteg == "szabaly"
 
 
+def test_idotullepes_eseten_is_a_szabaly_alapu_tartalek_megy():
+    """Időtúllépés — ugyanaz a tartalék-ág, mint a nem elérhető
+    szolgáltatásnál: az `LLMErtelmezo` a `TimeoutError`-t is
+    `utolso_hiba`-vá alakítja, nem engedi kivételként felszínre."""
+    llm = _FakeLLM(hiba="Ollama nem elérhető: timed out")
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = _ertelmez(kaszkad, "Petárdázni szeretnék kedden.")
+
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi"
+    assert kaszkad.utolso_reteg == "szabaly"
+
+
 # --- 1. kapu: normalizáló a modell ELŐTT ------------------------------
 
 
@@ -143,6 +157,82 @@ def test_feloldhatatlan_kifejezes_nelkuli_iso_datumot_eldobunk():
 
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-17T09:00:00Z"
     assert eredmeny["parameterek"]["datum_ig"] == "2026-08-24T23:59:59Z"
+
+
+def test_ket_datumkifejezes_ablaka_osszevonodik():
+    """Vagylagos/feltételes időpont: a modell KÉT kifejezést idéz, az
+    ablak összevonása determinisztikus (`_datum_ablak`) — mindkét kért
+    nap belefér, a második nem vész el."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "datum_kifejezes": "szerdán",
+                "datum_kifejezes_2": "csütörtök",
+            },
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "ha van hely szerdán, ha nincs, akkor csütörtök")
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-19T00:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-20T23:59:59Z"
+
+
+def test_ket_datumkifejezes_forditott_sorrendben_is_a_tagabb_ablakot_adja():
+    """A sorrend nem számít: az összevonás a KORÁBBI kezdetet és a
+    KÉSŐBBI véget veszi, nem az idézés sorrendjét."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "datum_kifejezes": "csütörtök",
+                "datum_kifejezes_2": "szerdán",
+            },
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "csütörtök vagy szerda")
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-19T00:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-20T23:59:59Z"
+
+
+def test_feloldhatatlan_masodik_kifejezes_nem_rontja_el_az_elsot():
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "datum_kifejezes": "holnap",
+                "datum_kifejezes_2": "amikor jó lesz",
+            },
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "holnap, vagy amikor jó lesz")
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-18T23:59:59Z"
+
+
+def test_a_modell_datum_kifejezesei_nem_szivarognak_at_a_parameterekbe():
+    """A `datum_kifejezes*` mezők NYERSANYAGOK a parsernek — az eszköz
+    paraméterei közé nem kerülhetnek be (az eszközsémák nem ismerik
+    őket, `additionalProperties: false`)."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "datum_kifejezes": "szerdán",
+                "datum_kifejezes_2": "csütörtök",
+            },
+        }
+    )
+    eredmeny = _ertelmez(_kaszkad(llm), "szerda vagy csütörtök")
+
+    assert "datum_kifejezes" not in eredmeny["parameterek"]
+    assert "datum_kifejezes_2" not in eredmeny["parameterek"]
 
 
 def test_napszak_a_datum_kifejezesbol_is_kinyerheto():

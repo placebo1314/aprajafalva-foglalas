@@ -85,6 +85,19 @@ FORMAT_SEMA = {
                         "'holnap', 'kedden' — NE számold ki, ne adj ISO-dátumot"
                     ),
                 },
+                # VAGYLAGOS/FELTÉTELES időpont: a mondat KÉT lehetőséget
+                # ad ("szerdán, ha nincs, akkor csütörtök"). Mindkettőt
+                # szövegesen idézzük; az ablakot a determinisztikus
+                # dátum-kapu vonja össze (`forditott_kaszkad.py::
+                # _datum_ablak`), nem a modell.
+                "datum_kifejezes_2": {
+                    "type": "string",
+                    "description": (
+                        "CSAK ha a mondat két időpontot ajánl vagylagosan vagy "
+                        "feltételesen ('vagy', 'ha nincs, akkor…') — a MÁSODIK "
+                        "időpont szó szerint. Egyébként hagyd ki."
+                    ),
+                },
                 "datum_tol": {
                     "type": "string",
                     "description": "teljes ISO-8601 UTC időbélyeg, pl. 2026-08-18T00:00:00Z",
@@ -142,6 +155,8 @@ Boltok: szundi (altató), ugyifogyi (petárda), torpilla (boldogság).
 DÁTUM: a "datum_kifejezes" mezőbe a dátumot SZÓ SZERINT másold a mondatból
 ("jövő hét péntek", "holnap", "kedden"). NE számold ki és NE adj ISO-dátumot —
 a feloldás a rendszer dolga. Ha a mondatban nincs időpont, hagyd ki a mezőt.
+Ha a mondat KÉT időpontot ajánl (vagylagosan vagy feltételesen), a másodikat
+a "datum_kifejezes_2" mezőbe másold, szintén szó szerint.
 
 Lemondáshoz a foglalási kód kell — ha nincs a mondatban, visszakerdez \
 (hianyzo_mezo: foglalasi_kod).

@@ -81,7 +81,7 @@ _LOG = logging.getLogger(__name__)
 # Amit a modell kimenetéből ELDOBUNK, mert determinisztikus forrásból
 # kell jönnie (a dátumkifejezés csak nyersanyag a parsernek, a
 # session_id az orchestratoré).
-_MODELLTOL_NEM_FOGADOTT = frozenset({"datum_kifejezes", "session_id"})
+_MODELLTOL_NEM_FOGADOTT = frozenset({"datum_kifejezes", "datum_kifejezes_2", "session_id"})
 
 
 class ForditottKaszkadErtelmezo:
@@ -176,10 +176,29 @@ class ForditottKaszkadErtelmezo:
         A modell `datum_kifejezes` mezője az elsődleges forrás. Ha a
         modell (a prompt ellenére) ISO-dátumot adott `datum_tol`-ban,
         azt is ELLENŐRIZZÜK: a kifejezésből feloldott ablak nyer, mert
-        a parser determinisztikus, a modell számolása nem."""
+        a parser determinisztikus, a modell számolása nem.
+
+        **Vagylagos/feltételes időpont** (`datum_kifejezes_2`): ha a
+        mondat két lehetőséget ad ("szerdán, ha nincs, akkor csütörtök"),
+        MINDKETTŐT feloldjuk, és a kettőt lefedő ablakot adjuk vissza —
+        az ÖSSZEVONÁS is determinisztikus, a modell csak idéz. Ez azért
+        helyes, mert a pontozó úgyis a ténylegesen szabad slotokból
+        választ: egy tágabb ablakban benne van mindkét kért nap, és a
+        vásárló nem veszíti el a második lehetőségét."""
         kifejezes = (nyers.get("datum_kifejezes") or "").strip()
         parser_tol, parser_ig = rule_based.datum_ablak_feloldas(kifejezes, most)
         napszak = rule_based.napszak_feloldas(kifejezes) if kifejezes else None
+
+        masodik = (nyers.get("datum_kifejezes_2") or "").strip()
+        if masodik:
+            masodik_tol, masodik_ig = rule_based.datum_ablak_feloldas(masodik, most)
+            if masodik_tol:
+                if parser_tol:
+                    parser_tol = min(parser_tol, masodik_tol)
+                    parser_ig = max(parser_ig or parser_tol, masodik_ig or masodik_tol)
+                else:
+                    parser_tol, parser_ig = masodik_tol, masodik_ig
+            napszak = napszak or rule_based.napszak_feloldas(masodik)
 
         if parser_tol:
             modell_tol = nyers.get("datum_tol")

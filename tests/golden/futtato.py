@@ -1,7 +1,8 @@
 """Golden set kiértékelő — TARTÓS modul (M3, golden-set skill).
 
-Ez a `python feladat.py golden` mögötti kód. Három értelmező közül lehet
-választani (`--ertelmezo szabaly|llm|kaszkad`, alapértelmezett: `szabaly`):
+Ez a `python feladat.py golden` mögötti kód. Négy értelmező közül lehet
+választani (`--ertelmezo szabaly|llm|kaszkad|forditott`, alapértelmezett:
+`szabaly`):
 
 - `szabaly` — `assistant/interpreter/rule_based.py::SzabalyAlapuErtelmezo`.
   NEM indít Ollamát, nem hív modellt.
@@ -9,7 +10,12 @@ választani (`--ertelmezo szabaly|llm|kaszkad`, alapértelmezett: `szabaly`):
   a modellnév `--modell`-ből vagy az `APRAJAFALVA_LLM_MODELL` környezeti
   változóból jön.
 - `kaszkad` — `assistant/interpreter/kaszkad.py::KaszkadErtelmezo`. A
-  szabály-alapú fut előbb, az LLM csak akkor, ha az nem boldogul.
+  szabály-alapú fut előbb, az LLM csak akkor, ha az nem boldogul
+  (ADR-016 sorrendje, ma már NEM az éles út — összehasonlításért maradt).
+- `forditott` — `assistant/interpreter/forditott_kaszkad.py`. A normalizáló
+  fut előbb, a modell értelmez, a determinisztikus rétegek a kapuk és a
+  tartalék. **Ez az éles út** (ADR-018), ezt építi fel az
+  `assistant/interpreter/__init__.py::alapertelmezett_ertelmezo()`.
 
 A `spike/golden_futtato.py` ezt a modult importálja (nem fordítva) — a
 `spike/` eldobható kód (roadmap M-1: "A spike kódja eldobható"), ez itt
@@ -299,8 +305,8 @@ def main(argv: list[str] | None = None) -> int:
         default="szabaly",
         help=(
             "szabaly: nincs Ollama-hívás (alapértelmezett). llm/kaszkad/forditott: "
-            "Ollamát hív. A 'forditott' az ADR-018 mért, ELVETETT kísérlete — "
-            "reprodukálhatóságért maradt."
+            "Ollamát hív. A 'forditott' az ÉLES út (ADR-018: a modell értelmez "
+            "előbb), a 'kaszkad' az ADR-016 régi sorrendje, összehasonlításért."
         ),
     )
     parser.add_argument(
@@ -335,11 +341,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Értelmező: llm (modell={szolgaltato.modell})\n")
             hivo = ertelmezo_hivo(llm)
         else:
-            from assistant.interpreter.kaszkad import KaszkadErtelmezo
             from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
-            print(f"Értelmező: kaszkad (modell={szolgaltato.modell})\n")
-            kaszkad = KaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
+            if args.ertelmezo == "forditott":
+                from assistant.interpreter.forditott_kaszkad import ForditottKaszkadErtelmezo
+
+                kaszkad = ForditottKaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
+            else:
+                from assistant.interpreter.kaszkad import KaszkadErtelmezo
+
+                kaszkad = KaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
+
+            print(f"Értelmező: {args.ertelmezo} (modell={szolgaltato.modell})\n")
             alap_hivo = ertelmezo_hivo(kaszkad)
 
             def hivo(bemenet, most, _alap=alap_hivo, _kaszkad=kaszkad):
