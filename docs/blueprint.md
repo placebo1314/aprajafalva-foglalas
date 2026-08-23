@@ -626,9 +626,32 @@ foglalás) — azok soha nem függnek fel, teszttel bizonyítottak maradnak.
 | Foglalás megerősítése (mag) | p95 < 100 ms | felfüggesztve |
 | Szabad időpont keresés | p95 < 200 ms | felfüggesztve |
 | Első reakció (sablon, hang) | p95 < 500 ms | felfüggesztve |
-| Tartalmi válasz (modell) | p95 < 8 s | felfüggesztve |
+| **Tartalmi válasz (modell)** | **átlag < 15 s** (a korábbi p95 < 8 s helyett) | **aktív keretként, l. lent** |
 | Szolgáltatás-azonosítás | > 98% **a leggyengébb nyelvi rétegen is > 90%** | aktív |
 | Dátumértelmezés | > 99% | aktív |
+
+### A 15 másodperces keret (2026-08-23)
+
+A tartalmi válasz korábbi célja (p95 < 8 s) **átlag 15 másodpercre
+tágul**. Ez nem az SLO-k feloldása és nem is a felfüggesztés
+visszavonása — a p95-sorok továbbra is felfüggesztve maradnak M4
+lezárásáig. Ez egy **fejlesztési keret**: az a felső határ, amin belül
+egy fordulónak maradnia kell, hogy a válaszidő ne váljon önmagában
+kizáró tényezővé, amíg a pontosságon dolgozunk.
+
+**Amit a keret megenged:** egy fordulóban **több modellhívás is**, ha
+mérhető pontosságjavulást hoz. Ilyen a 10. szakasz önkonzisztencia-
+ellenőrzése (az értelmező 3×, a JSON eszközhívások pontos
+egyenlőségvizsgálatával). Az engedély **feltételes**: a hívásszám
+növelése csak MÉRÉSSEL indokolható — mennyit javít, és mennyivel lassít
+—, és a mérésnek a golden seten kell megtörténnie, nem egyedi
+példákon. Ha egy plusz hívás nem javít mérhetően, kikapcsolva marad,
+akkor is, ha elméletileg indokolt.
+
+**Amit a keret NEM enged:** a 15 s **átlag**, nem p95 és nem "általában".
+Egy determinisztikusan eldönthető kérdésre (kapuőr, gombnyomás, zárt
+halmazbeli válasz) továbbra sem szabad modellt hívni — ott a helyes
+válaszidő nulla nagyságrendű, és a keret tágulása ezen nem változtat.
 
 A fenti "Első reakció" / "Tartalmi válasz" sor a korábbi "Asszisztens
 válasz (szöveg)" / "Asszisztens válasz (hang)" bontást váltja fel — ez az
