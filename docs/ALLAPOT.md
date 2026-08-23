@@ -36,7 +36,7 @@ költöztek.
 
 ## Konkrét számok
 
-- **Tesztek:** 485 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
+- **Tesztek:** 640 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`). A kör 155 új tesztet hozott, négy új fájlban: `test_kapuor.py` (a kapuőr, benne a „bizonytalanság nem elzárás" csoport), `test_onkonzisztencia.py`, `test_redakcio.py`, `test_naplo_elemzo.py`, plusz a `test_ar_kimeneti_tiltas.py` — ami az ár lezárásának mind a NÉGY pontját egy fájlban méri.
 - **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent).
 - **ADR-ek:** 20 dokumentum (001–014, 016–021) + 1 sablon. Ebből **19
   elfogadott**, **1 felülírva**: az ADR-016 (kaszkád sorrendje) —
@@ -156,6 +156,59 @@ ingadozó eseten, 13% a 38 stabilon) — de a hatása a
 bizonyosság-kapun menne át, amit ez a mérés nem hajt meg. Ezért:
 megépítve, tesztelve, **alapból kikapcsolva**.
 
+### D) FEJ NÉLKÜLI VÉGIGJÁTSZÁS — a VALÓDI felületen
+
+`python feladat.py vegigjatszas --robusztus` — 13 saját beszélgetés + a
+teljes foglalási menet + a **teljes robusztussági halmaz (44 eset)**,
+valódi modellel, Tkinter-eseményhurok nélkül. Ez mást mér, mint a
+golden futtató: ott az értelmezőt (mondat → eszközhívás), itt a teljes
+utat — orchestrator, ismétlésfigyelés, frusztráció-kiút, magyar
+mondatgenerálás, próba-napló.
+
+| | |
+|---|---|
+| eset | 44 (+13 saját beszélgetés + foglalási menet) |
+| **kivétel** | **0** (az elfogadási elv: 0) |
+| néma forduló | 2 — `ures-01`, `ures-02`: a felület üres bemenetet el sem küld |
+| leglassabb forduló | 6,36 s (`hosszu-01-tobb-tema`) |
+| a foglalási menet | végigment a kódig (`28SFL8RZ`) |
+
+**A teljes napló számai** (`python feladat.py naplo`, 73 forduló):
+
+| | |
+|---|---|
+| réteg-megoszlás | `llm` 78,1%, **`kapuor` 19,2%**, `szabaly` 2,7% |
+| válaszidő | **átlag 4,26 s, p95 6,17 s, max 7,08 s** |
+| a 15 s keret felett | **0 forduló** |
+
+**A válaszidőről őszintén:** a golden mérés a `hosszu-01` esetre
+15,18 s-ot mért, a végigjátszás UGYANARRA a mondatra 6,36 s-ot. A
+különbség nem magyarázható a kóddal — az Ollama futásonkénti szórása.
+**A számokat ezért nem szabad egyetlen futásból véglegesnek venni**;
+amit mondhatunk: az átlag mindkét mérésen bőven a kereten belül van, a
+farok viszont képes átlépni rajta.
+
+**Amit a végigjátszás mutatott meg, és a golden mérés nem:**
+
+- a kapuőr elhárító mondatai a képernyőn: *„Az árakról itt nem tudok
+  tájékoztatást adni — azt a boltban mondják meg. Időpontot viszont
+  szívesen keresek."* (0,04 s, modellhívás nélkül);
+- a `?????` bemenetre a KONKRÉT elhárítás megy, nem az általános:
+  *„Ezt nem sikerült értelmeznem. Mondd meg, melyik boltba szeretnél
+  menni és körülbelül mikor…"*;
+- az ötszörös ismétlésnél a harmadik fordulóra tényleg **kiút**
+  jelenik meg gombokkal (*„Úgy látom, itt körbe-körbe járunk"*) — ezt
+  a golden mérés szerkezetileg nem tudja megmutatni;
+- **a redaktálás élesben is működik**: a napló nem tartalmazza a
+  bediktált telefonszámot, TAJ-t, e-mailt vagy nevet, csak a
+  `<TELEFON>` / `<AZONOSITO>` / `<EMAIL>` / `<NEV>` címkéket.
+
+**Amit a végigjátszás fogott meg (és a mérés nem):** a napló-elemző
+`csendes_tartalek` detektora két TÉVES riasztást adott — a
+gombnyomásos és a tényválasz-rövidzárat is elhalt Ollamának
+minősítette. Javítva a forrásnál: az `utolso_reteg` mostantól
+megkülönbözteti a három `szabaly:*` okot.
+
 ## Mi hiányzik az M1 lezárásához (konkrétan)
 
 Az M1 kilépési feltétele: egy hónapnyi beosztás felvitele **percekben**
@@ -185,12 +238,22 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
    alapérték, vagy a profilrendszer (még nem épült) részeként
    bolt-/alkalmazott-szintű legyen? (`docs/AKADALYOK.md`, 2. pont)
 4. **Mikor kezdődjön a válaszidő-SLO-k tényleges betartatása** — a terv
-   szerint M4 lezárásáig fel vannak függesztve (lásd lent), de nincs
-   eldöntve, mi történik, ha M4-nél is a mai nagyságrendben marad a
-   válaszidő.
+   szerint M4 lezárásáig fel vannak függesztve, de nincs eldöntve, mi
+   történik, ha M4-nél is a mai nagyságrendben marad a válaszidő.
+   **RÉSZBEN MEGVÁLASZOLVA** (2026-08-23): a blueprint 12. szakasza egy
+   15 másodperces ÁTLAGOS keretet kapott, ami ma tartja magát (4,26 s
+   a valódi felületen). A p95-sorok továbbra is felfüggesztve —
+   véglegesítésük ADR-t igényel (blueprint 12., „a véglegesítéshez
+   ADR kell").
 5. **Racka-4B licenc-hozzáférés** — érdemes-e időt szánni a kézi
    GGUF-letöltésre és `ollama create`-re (ADR-013 ellenőrző jelöltje),
    vagy elég az Apache-2.0 Qwen3-ág egyedül?
+6. **ÚJ: a robusztussági halmaz bővítése.** A 44 eset 12 kategóriában
+   szűk — egy kategóriára 2-6 eset jut, tehát egyetlen eset 17-50%-ot
+   mozgat egy kategórián belül. A ma mért „0 biztonsági sértés" ezért
+   **azt jelenti, hogy ezen a 44 eseten nincs sértés**, nem azt, hogy
+   a rendszer robusztus. Ki bővítse, milyen ütemben, és honnan jöjjenek
+   az új esetek (kézzel írva vagy a próba-naplóból, `--golden`)?
 
 ## Ismert korlátok
 
@@ -224,7 +287,20 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
 - **A vásárlóazonosító hash-elése ideiglenes** (`privacy/
   hash_ideiglenes.py`, sima SHA-256, nincs pepper, nincs
   kulcsverzió-rotáció) — a végleges HMAC+pepper megoldás (CLAUDE.md
-  2. invariáns, `adatvedelem` skill) M5 előtt nem készül el.
+  2. invariáns, `adatvedelem` skill) M5 előtt nem készül el. **A
+  REDAKTÁLÁS viszont megvan** (`privacy/redakcio/`, 2026-08-23): a
+  lemezre írt napló nem tartalmaz nyers telefonszámot, TAJ-t,
+  adóazonosítót, igazolványszámot, e-mailt vagy bankkártyaszámot. A
+  kettő nem ugyanaz: a hashelés visszakereshető azonosítót csinál, a
+  redaktálás egyirányúan eltakar.
+- **A névredaktálás csak a BEMUTATKOZÓ szerkezetet fogja** („a Marika
+  vagyok", „a nevem Kovács János") — a számformátumokkal ellentétben a
+  személynévre nincs megbízható minta névlista nélkül. Részletesen és
+  a helyes iránnyal: `docs/ALTALANOSITAS.md` 2.6.
+- **A robusztussági halmaz 44 esete kevés.** Kategóriánként 2-6 eset,
+  tehát a „0 biztonsági sértés" azt jelenti, hogy EZEN a 44 eseten
+  nincs sértés — nem azt, hogy a rendszer robusztus. A bővítés nyitott
+  döntés (l. fent, 6. pont).
 - **`bolt_info` cím/nyitvatartás adata még mindig statikus, kódba írt**
   (`assistant/tools/katalogus.py::BOLT_INFO_STATIKUS`) — ehhez a
   kettőhöz nincs `bolt`-oszlop. A `megjelenes`/`termek`/`ar` viszont már
