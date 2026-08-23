@@ -191,7 +191,10 @@ def test_a_rendszerprompt_a_beszelgetesrol_beszel():
     uzenetek = _elkuldott_uzenetek([(KI_VASARLO, "bármi")])
 
     assert "BESZÉLGETÉS" in uzenetek["rendszer"]
-    assert "NE töltsd ki" in uzenetek["rendszer"]
+    # A kemény/puha aszimmetria kimondva: a bolt továbbvihető, az
+    # időpont nem (ADR-019, szándék-rétegzés).
+    assert "hagyd ki a mezőt" in uzenetek["rendszer"]
+    assert "NE vidd tovább" in uzenetek["rendszer"]
 
 
 def test_ertelmez_ollama_nem_elerheto_nincs_kivetel(monkeypatch):

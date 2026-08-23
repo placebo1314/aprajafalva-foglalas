@@ -195,7 +195,7 @@ def test_ket_datumkifejezes_forditott_sorrendben_is_a_tagabb_ablakot_adja():
             },
         }
     )
-    eredmeny = _ertelmez(_kaszkad(llm), "csütörtök vagy szerda")
+    eredmeny = _ertelmez(_kaszkad(llm), "csütörtökön vagy szerdán")
 
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-19T00:00:00Z"
     assert eredmeny["parameterek"]["datum_ig"] == "2026-08-20T23:59:59Z"
@@ -638,3 +638,71 @@ def test_a_modell_mit_mezoje_marad_ha_a_szabaly_nem_ismeri_fel_a_kerdest():
     eredmeny = _ertelmez(_kaszkad(llm), "Na és a Törpillánál?")
 
     assert eredmeny["parameterek"]["mit"] == "termek"
+
+
+# --- a dátum az AKTUÁLIS mondatból való (ADR-019) ---------------------
+
+
+def test_korabbi_fordulobol_idezett_datumot_eldobunk():
+    """A modell a teljes beszélgetést látja, és hajlamos egy KORÁBBI
+    forduló napját is beírni. A szándék-rétegzés szerint viszont a puha
+    rész minden fordulóban frissen dől el — az utolsó mondat felülírja a
+    korábbit, nem kiegészíti."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "ugyifogyi",
+                "datum_kifejezes": "jövő héten",
+                "datum_kifejezes_2": "kedden",  # ez az ELŐZŐ fordulóból van
+            },
+        }
+    )
+
+    eredmeny = _ertelmez(
+        _kaszkad(llm),
+        "bármikor a jövő héten",
+        elozmenyek=[(KI_VASARLO, "Szeretnék petárdázni kedden délelőtt.")],
+    )
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-24T00:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-30T23:59:59Z"
+
+
+def test_ket_kifejezes_egy_mondatbol_tovabbra_is_osszevonodik():
+    """Az ellenpróba: ha MINDKÉT idézet az aktuális mondatból való, a
+    vagylagos ablak-összevonás változatlanul működik."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "datum_kifejezes": "szerdán",
+                "datum_kifejezes_2": "csütörtök",
+            },
+        }
+    )
+
+    eredmeny = _ertelmez(
+        _kaszkad(llm),
+        "ha van hely szerdán, ha nincs, akkor csütörtök",
+        elozmenyek=[(KI_VASARLO, "Szeretnék időpontot a Szundiba.")],
+    )
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-19T00:00:00Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-20T23:59:59Z"
+
+
+def test_toldalekolt_alak_meg_elfogadott_idezet():
+    """A magyar toldalékolás a kapu kedvére dolgozik: a rövidebb idézet
+    ("péntek") részszövege az inflektáltnak ("pénteken")."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "ugyifogyi", "datum_kifejezes": "jövő hét péntek"},
+        }
+    )
+
+    eredmeny = _ertelmez(_kaszkad(llm), "és jövő héten pénteken?")
+
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-28T00:00:00Z"

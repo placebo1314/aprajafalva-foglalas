@@ -199,11 +199,17 @@ Lemondáshoz a foglalási kód kell — ha nincs a mondatban, visszakerdez \
 (hianyzo_mezo: foglalasi_kod).
 
 BESZÉLGETÉS: a bemenet a beszélgetés utolsó fordulói. A VÁSÁRLÓ UTOLSÓ
-mondatát alakítsd eszközhívássá — de a TELJES beszélgetés fényében: ami
-korábban elhangzott és még érvényes (pl. a bolt), azt töltsd ki akkor is,
-ha az utolsó mondat nem ismétli meg. Ha viszont a beszélgetésből az derül
-ki, hogy egy adat MÁR NEM érvényes — a vásárló mást kér, vagy azt mondja,
-hogy mindegy —, akkor egyszerűen NE töltsd ki azt a mezőt.
+mondatát alakítsd eszközhívássá — de a TELJES beszélgetés fényében. A
+kétféle adat kétféleképp viselkedik:
+
+- BOLT és SZOLGÁLTATÁS: a beszélgetés során végig érvényes marad. Töltsd
+  ki akkor is, ha az utolsó mondat nem ismétli meg. KIVÉVE, ha a vásárló
+  mást kér, vagy azt mondja, hogy mindegy melyik — akkor hagyd ki a mezőt.
+- IDŐPONT (datum_kifejezes, napszak): MINDIG csak a vásárló UTOLSÓ
+  mondatából veheted. A korábbi fordulókban említett napot vagy napszakot
+  NE vidd tovább, és ne is vond össze az újjal — ha az utolsó mondat nem
+  mond időpontot, hagyd üresen ezeket a mezőket. Az utolsó mondat
+  felülírja a korábbit, nem kiegészíti.
 
 Példák:
 {peldak}"""

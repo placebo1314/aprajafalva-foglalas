@@ -283,6 +283,40 @@ class ForditottKaszkadErtelmezo:
     # -- dátum-kapu ----------------------------------------------------
 
     @staticmethod
+    def _mondatbeli_kifejezes(kifejezes: str | None, mondat: str) -> str:
+        """A modell dátum-idézete, HA az tényleg az AKTUÁLIS mondatból
+        való — különben üres sztring.
+
+        **Miért kell.** A modell mostantól a teljes beszélgetést látja
+        (ADR-019), és hajlamos egy KORÁBBI fordulóból idézni a napot:
+        a "Szeretnék petárdázni kedden délelőtt." / "bármikor a jövő
+        héten" menetben a keddet is, a jövő hetet is beírta, és a
+        determinisztikus összevonás egy 12 napos ablakot csinált belőle.
+        A szándék-rétegzés doktrínája szerint viszont a PUHA rész (dátum,
+        napszak) minden fordulóban frissen dől el
+        (`orchestrator.kovetkezo_kontextus`) — az utolsó mondat felülírja
+        a korábbit, nem kiegészíti.
+
+        Ez a kapu ezt **kikényszeríti**, nem csak a promptban kéri: az
+        idézetet elfogadjuk, ha minden érdemi szava előfordul az
+        aktuális mondatban. A magyar toldalékolás a kedvünkre dolgozik:
+        az idézet rövidebb alakja ("péntek") részszövege az
+        inflektáltnak ("pénteken"). Ha az idézet NEM innen való, eldobjuk
+        — a dátum ilyenkor vagy hiányzik, vagy a mondat egészéből oldódik
+        fel, ami ugyanennek az elvnek felel meg."""
+        if not kifejezes:
+            return ""
+        tiszta = kifejezes.strip()
+        also = normalizal(mondat).lower()
+        szavak = [sz for sz in normalizal(tiszta).lower().split() if len(sz) >= 3]
+        if not szavak:
+            return ""
+        if all(sz in also for sz in szavak):
+            return tiszta
+        _LOG.info("kaszkád: a modell dátum-idézete nem az aktuális mondatból való (%r)", tiszta)
+        return ""
+
+    @staticmethod
     def _datum_ablak(
         nyers: dict, mondat: str, most: str
     ) -> tuple[str | None, str | None, str | None]:
@@ -309,11 +343,15 @@ class ForditottKaszkadErtelmezo:
         mondatban, azt ne veszítsük el csak azért, mert a modell
         kihagyta — különben egy visszakérdezés után a vásárlónak újra el
         kellene mondania a már megadott napot."""
-        kifejezes = (nyers.get("datum_kifejezes") or "").strip()
+        kifejezes = ForditottKaszkadErtelmezo._mondatbeli_kifejezes(
+            nyers.get("datum_kifejezes"), mondat
+        )
         parser_tol, parser_ig = rule_based.datum_ablak_feloldas(kifejezes, most)
         napszak = rule_based.napszak_feloldas(kifejezes) if kifejezes else None
 
-        masodik = (nyers.get("datum_kifejezes_2") or "").strip()
+        masodik = ForditottKaszkadErtelmezo._mondatbeli_kifejezes(
+            nyers.get("datum_kifejezes_2"), mondat
+        )
         if masodik:
             masodik_tol, masodik_ig = rule_based.datum_ablak_feloldas(masodik, most)
             if masodik_tol:
