@@ -38,7 +38,6 @@ from pathlib import Path
 GYOKER = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(GYOKER))
 
-from core.azonosito import new_uuid  # noqa: E402
 from seed.betolt import ALAP_DB_PATH  # noqa: E402
 
 # A végigjátszott beszélgetések. Az első nyolc a golden set `mintan_tul`
@@ -137,7 +136,10 @@ def vegigjatszas(db_path: str) -> int:
     for cimke, mondatok in BESZELGETESEK:
         print("=" * 72)
         print(f"# {cimke}")
-        app.session_id = new_uuid()  # minden beszélgetés friss kontextussal indul
+        # Friss session ÉS friss előzmény — az `_uj_beszelgetes` mindkettőt
+        # elintézi (ADR-019: az előzmény a beszélgetés bemenete, nem
+        # szabad átcsordulnia a következő próbába).
+        app._uj_beszelgetes()
         for mondat in mondatok:
             app._szo_kuldes(mondat)
             uj_sorok, naplo_hossz = _naplo_ujdonsag(app, naplo_hossz)
@@ -165,7 +167,7 @@ def _foglalasi_menet(app) -> None:
     tehát a felület valódi útját járja be, nem egy mellékbejáratot."""
     print("=" * 72)
     print("# teljes foglalási menet (keresés → jelölt → megerősítés → kód)")
-    app.session_id = new_uuid()
+    app._uj_beszelgetes()
     app._szo_kuldes(FOGLALASI_MENET_MONDAT)
     print(f"\n  > {FOGLALASI_MENET_MONDAT}")
 

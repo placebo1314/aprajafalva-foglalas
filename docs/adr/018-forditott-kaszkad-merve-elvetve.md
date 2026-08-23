@@ -11,6 +11,13 @@
   hivatkozási cím, nem állapotjelzés — átnevezve a korábbi commitokban
   és a `docs/ALLAPOT.md`-ben lévő hivatkozások elhasadnának. Az ÁLLAPOT
   a fenti mező, nem a fájlnév.
+- **Kiegészítette az ADR-019** (2026-08-23): a SORREND, amit ez az ADR
+  rögzít, változatlanul érvényes — de a modell BEMENETE megváltozott.
+  Az itt leírt "elengedés-kapu" (külön, zárt modellhívás arról, hogy
+  melyik korábbi mező esik ki) **megszűnt**: a modell azóta a
+  beszélgetést látja, és egy hívásban adja vissza a teljes kérést. Az
+  alábbi szövegben az elengedés-kapura vonatkozó részek ezért
+  TÖRTÉNETIEK — a mérés reprodukálásához maradtak meg, l. ADR-019.
 
 ## Kontextus
 
@@ -85,9 +92,9 @@ reprodukálható. Ami hiányzott, és most megvan:
 
 | Kapu | Mit old meg |
 |---|---|
-| **Kontextus a promptban** | A modell eddig minden fordulót nulláról látott. A szándék KEMÉNY része (bolt, szolgáltatás) mostantól bekerül a rendszerpromptba — a puha (dátum, napszak) szándékosan nem, mert az minden fordulóban frissen dől el. |
+| **Kontextus a promptban** *(azóta a BESZÉLGETÉS váltotta fel, ADR-019)* | A modell eddig minden fordulót nulláról látott. A szándék KEMÉNY része (bolt, szolgáltatás) mostantól bekerül a rendszerpromptba — a puha (dátum, napszak) szándékosan nem, mert az minden fordulóban frissen dől el. |
 | **Kontextus-kapu** | Ha a modell a boltra kérdezne, de a kontextus ismeri, keresés megy visszakérdezés helyett. (A hibás kimenet szó szerint ez volt: `visszakerdez` `hianyzo_mezo: bolt_id`-vel ÉS `bolt_id: szundi`-val ugyanabban a dictben.) |
-| **Elengedés-kapu** | A kontextus-sor mellékhatása: a modell akkor is megtartotta a boltot, amikor a mondat elvetette. Ha a bolt a kontextusból jön ÉS a mondat determinisztikusan nem nevez meg boltot, egy külön, szigorúan zárt kérdés megy a modellnek ("mi esik ki?", csak mezőnevek) — ugyanaz a mechanizmus, amit az ADR-016 kaszkád használ. |
+| **Elengedés-kapu** *(azóta TÖRÖLVE, ADR-019)* | A kontextus-sor mellékhatása: a modell akkor is megtartotta a boltot, amikor a mondat elvetette. Ha a bolt a kontextusból jön ÉS a mondat determinisztikusan nem nevez meg boltot, egy külön, szigorúan zárt kérdés megy a modellnek ("mi esik ki?", csak mezőnevek) — ugyanaz a mechanizmus, amit az ADR-016 kaszkád használ. |
 | **Vagylagos dátum** | `datum_kifejezes_2`: két időpont vagylagos/feltételes megadásánál mindkettőt IDÉZI a modell, az ablak összevonása determinisztikus. |
 | **Determinisztikus pótlások** | Dátum, napszak, szolgáltatás, preferált óra a MONDAT egészéből, ha a modell kihagyta. A modell válasza mindig nyer; a szabály csak pótol. |
 | **Zárt visszakérdezés-halmaz** | A `hianyzo_mezo` enum lett. A modell korábban olyan mezőnevet is adott ("datum_kifejezes", "termek"), amit a vásárlónak feltéve értelmetlen kérdés. |
