@@ -11,6 +11,11 @@
   hivatkozási cím, nem állapotjelzés — átnevezve a korábbi commitokban
   és a `docs/ALLAPOT.md`-ben lévő hivatkozások elhasadnának. Az ÁLLAPOT
   a fenti mező, nem a fájlnév.
+- **Kiegészítette az ADR-020** (2026-08-23): az itt „A következő
+  lépés"-ként kijelölt determinisztikus kapuőr megépült. A sorrend
+  változatlan, de **a hatókörön KÍVÜLI kérésekre már nem is jut el a
+  modellig** — a fordított kaszkád azóta a hatókörön belüli kérésekre
+  vonatkozik, nem mindenre.
 - **Kiegészítette az ADR-019** (2026-08-23): a SORREND, amit ez az ADR
   rögzít, változatlanul érvényes — de a modell BEMENETE megváltozott.
   Az itt leírt "elengedés-kapu" (külön, zárt modellhívás arról, hogy
@@ -234,6 +239,15 @@ Az ADR-016 sorrendje (`kaszkad.py`) a repóban marad,
   Ez nem a sorrend hibája — a bolti tudás promptba emelése külön lépés.
 
 ## A következő lépés (nem ebben az ADR-ben)
+
+> **MEGTÖRTÉNT — l. ADR-020** (2026-08-23). Az alábbi szakasz
+> történeti: a kapuőr azóta determinisztikus, a modell előtt fut, és a
+> nyelvi golden set `kapuor` rétege 50% → 100%. A robusztussági
+> halmazon a hatókörön kívüli válaszok száma 3 → 0. Az ADR-020 azt is
+> kimondja, hogy az alábbi „azonnali javulást ígér" becslés
+> **alábecsülte a problémát**: a mérés szerint a rendszer nem
+> „feleslegesen visszakérdezett" az ár-kérdésre, hanem termékleírást
+> olvasott volna fel rá.
 
 **Determinisztikus kapuőr a modell ELŐTT.** A kapuőr-minták
 (`_KAPUOR_MINTAK`) pozitív, nagy pontosságú illesztések; ha illeszkednek,
