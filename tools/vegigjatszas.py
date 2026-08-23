@@ -138,6 +138,21 @@ def vegigjatszas(db_path: str, robusztus: bool = False, csak_robusztus: bool = F
     # ne villantson fel semmit.
     app.withdraw()
     print(f"Adatbázis: {db_path}")
+
+    # ÜRES ADATBÁZIS: a felület ilyenkor egyetlen figyelmeztető
+    # címkét épít fel, fülek és beviteli mező nélkül
+    # (`ui/vasarlo.py::_build` korai visszatérése) — nincs mit
+    # végigjátszani. Enélkül az ellenőrzés `AttributeError`-ral állna
+    # meg egy olyan widgeten, ami létre sem jött, és a próbálgató a
+    # tracebackből nem tudná meg, hogy csak a `seed` hiányzik.
+    if app.org_id is None:
+        print(
+            "\nNincs betöltött demóadat ebben az adatbázisban — "
+            "futtasd előbb: python feladat.py seed"
+        )
+        app._close()
+        return 1
+
     print(f"Beosztás:  {app.idoszak}")
     print(f"Indító sor: {app.idoszak_cimke.cget('text')}")
     print(f"Értelmező: {type(app.orchestrator.ertelmezo).__name__}")
