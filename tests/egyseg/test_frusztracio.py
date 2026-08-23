@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from assistant.frusztracio import Frusztracio, kimondott_jel
 
-
 # --- kimondott jel ----------------------------------------------------
 
 
