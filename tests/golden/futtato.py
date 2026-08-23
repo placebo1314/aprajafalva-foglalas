@@ -219,8 +219,20 @@ _ENGEDELYEZETT_ESZKOZOK = _VALODI_ESZKOZOK | {"visszakerdez", "nincs"}
 # kontextusból örökölhető mezők. Ami ezen kívül van, azt a modell
 # TALÁLTA KI (pl. `letszam`, `surgosseg`) — a kötött dekódolásnak ki
 # kellene zárnia, ez a vizsgálat azt méri, hogy tényleg kizárja-e.
+#
+# **Mérési korrekció (2026-08-23).** Az első futáson a `datum_kifejezes`
+# és a `datum_kifejezes_2` hiányzott innen, ezért a KAPUK NÉLKÜLI `llm`
+# felállás 19 „kitalált tényt" kapott — holott ez a két mező a modell
+# szerződésének RÉSZE (`llm_based.FORMAT_SEMA`): a modell szó szerint
+# idézi bennük a dátumot, és a fordított kaszkád dobja el őket a
+# feloldás után (`_MODELLTOL_NEM_FOGADOTT`). A nyers modellkimenetben
+# tehát helyénvalók. A hiba iránya fontos: a mérés ROSSZABBNAK mutatta
+# a modellt, mint amilyen — és pont az a felállás sérült, amivel a
+# determinisztikus kapuk hasznát bizonyítjuk.
 _ISMERT_MEZOK = frozenset(
     {
+        "datum_kifejezes",
+        "datum_kifejezes_2",
         "bolt_id",
         "szolgaltatas_id",
         "datum",
@@ -513,6 +525,9 @@ class EsetEredmeny:
     tokenszam: int
     hiba: str | None
     nyers_kimenet: dict | None = None
+    # Önkonzisztencia: hány futás értett egyet az UTOLSÓ fordulón
+    # (ADR-021). `None`, ha nem volt bekapcsolva.
+    egyetertes: int | None = None
     # A biztonsági sértések `[(kategoria, indoklas), ...]` — csak a
     # robusztussági halmazon telik meg (l. `biztonsagi_ellenorzes`).
     biztonsagi_sertesek: list[tuple[str, str]] = field(default_factory=list)
@@ -598,6 +613,7 @@ def fut(meta: dict, esetek: list[Eset], hivo: HivoFuggveny) -> list[EsetEredmeny
                 kimenet,
                 biztonsagi_sertesek=sertesek,
                 fordulo_kimenetek=fordulo_kimenetek,
+                egyetertes=getattr(hivo, "utolso_egyetertes", None),
             )
         )
         print(f"  {eset.id:32s} {pontszam:.1f}  {indoklas[:60]}")
@@ -848,6 +864,11 @@ def main(argv: list[str] | None = None) -> int:
                     reteg_szamlalo.get(_kaszkad.utolso_reteg, 0) + 1
                 )
                 egyetertes = getattr(_futt, "utolso_egyetertes", None)
+                # Esetenként is elérhetővé tesszük (`fut()` olvassa a
+                # hívó-objektumról), hogy a JSON-ban NÉV szerint
+                # látszódjon, melyik eseten ingadozott a modell — nem
+                # csak az, hogy hányon.
+                hivo.utolso_egyetertes = egyetertes
                 if egyetertes is not None:
                     kulcs = f"egyetertes={egyetertes}"
                     egyetertes_szamlalo[kulcs] = egyetertes_szamlalo.get(kulcs, 0) + 1
@@ -891,6 +912,7 @@ def main(argv: list[str] | None = None) -> int:
                             "hiba": er.hiba,
                             "nyers_kimenet": er.nyers_kimenet,
                             "biztonsagi_sertesek": er.biztonsagi_sertesek,
+                            "egyetertes": er.egyetertes,
                         }
                         for er in eredmenyek
                     ],
