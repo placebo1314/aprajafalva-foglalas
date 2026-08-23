@@ -32,6 +32,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
+from assistant.frusztracio import Frusztracio
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
 from assistant.tools import (
     bolt_info,
@@ -185,6 +186,10 @@ class _SessionAllapot:
     # Ismétlésfigyelés: {"kulcs": <válaszfajta>, "darab": n} — l.
     # `Orchestrator._ismetlest_figyel`.
     valasz_ismetles: dict = field(default_factory=dict)
+    # Frusztráció-számláló (`assistant/frusztracio.py`) — a vásárló
+    # oldaláról nézi, hogy elakadtunk-e, nem a mi válaszaink
+    # ismétlődéséből.
+    frusztracio: Frusztracio = field(default_factory=Frusztracio)
 
 
 class Orchestrator:
@@ -194,11 +199,15 @@ class Orchestrator:
         ertelmezo: Ertelmezo,
         org_id: str,
         kuszobok: BizonyossagKuszobok | None = None,
+        frusztracio_kuszob: int | None = None,
     ):
         self.conn = conn
         self.ertelmezo = ertelmezo
         self.org_id = org_id
         self.kuszobok = kuszobok or BizonyossagKuszobok()
+        # Hány "pont" után ajánlunk kiutat (`assistant/frusztracio.py`).
+        # `None` = az ottani alapérték.
+        self.frusztracio_kuszob = frusztracio_kuszob
         self._sessionok: dict[str, _SessionAllapot] = {}
         # Az utolsó `fordulo()`-hívás nyers értelmezés-kimenete
         # ({eszkoz, parameterek}) — nem a válasz része, csak
@@ -207,7 +216,10 @@ class Orchestrator:
 
     def _allapot(self, session_id: str) -> _SessionAllapot:
         if session_id not in self._sessionok:
-            self._sessionok[session_id] = _SessionAllapot(session_id=session_id)
+            allapot = _SessionAllapot(session_id=session_id)
+            if self.frusztracio_kuszob is not None:
+                allapot.frusztracio.kuszob = self.frusztracio_kuszob
+            self._sessionok[session_id] = allapot
         return self._sessionok[session_id]
 
     # -- szabad szöveges forduló ------------------------------------
@@ -230,7 +242,8 @@ class Orchestrator:
         — ez a determinisztikus út és az egyfordulós mérés esete."""
         allapot = self._allapot(session_id)
         valasz = self._fordulo_belso(allapot, session_id, mondat, most, elozmenyek or [])
-        return self._ismetlest_figyel(allapot, valasz)
+        valasz = self._ismetlest_figyel(allapot, valasz)
+        return self._frusztraciot_figyel(allapot, mondat, valasz)
 
     def _fordulo_belso(
         self,
@@ -390,6 +403,30 @@ class Orchestrator:
             # Az eredeti válasz kulcsát megtartjuk, hogy a hívó (és a
             # próba-napló) lássa, MIBŐL futottunk körbe.
             "eredeti_uzenet_kulcs": valasz.get("uzenet_kulcs"),
+        }
+
+    def _frusztraciot_figyel(self, allapot: _SessionAllapot, mondat: str, valasz: dict) -> dict:
+        """Ha a vásárló elakadt, KIUTAT ajánlunk — akkor is, ha a
+        rendszer minden fordulóban mást válaszolt (az
+        `_ismetlest_figyel` csak a saját ismétlődésünket látja).
+
+        A kiút alakja ugyanaz, mint az ismétlés-kiúté, hogy a felület ne
+        ágazzon szét — csak a `ok` mező mondja meg, melyik jel indította,
+        és a MÁSODIK kiút már embert ajánl, nem újabb szűkítést
+        (a vásárló 8. igénye: "legyen kiút emberhez")."""
+        allapot.frusztracio.fordulo(mondat, valasz.get("tipus"))
+        if valasz.get("tipus") == "kiut" or not allapot.frusztracio.kiutat_kell():
+            return valasz
+
+        emberhez = allapot.frusztracio.kiut_ajanlva >= 1
+        allapot.frusztracio.kiut_kiadva()
+        return {
+            "tipus": "kiut",
+            "uzenet_kulcs": "emberhez_iranyitas" if emberhez else "ismetlodo_valasz_kiut",
+            "valaszthato_dimenziok": [] if emberhez else list(_KIUT_DIMENZIOK),
+            "ok": "frusztracio",
+            "emberhez": emberhez,
+            "eredeti": valasz,
         }
 
     def _visszakerdez(self, allapot: _SessionAllapot, parameterek: dict) -> dict:

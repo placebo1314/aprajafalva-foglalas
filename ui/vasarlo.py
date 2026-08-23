@@ -667,6 +667,11 @@ class VasarloApp(tk.Tk):
         if tipus == "kiut":
             # Ugyanaz a válasz harmadszor nem megy ki — más mondat, zárt
             # választással (blueprint 7. szakasz, "Négy technika" 2.).
+            # A frusztráció-figyelő MÁSODIK kiútja embert ajánl, nem
+            # újabb szűkítést — ott nincs gomb, csak a mondat.
+            if valasz.get("emberhez"):
+                self._naplo_ir("Rendszer", valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"]))
+                return
             bevezetes, gombok = valasz_szoveg.kiut_szoveg(valasz.get("valaszthato_dimenziok", []))
             self._naplo_ir("Rendszer", bevezetes)
             for dimenzio, felirat in gombok:

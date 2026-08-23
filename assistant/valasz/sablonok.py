@@ -60,6 +60,16 @@ SABLONOK: dict[str, dict[str, object]] = {
             # van (gombokkal együtt) — ez a tartalék, ha a hívó csak a
             # hibakulcsot tudja megjeleníteni.
             "ismetlodo_valasz_kiut": "Úgy látom, itt körbe-körbe járunk — próbáljuk másképp.",
+            # Frusztráció-felismerés MÁSODIK kiútja (a vásárló 8.
+            # igénye: "legyen kiút emberhez vagy sorbanálláshoz").
+            # Nem ígér visszahívást és nem kér elérhetőséget — olyat
+            # nem ígérhetünk, amit a rendszer nem tud teljesíteni
+            # (ADR-012: értesítés előáll, de nem megy ki).
+            "emberhez_iranyitas": (
+                "Úgy látom, ez így nem vezet sehova — ne kínlódj vele tovább. "
+                "A boltban élőben is fel tudnak venni időpontot, és a koppintós "
+                "úton (a másik fülön) is végig lehet menni pár kattintással."
+            ),
             "ervenytelen_alternativa": "Ezt az alternatívát most nem tudom megmutatni.",
             "ervenytelen_kod": "Nem találtam ilyen foglalási kódot.",
             "nincs_ilyen_foglalas": "Nem találtam ilyen foglalási kódot.",

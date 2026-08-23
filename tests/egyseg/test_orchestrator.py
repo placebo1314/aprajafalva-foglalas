@@ -756,7 +756,10 @@ def test_ismetles_mas_valaszfajta_nullazza_a_szamlalot(tmp_path):
             _visszakerdez_valasz(),
         ]
     )
-    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+    # A frusztráció-figyelő szándékosan kikapcsolva: ez a teszt az
+    # ISMÉTLÉS-számlálót méri, és öt eredménytelen forduló különben a
+    # frusztráció-kiutat indítaná el (l. saját tesztjeit).
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi", frusztracio_kuszob=999)
 
     orch.fordulo("s1", "a", _MOST)
     orch.fordulo("s1", "b", _MOST)
@@ -1006,3 +1009,88 @@ def test_bizonyossag_kuszobok_konfiguralhatok(tmp_path):
         conn, _ertelmezo(), org_id=ctx["org_id"], kuszobok=BizonyossagKuszobok(eszkoz=0.3)
     )
     assert megengedo.fordulo("s2", "x", _MOST)["tipus"] == "ajanlat"
+
+
+# --- frusztráció-felismerés (blueprint: "legyen kiút emberhez") --------
+
+
+def test_frusztracio_kiutat_ajanl_akkor_is_ha_mas_a_valasz(tmp_path):
+    """Az `_ismetlest_figyel` csak a SAJÁT ismétlődésünket látja. Ha a
+    rendszer minden fordulóban mást válaszol, de a vásárló mégsem jut
+    előre, korábban semmi nem szólalt meg — most igen."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            _visszakerdez_valasz(mezo="bolt_id"),
+            _visszakerdez_valasz(mezo="szolgaltatas_id"),
+            {"eszkoz": "nincs", "parameterek": {}},
+            _visszakerdez_valasz(mezo="foglalasi_kod"),
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    orch.fordulo("s1", "a", _MOST)
+    orch.fordulo("s1", "b", _MOST)
+    orch.fordulo("s1", "c", _MOST)
+    negyedik = orch.fordulo("s1", "d", _MOST)
+
+    assert negyedik["tipus"] == "kiut"
+    assert negyedik["ok"] == "frusztracio"
+    assert negyedik["emberhez"] is False
+
+
+def test_frusztracio_masodik_kiutja_emberhez_iranyit(tmp_path):
+    """A vásárló 8. igénye: ha a szűkítési javaslat sem segített, ne
+    ugyanazt kínáljuk újra."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    # Váltakozó hiányzó mező: így az ISMÉTLÉS-figyelő nem szólal meg
+    # (más-más választ adunk), csak a frusztráció-figyelő.
+    ertelmezo = _ScriptedErtelmezo(
+        [_visszakerdez_valasz(mezo="bolt_id"), _visszakerdez_valasz(mezo="szolgaltatas_id")] * 6
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    kiutak = []
+    for i in range(10):
+        valasz = orch.fordulo("s1", f"nem értem {i}", _MOST)
+        if valasz["tipus"] == "kiut" and valasz.get("ok") == "frusztracio":
+            kiutak.append(valasz)
+
+    assert len(kiutak) >= 2
+    assert kiutak[0]["emberhez"] is False
+    assert kiutak[1]["emberhez"] is True
+    assert kiutak[1]["uzenet_kulcs"] == "emberhez_iranyitas"
+
+
+def test_frusztracio_sikeres_ajanlat_utan_nem_szolal_meg(tmp_path):
+    """Egy sikeres ajánlat nullázza a számlálót — a beszélgetés jó
+    irányba ment, a korábbi döccenőket nem hordozzuk tovább."""
+    conn = _conn(tmp_path)
+    adat = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            _visszakerdez_valasz(),
+            _visszakerdez_valasz(),
+            _visszakerdez_valasz(),
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                },
+            },
+            _visszakerdez_valasz(),
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=adat["org_id"])
+
+    for mondat in ("a", "b", "c"):
+        orch.fordulo("s1", mondat, _MOST)
+    negyedik = orch.fordulo("s1", "Ügyifogyiba mennék", _MOST)
+    otodik = orch.fordulo("s1", "e", _MOST)
+
+    assert negyedik["tipus"] == "ajanlat"
+    assert otodik["tipus"] == "visszakerdezes", "a sikeres ajánlatnak nulláznia kellett"
