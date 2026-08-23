@@ -239,7 +239,9 @@ _KIVUL_MINTAK: list[tuple[re.Pattern, str]] = [
     (
         re.compile(
             r"mennyibe\s*ker[üu]l|mibe\s*ker[üu]l|mi\s*az\s*[áa]ra|mennyit\s*fizet"
-            r"|h[áa]ny\s*forint|dr[áa]ga[- ]?e|[áa]rt[áa]j[ée]koztat|[áa]rlista"
+            # A szótő elég: a magyar toldalékolás miatt az "árlistát",
+            # "árlistára" alakok is ide tartoznak.
+            r"|h[áa]ny\s*forint|dr[áa]ga[- ]?e|[áa]rt[áa]j[ée]koztat|[áa]rlist"
         ),
         OK_AR,
     ),
