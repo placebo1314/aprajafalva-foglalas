@@ -243,10 +243,10 @@ válasz helyes, nem hiba.
 #### A tíz próba
 
 **Mindegyik próba előtt nyomj "Új beszélgetés"-t** (a szöveges fül
-alján). A szándék kemény része (bolt, szolgáltatás) szándékosan túléli a
-fordulókat — ez kell az alkudozáshoz —, de próbálgatás közben ez azt
-jelentené, hogy az előző próba boltja beleszól a következőbe. A 6., 7.
-és 9. próba viszont TÖBB egymást követő fordulóból áll: azok közben ne
+alján). A rendszer a **beszélgetés utolsó fordulóit** adja át az
+értelmezőnek (ADR-019) — ez kell az alkudozáshoz, de próbálgatás közben
+azt jelentené, hogy az előző próba beleszól a következőbe. A 6., 7., 9.
+és 12. próba viszont TÖBB egymást követő fordulóból áll: azok közben ne
 nyomd meg.
 
 | # | Amit beírsz | Mit kell látnod | A hiba jele |
@@ -261,6 +261,8 @@ nyomd meg.
 | 8 | `Le szeretném mondani a foglalásomat.` | Kérdés a foglalási kódra. | Bármi más — kód nélkül lemondani nem szabad. |
 | 9 | Írd be háromszor egymás után ugyanazt a semmitmondó mondatot (`mennék`) | A harmadikra **más mondat**, és koppintható kiút-gombok (Másik bolt / Másik hét / Másik napszak). | Harmadszor is ugyanaz a válasz. |
 | 10 | Egy időpont-gomb → azonosítónak írj bármit → "Igen, foglalom" | "Foglalás létrejött! Foglalási kód: XXXXXXXX" | Hibaüzenet, vagy nincs kód. |
+| 11 | `Mikor tudok legkorábban menni a Törpillához?` | "A legkorábbi szabad időpont:" + **egyetlen** gomb. | Három jelölt (az a `szabad_idopontok` válasza — gyengébb, de nem hibás), vagy visszakérdezés. |
+| 12 | Írd be egymás után négyszer, hogy `nem értem, mit kell csinálni` | A rendszer **kiutat** ajánl (Másik bolt / Másik hét / Másik napszak), majd ha ez sem segít, **emberhez irányít** ("a boltban élőben is fel tudnak venni időpontot"). | Negyedszer is ugyanaz a visszakérdezés — a frusztráció-figyelő nem szólalt meg. |
 
 #### Ha valami furcsa: nyisd meg a naplót
 
