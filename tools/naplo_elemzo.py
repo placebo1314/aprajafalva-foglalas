@@ -34,7 +34,7 @@ egyetlen, ellenőrizhető feltétel:
 | `elharitas` | `valasz_tipus == "elutasitas"` | a kapuőr zárt — okonként bontva |
 | `eszkoz_hiba` | `valasz_tipus == "eszkoz_hiba"` | üres eredmény vagy hiba |
 | `kiut` | `valasz_tipus == "kiut"` | a rendszer maga adta fel |
-| `csendes_tartalek` | `reteg == "szabaly"`, de volt modell | az Ollama elhalt, észrevétlenül |
+| `csendes_tartalek` | `szabaly:tartalek`, de volt modell | az Ollama elhalt, észrevétlenül |
 | `alacsony_bizonyossag` | kritikus mező a küszöb alatt | a modell tippelt |
 | `ismetelt_bemenet` | ugyanaz a mondat közvetlenül újra | a vásárló nem kapott választ |
 | `lassu_fordulo` | a válaszidő a 15 s keret felett | a keretet sérti |
@@ -102,17 +102,31 @@ def hibamintak(sorok: list[dict]) -> dict[str, list[int]]:
         if mezo is not None and mezo == elozo_mezo:
             talalatok["ismetelt_visszakerdezes"].append(i)
         if tipus == "elutasitas":
-            talalatok[f"elharitas:{sor.get('kapuor_ok') or 'ismeretlen'}"].append(i)
+            # `kapuor_ok` hiánya nem "ismeretlen": azt jelenti, hogy nem
+            # a kapuőr hárított el, hanem a MODELL döntött úgy, hogy a
+            # kérés nem foglalással kapcsolatos. A kettő külön jelenség,
+            # és a napló épp arra való, hogy megkülönböztesse őket.
+            talalatok[f"elharitas:{sor.get('kapuor_ok') or 'modell_dontese'}"].append(i)
         if tipus == "eszkoz_hiba":
             talalatok[f"eszkoz_hiba:{sor.get('uzenet_kulcs') or 'ismeretlen'}"].append(i)
         if tipus == "kiut":
             talalatok["kiut"].append(i)
 
-        # CSENDES TARTALÉK: a `szabaly` réteg önmagában nem hiba (a
-        # gombnyomásos út és a zárt válaszok szándékosan oda futnak) —
-        # de ha a naplóban VAN llm-es forduló is, akkor volt konfigurált
-        # modell, és egy szabály-fordulónál érdemes megnézni, miért.
-        if sor.get("reteg") == "szabaly" and any(s.get("reteg") == "llm" for s in sorok):
+        # CSENDES TARTALÉK: az Ollama nem elérhető, és senki nem vette
+        # észre, mert a rendszer hiba nélkül átvált a determinisztikus
+        # rétegre.
+        #
+        # **Csak a `szabaly:tartalek` réteg gyanús.** A `szabaly:*`
+        # másik két értéke (gombnyomás, tényválasz-rövidzár) SZÁNDÉKOS,
+        # tervezett út (`forditott_kaszkad.RETEG_*`) — az első változat
+        # ezeket is jelezte, és a valódi végigjátszáson két téves
+        # riasztást adott. A megkülönböztetés azóta a FORRÁSNÁL van, nem
+        # itt találgatva.
+        #
+        # A `szabaly` (utótag nélküli) alak a RÉGI naplósorokban
+        # szerepel, amikor a három ok még nem volt megkülönböztetve —
+        # ezeket nem jelezzük, mert nem lehet eldönteni, melyikről volt szó.
+        if sor.get("reteg") == "szabaly:tartalek" and any(s.get("reteg") == "llm" for s in sorok):
             talalatok["csendes_tartalek"].append(i)
 
         bizonyossag = sor.get("bizonyossag") or {}

@@ -11,6 +11,17 @@ leül a felület elé**.
 
     python feladat.py vegigjatszas
     python feladat.py vegigjatszas --db proba.db
+    python feladat.py vegigjatszas --robusztus     # + a teljes robusztussági halmaz
+    python feladat.py vegigjatszas --csak-robusztus
+
+**A `--robusztus` a robusztussági halmaz (`tests/golden/robusztus.yaml`,
+44 eset) MINDEN esetét végigjátssza a VALÓDI felületen.** Ez másra jó,
+mint a `python feladat.py golden --halmaz robusztus`: az az ÉRTELMEZŐT
+méri (mondat → eszközhívás), ez pedig a teljes utat — orchestrator,
+ismétlésfigyelés, frusztráció-kiút, bizonyosság-kapu, magyar
+mondatgenerálás, próba-napló. A golden mérés szerkezetileg nem tudja
+megmutatni, hogy egy üres bemenetre MI JELENIK MEG a képernyőn; ez
+igen.
 
 Amit kiír, fordulónként: a bemenet, melyik réteg oldotta meg, a felismert
 eszköz és paraméterek, a válasz típusa, és a felület által ténylegesen
@@ -119,7 +130,7 @@ def _widgetek(keret, osztaly: str) -> list:
     return talalatok
 
 
-def vegigjatszas(db_path: str) -> int:
+def vegigjatszas(db_path: str, robusztus: bool = False, csak_robusztus: bool = False) -> int:
     from ui.vasarlo import VasarloApp
 
     app = VasarloApp(db_path)
@@ -132,6 +143,18 @@ def vegigjatszas(db_path: str) -> int:
     print(f"Értelmező: {type(app.orchestrator.ertelmezo).__name__}")
     print(f'"most" a szöveges úton: {app._most_iso()}\n')
 
+    kilepokod = 0
+    if not csak_robusztus:
+        _sajat_probak(app)
+        _foglalasi_menet(app)
+    if robusztus or csak_robusztus:
+        kilepokod = _robusztus_halmaz(app)
+
+    app._close()
+    return kilepokod
+
+
+def _sajat_probak(app) -> None:
     naplo_hossz = 0
     for cimke, mondatok in BESZELGETESEK:
         print("=" * 72)
@@ -160,9 +183,92 @@ def vegigjatszas(db_path: str) -> int:
                 print(f"    gombok:      {gombok}")
         print()
 
-    _foglalasi_menet(app)
-    app._close()
-    return 0
+
+def _robusztus_halmaz(app) -> int:
+    """A robusztussági halmaz MINDEN esete a valódi felületen.
+
+    Amit ez mér, és a `python feladat.py golden --halmaz robusztus`
+    nem: mi JELENIK MEG a képernyőn. Egy üres bemenetre a felület
+    egyáltalán el sem küldi a fordulót (`ui/vasarlo.py::_szo_kuldes`
+    üres szövegnél visszatér) — ez helyes viselkedés, de a golden
+    mérésben láthatatlan, mert ott nincs felület.
+
+    Az elfogadási elv itt egyetlen dologra szűkül, mert a többit a
+    golden mérés már lefedte: **egyetlen eset sem okozhat kivételt**.
+    A kilépőkód ezt jelenti."""
+    import time
+
+    from tests.golden.futtato import ROBUSZTUS_UTVONAL, betolt
+
+    _, esetek = betolt(ROBUSZTUS_UTVONAL)
+    print("\n" + "#" * 72)
+    print(f"# ROBUSZTUSSÁGI HALMAZ A FELÜLETEN — {len(esetek)} eset")
+    print("#" * 72)
+
+    kivetelek: list[tuple[str, str]] = []
+    nema_fordulok: list[str] = []
+    valasz_tipusok: dict[str, int] = {}
+    leglassabb = (0.0, "")
+
+    for eset in esetek:
+        print("\n" + "=" * 72)
+        print(f"# {eset.id}  [{', '.join(eset.cimkek)}]")
+        app._uj_beszelgetes()
+        naplo_hossz = 0
+        for mondat in eset.fordulok:
+            kezdet = time.monotonic()
+            try:
+                app._szo_kuldes(mondat)
+            except Exception as exc:  # noqa: BLE001 - épp a kivételt keressük
+                kivetelek.append((eset.id, f"{type(exc).__name__}: {exc}"))
+                print(f"\n  > {mondat!r}")
+                print(f"    KIVÉTEL:     {type(exc).__name__}: {exc}")
+                continue
+            telt = time.monotonic() - kezdet
+            if telt > leglassabb[0]:
+                leglassabb = (telt, eset.id)
+
+            uj_sorok, naplo_hossz = _naplo_ujdonsag(app, naplo_hossz)
+            ertelmezes = app.orchestrator.utolso_ertelmezes or {}
+            reteg = getattr(app.orchestrator.ertelmezo, "utolso_reteg", None)
+            print(f"\n  > {mondat!r}")
+            if not uj_sorok:
+                # A felület el sem küldte a fordulót (üres/whitespace
+                # bemenet) — nincs se napló-sor, se válasz.
+                nema_fordulok.append(eset.id)
+                print("    (a felület nem küldte el — üres bemenet)")
+                continue
+            print(f"    réteg:       {reteg}   ({telt:.2f} s)")
+            print(f"    eszköz:      {ertelmezes.get('eszkoz')}")
+            print(f"    paraméterek: {ertelmezes.get('parameterek')}")
+            for sor in uj_sorok:
+                print(f"    | {sor}")
+            gombok = _gombfeliratok(app) + _jelolt_gombok(app)
+            if gombok:
+                print(f"    gombok:      {gombok}")
+
+        from ui.vasarlo import proba_naplo_olvas
+
+        utolso = proba_naplo_olvas(1)
+        if utolso:
+            tipus = utolso[0].get("valasz_tipus") or "?"
+            valasz_tipusok[tipus] = valasz_tipusok.get(tipus, 0) + 1
+
+    print("\n" + "#" * 72)
+    print("# ÖSSZEGZÉS — robusztussági halmaz a felületen")
+    print("#" * 72)
+    print(f"  esetek:           {len(esetek)}")
+    print(f"  KIVÉTELEK:        {len(kivetelek)}   (elfogadási elv: 0)")
+    for eset_id, uzenet in kivetelek:
+        print(f"      {eset_id}: {uzenet}")
+    print(f"  néma forduló:     {len(nema_fordulok)}   (üres bemenet, a felület nem küldte el)")
+    if nema_fordulok:
+        print(f"      {', '.join(nema_fordulok)}")
+    print(f"  leglassabb:       {leglassabb[0]:.2f} s  ({leglassabb[1]})")
+    print("  válasz-típusok (utolsó forduló):")
+    for tipus, darab in sorted(valasz_tipusok.items(), key=lambda p: -p[1]):
+        print(f"      {tipus:22s} {darab}")
+    return 1 if kivetelek else 0
 
 
 def _foglalasi_menet(app) -> None:
@@ -206,8 +312,18 @@ def _foglalasi_menet(app) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fej nélküli végigjátszás a vásárlói felületen.")
     parser.add_argument("--db", default=str(ALAP_DB_PATH), help="adatbázis útvonala")
+    parser.add_argument(
+        "--robusztus",
+        action="store_true",
+        help="a saját próbák UTÁN a teljes robusztussági halmaz is (tests/golden/robusztus.yaml)",
+    )
+    parser.add_argument(
+        "--csak-robusztus",
+        action="store_true",
+        help="CSAK a robusztussági halmaz — a saját próbák és a foglalási menet kihagyva",
+    )
     args = parser.parse_args(argv)
-    return vegigjatszas(args.db)
+    return vegigjatszas(args.db, robusztus=args.robusztus, csak_robusztus=args.csak_robusztus)
 
 
 if __name__ == "__main__":

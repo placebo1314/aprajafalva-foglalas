@@ -11,7 +11,11 @@ réteg veszi át hiba nélkül."""
 from __future__ import annotations
 
 from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
-from assistant.interpreter.forditott_kaszkad import ForditottKaszkadErtelmezo
+from assistant.interpreter.forditott_kaszkad import (
+    RETEG_SZABALY_TARTALEK,
+    RETEG_SZABALY_ZART_VALASZ,
+    ForditottKaszkadErtelmezo,
+)
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
 _MOST = "2026-08-17T09:00:00Z"  # hétfő
@@ -74,7 +78,7 @@ def test_llm_nelkul_tisztan_determinisztikus():
     )
 
     assert eredmeny == kozvetlen
-    assert kaszkad.utolso_reteg == "szabaly"
+    assert kaszkad.utolso_reteg == RETEG_SZABALY_TARTALEK
 
 
 def test_ollama_hiba_eseten_szabaly_alapu_tartalek_hiba_nelkul():
@@ -91,7 +95,7 @@ def test_ollama_hiba_eseten_szabaly_alapu_tartalek_hiba_nelkul():
     )
 
     assert eredmeny == kozvetlen
-    assert kaszkad.utolso_reteg == "szabaly"
+    assert kaszkad.utolso_reteg == RETEG_SZABALY_TARTALEK
 
 
 def test_idotullepes_eseten_is_a_szabaly_alapu_tartalek_megy():
@@ -105,7 +109,7 @@ def test_idotullepes_eseten_is_a_szabaly_alapu_tartalek_megy():
 
     assert eredmeny["eszkoz"] == "szabad_idopontok"
     assert eredmeny["parameterek"]["bolt_id"] == "ugyifogyi"
-    assert kaszkad.utolso_reteg == "szabaly"
+    assert kaszkad.utolso_reteg == RETEG_SZABALY_TARTALEK
 
 
 # --- 1. kapu: normalizáló a modell ELŐTT ------------------------------
@@ -600,7 +604,10 @@ def test_bolt_slug_onmagaban_nem_megy_a_modellhez():
 
     assert eredmeny["eszkoz"] == "szabad_idopontok"
     assert eredmeny["parameterek"]["bolt_id"] == "torpilla"
-    assert kaszkad.utolso_reteg == "szabaly"
+    # A GOMBNYOMÁSOS út saját réteg-jelzést kap — nem "tartalék": ez
+    # tervezett, gyors, modellhívás nélküli ág (ADR-020 utáni
+    # megkülönböztetés, `forditott_kaszkad.RETEG_*`).
+    assert kaszkad.utolso_reteg == RETEG_SZABALY_ZART_VALASZ
     assert llm.kapott_mondatok == []
 
 

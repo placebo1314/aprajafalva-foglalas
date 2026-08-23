@@ -124,6 +124,29 @@ _MODELLTOL_NEM_FOGADOTT = frozenset({"datum_kifejezes", "datum_kifejezes_2", "se
 # rá soha.
 _BLOKKOLO_MEZOK = frozenset({"bolt_id", "foglalasi_kod"})
 
+# MELYIK RÉTEG oldotta meg (`utolso_reteg`) — zárt halmaz.
+#
+# **A `szabaly` HÁROM okból szólalhat meg, és a három nem ugyanaz.**
+# Korábban mindhárom `"szabaly"`-ként naplózódott, és a napló-elemző
+# (`tools/naplo_elemzo.py`) emiatt téves riasztást adott: a
+# gombnyomásos és a tényválasz-rövidzárat "csendes tartaléknak"
+# minősítette, holott mindkettő SZÁNDÉKOS, tervezett út. A megkülönböztetés
+# ezért a FORRÁSNÁL van, nem az elemzőben találgatva:
+#
+# - `szabaly:zart_valasz` — a mondat MAGA egy zárt halmazbeli érték
+#   (gombnyomás). Tervezett, gyors, modellhívás nélküli út.
+# - `szabaly:tenyvalasz` — a kapuőr engedélyezett tényválaszt látott, és
+#   a bolt is feloldható (ADR-020). Tervezett, a blueprint 10. szakasza
+#   szerinti.
+# - `szabaly:tartalek` — az Ollama NEM elérhető, vagy nincs konfigurált
+#   modell. **Ez az egyetlen, ami figyelmet érdemel**: ha modell VAN
+#   konfigurálva és mégis ide futunk, valami elromlott.
+RETEG_KAPUOR = "kapuor"
+RETEG_LLM = "llm"
+RETEG_SZABALY_ZART_VALASZ = "szabaly:zart_valasz"
+RETEG_SZABALY_TENYVALASZ = "szabaly:tenyvalasz"
+RETEG_SZABALY_TARTALEK = "szabaly:tartalek"
+
 
 class ForditottKaszkadErtelmezo:
     """Az `Ertelmezo` protokoll fordított kaszkád implementációja — l.
@@ -141,8 +164,9 @@ class ForditottKaszkadErtelmezo:
     def __init__(self, szabaly: Ertelmezo | None = None, llm: LLMErtelmezo | None = None):
         self.szabaly = szabaly or SzabalyAlapuErtelmezo()
         self.llm = llm
-        # "kapuor" | "llm" | "szabaly" — melyik réteg adta az utolsó
-        # választ. A "kapuor" azt jelenti, hogy a modell meg sem szólalt.
+        # Melyik réteg adta az utolsó választ — a fenti `RETEG_*` zárt
+        # halmazból. A `kapuor` azt jelenti, hogy a modell meg sem
+        # szólalt; a három `szabaly:*` érték három KÜLÖNBÖZŐ okot jelöl.
         self.utolso_reteg: str | None = None
         # Az utolsó kapuőr-döntés — megfigyelhetőséghez (napló,
         # `tools/naplo_elemzo.py`). Nem a protokoll része.
@@ -170,7 +194,7 @@ class ForditottKaszkadErtelmezo:
         # egyben a leggyorsabb ág is (nulla modellhívás).
         kapuor_dontes = kapuor.dontes(mondat)
         if kapuor_dontes.kivul:
-            self.utolso_reteg = "kapuor"
+            self.utolso_reteg = RETEG_KAPUOR
             self.utolso_normalizalt = normalizal(mondat)
             self.utolso_kapuor = kapuor_dontes
             return {
@@ -190,8 +214,11 @@ class ForditottKaszkadErtelmezo:
         normalizalt = normalizal(mondat)
         self.utolso_normalizalt = normalizalt
 
-        if self.llm is None or self._zart_valasz_e(normalizalt):
-            self.utolso_reteg = "szabaly"
+        if self.llm is None:
+            self.utolso_reteg = RETEG_SZABALY_TARTALEK
+            return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
+        if self._zart_valasz_e(normalizalt):
+            self.utolso_reteg = RETEG_SZABALY_ZART_VALASZ
             return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
 
         # A KAPUŐR MÁSODIK KATEGÓRIÁJA: engedélyezett tényválasz, zárt
@@ -208,7 +235,7 @@ class ForditottKaszkadErtelmezo:
         if kapuor_dontes.kategoria == kapuor.ENGEDELYEZETT_TENYVALASZ:
             bolt_id = rule_based.bolt_feloldas(mondat)
             if bolt_id is not None:
-                self.utolso_reteg = "szabaly"
+                self.utolso_reteg = RETEG_SZABALY_TENYVALASZ
                 return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
 
         llm_eredmeny = self.llm.ertelmez(
@@ -219,10 +246,10 @@ class ForditottKaszkadErtelmezo:
             # választ adott — a determinisztikus réteg veszi át, HIBA
             # NÉLKÜL (a vásárló ebből semmit nem vesz észre).
             _LOG.info("kaszkád: tartalék=szabaly (%s)", self.llm.utolso_hiba)
-            self.utolso_reteg = "szabaly"
+            self.utolso_reteg = RETEG_SZABALY_TARTALEK
             return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
 
-        self.utolso_reteg = "llm"
+        self.utolso_reteg = RETEG_LLM
         return self._determinisztikus_kapuk(llm_eredmeny, mondat, most, kontextus)
 
     def _determinisztikus_kapuk(

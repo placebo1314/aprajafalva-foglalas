@@ -139,15 +139,52 @@ def test_elharitas_okonkent_bontva() -> None:
 
 
 def test_csendes_tartalek_csak_ha_volt_modell() -> None:
-    """A `szabaly` réteg önmagában NEM hiba: a gombnyomásos út és a
-    zárt válaszok szándékosan oda futnak. Csak akkor gyanús, ha a
-    naplóban van llm-es forduló is — mert akkor volt konfigurált
-    modell, és ez a forduló mégis a tartalékra esett."""
-    csak_szabaly = hibamintak([_sor(reteg="szabaly"), _sor(reteg="szabaly")])
-    assert "csendes_tartalek" not in csak_szabaly
+    """Csak akkor gyanús, ha a naplóban van llm-es forduló is — mert
+    akkor volt konfigurált modell, és ez a forduló mégis a tartalékra
+    esett."""
+    csak_tartalek = hibamintak([_sor(reteg="szabaly:tartalek")] * 2)
+    assert "csendes_tartalek" not in csak_tartalek
 
-    vegyes = hibamintak([_sor(reteg="llm"), _sor(reteg="szabaly")])
+    vegyes = hibamintak([_sor(reteg="llm"), _sor(reteg="szabaly:tartalek")])
     assert vegyes["csendes_tartalek"] == [2]
+
+
+def test_a_szandekos_determinisztikus_utak_nem_csendes_tartalekok() -> None:
+    """A `szabaly:*` három értéke közül KETTŐ tervezett, gyors út
+    (gombnyomás, tényválasz-rövidzár, `forditott_kaszkad.RETEG_*`) —
+    csak a `szabaly:tartalek` jelent elhalt Ollamát.
+
+    Ez a teszt egy VALÓDI téves riasztást rögzít: a végigjátszás
+    naplójában a `"torpilla"` gombnyomás és a „Hogy néz ki a Törpilla
+    bolt?" tényválasz is „csendes tartaléknak" minősült, holott
+    mindkettő pontosan úgy működött, ahogy tervezve volt. A
+    megkülönböztetés azóta a forrásnál van, nem itt találgatva."""
+    mintak = hibamintak(
+        [
+            _sor(reteg="llm"),
+            _sor(reteg="szabaly:zart_valasz", bemenet="torpilla"),
+            _sor(reteg="szabaly:tenyvalasz", bemenet="Hogy néz ki a Törpilla bolt?"),
+        ]
+    )
+    assert "csendes_tartalek" not in mintak
+
+
+def test_regi_naplosor_utotag_nelkuli_szabaly_retege_nem_riaszt() -> None:
+    """A régi naplósorokban a `szabaly` utótag nélkül szerepel, mert a
+    három ok akkor még nem volt megkülönböztetve. Ezekről nem lehet
+    eldönteni, melyikről volt szó — visszamenőleg riasztani rájuk
+    hamis jelzés lenne."""
+    mintak = hibamintak([_sor(reteg="llm"), _sor(reteg="szabaly")])
+    assert "csendes_tartalek" not in mintak
+
+
+def test_elharitas_a_modell_dontese_ha_nincs_kapuor_ok() -> None:
+    """A `kapuor_ok` hiánya nem "ismeretlen": azt jelenti, hogy nem a
+    kapuőr hárított el, hanem a MODELL döntött úgy, hogy a kérés nem
+    foglalással kapcsolatos. A napló épp arra való, hogy a kettőt
+    megkülönböztesse."""
+    mintak = hibamintak([_sor(valasz_tipus="elutasitas", kapuor_ok=None)])
+    assert mintak["elharitas:modell_dontese"] == [1]
 
 
 def test_alacsony_bizonyossag_mezonkent() -> None:
