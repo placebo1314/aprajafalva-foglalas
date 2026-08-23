@@ -101,7 +101,56 @@ kiegészíti. A modell ezt nem tudhatta — sehol nem mondtuk meg neki.
   dolgozik — a rövidebb idézet („péntek") részszövege az inflektáltnak
   („pénteken").
 
-PLACEHOLDER_VEGSO_TABLA
+A második mérés a végleges kódon, 45 eset, `qwen3.5:9b`:
+
+| Értelmező | Összesített | Leggyengébb réteg | Válaszidő | Réteg-megoszlás |
+|---|---|---|---|---|
+| `szabaly` | 78,9% | `elengedes` 0% | ~0,00 s | — |
+| `llm` (kapuk nélkül) | 18,9% | `alkudozas` 0% | ~6,50 s | — |
+| `kaszkad` (ADR-016) | 76,7% | `elengedes` 0% | ~1,61 s | llm=3, szabaly=42 |
+| **`forditott`** (éles) | **81,1%** | **`elengedes` 66,7%** | ~6,48 s | llm=45 |
+
+Rétegenként, `forditott`, a három állapotban:
+
+| Réteg | ADR-018 (elengedés-hívással) | ADR-019 1. mérés | ADR-019 végleges |
+|---|---|---|---|
+| `alkudozas` | 100,0% | 33,3% | **100,0%** |
+| `egyszerusitett` | 87,5% | 87,5% | **100,0%** |
+| `elengedes` | 100,0% | 33,3% | 66,7% |
+| `kapuor` | 50,0% | 50,0% | 50,0% |
+| `koznyelvi` | 80,0% | 80,0% | 70,0% |
+| `mintan_tul` | 83,3% | 72,2% | 77,8% |
+| `szleng` | 100,0% | 100,0% | 100,0% |
+| `tajszolas` | 100,0% | 100,0% | 75,0% |
+| `toredekes` | 100,0% | 100,0% | 75,0% |
+| `valtozatossag` | 80,0% | 80,0% | 80,0% |
+| **összesített** | **88,9%** | 73,3% | 81,1% |
+
+## Ezt őszintén kell kimondani: a szám ROSSZABB lett
+
+**88,9% → 81,1%.** A fordított kaszkád továbbra is a legjobb a három
+felállás közül, és a leggyengébb rétege sokkal jobb a másik kettőnél
+(66,7% vs 0%) — de a saját korábbi csúcsához képest 7,8 pontot vesztett.
+Három ok, mindhárom azonosítható:
+
+1. **A golden set szigorodott.** A `koznyelvi-02` azóta a
+   `legkozelebbi_idopont` eszközt várja, és a modell (a prompt-sor és a
+   few-shot példa ellenére) a tág keresést adja rá — fél pont, kb. 1,1
+   százalékpont.
+2. **A biztonsági háló elvesztése valódi ár.** Az `elengedes` réteg
+   100% → 66,7%: a modell a *„és bármelyik másik boltban?"* mondatra
+   megtartja a boltot. Korábban ezt egy külön, zárt kérdés javította ki.
+   Ez a döntés tudatos: cserébe nincs második modellhívás, és nincs egy
+   olyan fogalom a rendszerben, amit senki más nem használ.
+3. **Futásonkénti szórás.** A `toredekes` és a `tajszolas` réteg
+   ugyanazzal a kóddal 75% és 100% között ingadozik futásról futásra
+   (`temperature: 0` mellett is). A 45 eses halmazon egy eset 2,2
+   százalékpont — a 7,8 pontos különbségből 2-4 pont ebbe belefér.
+
+**Ami viszont javult, és nem a mérésben látszik:** a válaszidő 7,83 s →
+6,48 s (nincs többé második hívás), a kód rövidebb két függvénnyel és egy
+fogalommal, és az `alkudozas` réteg — a beszélgetés-értés tulajdonképpeni
+mérőszáma — 100%.
 
 ## Miért
 

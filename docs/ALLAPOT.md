@@ -1,6 +1,7 @@
-# Állapot — 2026-08-23 (frissítve: a fordított kaszkád lett az éles út
-(ADR-018, az ADR-016 felülírva), `mintan_tul` golden réteg, tesztelhető
-vásárlói felület, fej nélküli végigjátszás)
+# Állapot — 2026-08-23 (frissítve: a modell a BESZÉLGETÉST látja
+(ADR-019, az elengedés-gépezet törölve), `legkozelebbi_idopont` eszköz,
+frusztráció-felismerés, `mintan_tul` golden réteg, tesztelhető vásárlói
+felület, fej nélküli végigjátszás)
 
 Egy oldalas pillanatkép: hol tartunk. A terv és a "miért" a
 `docs/blueprint.md`-ben és a `docs/roadmap.md`-ben van, ez itt nem
@@ -21,7 +22,7 @@ mérföldköveihez vannak jelölve, még nincs belőlük semmi megépítve.
 | M1 — Admin beosztásszerkesztő | **részben kész** | Naptárnézet, műszak felvitele, sablon-műszakok, hét másolása, törzsadat-szerkesztés, ütközéslista megvan. A törzsadat-szerkesztés kibővült a "Bolti tudás" mezőkkel (megjelenés/termékleírás/ár, `core/api/adminszolgaltatas.py::shop_description_update`/`service_description_update`) — a `bolt_info` eszköz ezeket olvassa vissza. Ami hiányzik: lásd lent. |
 | M2 — Eszközszerződés | **kész** | A hat eszköz (`assistant/tools/`) megvan: JSON-séma v1-gyel, `additionalProperties: false`, egységes hiba-formátummal, LLM nélkül hívható és tesztelt (23 teszt). |
 | M3 — Golden set és értékelő | **részben kész** | A nyelvi golden set **45 esetre** nőtt, 10 rétegben (`tests/golden/nyelvi_alap.yaml`): 22 egyfordulós, öt nyelvi réteg + 2 kapuőr + 6 alkudozás + 3 elengedés + 5 nyelvi változatosság + **9 `mintan_tul`**. A `mintan_tul` réteg mondattani ALAKZATOKAT mér (vagylagos, feltételes, indoklás mellékmondattal, kettős kérés, visszavonás, bizonytalanság, töltelék) — a magja a **04–09. tükörpár**: ugyanaz a szerkezet, a két napszak felcserélve, amire egy szólistás réteg szükségszerűen ugyanazt adja, tehát az egyiket elrontja. **Őszintén: a kilencből a determinisztikus réteg többet is megold, véletlenül** (a „28-án" beleesik a „jövő hét" ablakába; a napszak-minták sorrendje éppen jó irányba dől) — a réteg értéke a tükörpárban van, nem az esetek nehézségében. A roadmap 150-200 esetet ír elő kilépési feltételként, ez messze nincs meg; szituációs esetek (naptárállapot → ajánlás) egyáltalán nincsenek. A `python feladat.py golden` mind a négy felállást méri (`--ertelmezo szabaly|llm|kaszkad|forditott`), a kiértékelő egy tartós modulban (`tests/golden/futtato.py`), amit a `spike/golden_futtato.py` és a determinisztikus regressziós védőháló (`tests/egyseg/test_rule_based_golden_set.py`) is hív — nincs két másolat. **Egy mérési hiba javítva:** a `kitalalt_ar` tiltott-minta vizsgálat részszöveget keresett, ezért a `varhato_kerdes_tipusa` mezőt is „kitalált árnak" minősítette. |
-| M4 — Asszisztens | **részben kész** | A **determinisztikus fele kész**, és **az éles út mostantól a MODELL-ELSŐBBSÉGŰ (fordított) kaszkád** (ADR-018, felülírja az ADR-016-ot): `assistant/orchestrator.py` (ADR-007 állapotgép), `assistant/interpreter/` — `rule_based.py` (determinisztikus alapvonal és tartalék), `llm_based.py` (Ollama `/api/chat`, `format` séma-kényszerrel, few-shot példák, `think: false` explicit, logprob-alapú bizonyosság, `LLMSzolgaltato` absztrakció konfigból jövő modellnévvel — ADR-013), `forditott_kaszkad.py` (**éles**: normalizáló → modell → determinisztikus kapuk → szabály-alapú tartalék), `kaszkad.py` (ADR-016 sorrendje, **a visszaút**). **Mérve** a 45 esetes golden seten (`qwen3.5:9b`, l. lent „Konkrét számok"): `szabaly` 78,9%, `kaszkad` 83,3%, **`forditott` 88,9%** — és a leggyengébb rétegen is jobb (80,0% vs 40,0%). Ára: minden forduló hív modellt (~7,8 s/forduló), és a **kapuőr 100% → 50%** — ez a legfontosabb nyitott pont. A koppintós út (M4 terv 7. pontja) megvan: `ui/vasarlo.py`, két egyenrangú úttal (koppintós + szöveges) egy ablakban, mindkettő végigjátszható (keresés → jelölt-választás → „biztosan lefoglaljam?" → foglalási kód) — és mostantól **fej nélkül is** (`python feladat.py vegigjatszas`, `tools/vegigjatszas.py`: 13 beszélgetés + a teljes foglalási menet, Tkinter-eseményhurok nélkül). A felület **a beosztáshoz horgonyoz, nem a rendszerórához** (`horgony_most`), az ablak tetején kiírja, melyik hétre és melyik boltba van beosztás, mit jelent itt a „ma", és melyik értelmező dolgozik. A **próba-napló** (`naplo/probak.jsonl`) fordulónként nyolc mezőt rögzít (bemenet, normalizált alak, réteg, eszköz, paraméterek, bizonyosság, a válasz típusa, időbélyeg), és a szöveges fülön a „Napló megnyitása" gomb olvashatóan kiírja — l. `docs/TESZTELES.md`, „Beszélgetés-próba". A blueprint rögzíti a „Bolti tudás" elvet (10. szakasz): a bolt-szintű tény szerkesztett adat, a modell sosem generálja — a `bolt_info` eszköz `v2` sémát kapott (`megjelenes`/`termek`/`ar`, `migrations/0004_bolt_szolgaltatas_tudas.sql`). A **`valasz` modul** (`assistant/valasz/`) adja MINDEN magyar mondatot, a felület egyet sem fogalmaz — beleértve az új „rendszersor" kategóriát (az indító sor). **Szándék rétegzés** (`kovetkezo_kontextus`): a kemény rész (bolt, szolgáltatás) túléli a fordulót, a puha (dátum/napszak/óra) nem; a fordított kaszkádban a kemény rész a MODELL PROMPTJÁBA is bekerül, az elengedést pedig egy külön, zárt kérdés dönti el. **Enumeráció-védelem és rate limiting** a `foglalas_lekerdezes` ágon. **Bizonyosság-küszöbök** (`BizonyossagKuszobok`: eszköz 0,7, kritikus mező 0,6) → zárt kérdés küszöb alatt. **Ismétlésfigyelés**: ugyanaz a válaszfajta legfeljebb kétszer; a harmadikra kiút. **Hiányzik**: determinisztikus kapuőr a modell előtt (l. fent), kötött dekódolás GBNF/XGrammar szinten (ma az Ollama `format` JSON-séma-kényszere adja, ami nem ugyanaz), önkonzisztencia-ellenőrzés, és a bolti tudás (megjelenés/termék) a promptban — enélkül a „csillagos kirakatú bolt" típusú körülírást a modell nem tudja feloldani. |
+| M4 — Asszisztens | **részben kész** | A **determinisztikus fele kész**, és **az éles út mostantól a MODELL-ELSŐBBSÉGŰ (fordított) kaszkád** (ADR-018, felülírja az ADR-016-ot): `assistant/orchestrator.py` (ADR-007 állapotgép), `assistant/interpreter/` — `rule_based.py` (determinisztikus alapvonal és tartalék), `llm_based.py` (Ollama `/api/chat`, `format` séma-kényszerrel, few-shot példák, `think: false` explicit, logprob-alapú bizonyosság, `LLMSzolgaltato` absztrakció konfigból jövő modellnévvel — ADR-013), `forditott_kaszkad.py` (**éles**: normalizáló → modell → determinisztikus kapuk → szabály-alapú tartalék). **ADR-019: a modell a BESZÉLGETÉST látja** — az utolsó fordulók párbeszédként mennek a promptba (`ErtelmezesKontextus.elozmenyek`, a felület vezeti), a modell EGY hívásban adja vissza a teljes kérést, és ami már nem érvényes, azt egyszerűen nem tölti ki. Az "elengedés" fogalma és a hozzá tartozó külön modellhívás TÖRÖLVE. A megőrzött kontextus szerepe tartalékra szűkült: a modell null-ja erősebb nála. Két új kapu védi a szándék PUHA részét: a dátum-idézetet és a napszakot csak akkor fogadjuk el, ha az aktuális mondatból való, `kaszkad.py` (ADR-016 sorrendje, **a visszaút**). **Mérve** a 45 esetes golden seten (`qwen3.5:9b`, l. lent „Konkrét számok"): `szabaly` 78,9%, `kaszkad` 76,7%, **`forditott` 81,1%** — a leggyengébb rétegen sokkal jobb (66,7% vs 0%), de a saját ADR-018-as csúcsához (88,9%) képest visszaesett; az okok az ADR-019-ben tételesen. Ára: minden forduló hív modellt (~6,5 s/forduló), és a **kapuőr 100% → 50%** — ez a legfontosabb nyitott pont. A koppintós út (M4 terv 7. pontja) megvan: `ui/vasarlo.py`, két egyenrangú úttal (koppintós + szöveges) egy ablakban, mindkettő végigjátszható (keresés → jelölt-választás → „biztosan lefoglaljam?" → foglalási kód) — és mostantól **fej nélkül is** (`python feladat.py vegigjatszas`, `tools/vegigjatszas.py`: 13 beszélgetés + a teljes foglalási menet, Tkinter-eseményhurok nélkül). A felület **a beosztáshoz horgonyoz, nem a rendszerórához** (`horgony_most`), az ablak tetején kiírja, melyik hétre és melyik boltba van beosztás, mit jelent itt a „ma", és melyik értelmező dolgozik. A **próba-napló** (`naplo/probak.jsonl`) fordulónként nyolc mezőt rögzít (bemenet, normalizált alak, réteg, eszköz, paraméterek, bizonyosság, a válasz típusa, időbélyeg), és a szöveges fülön a „Napló megnyitása" gomb olvashatóan kiírja — l. `docs/TESZTELES.md`, „Beszélgetés-próba". A blueprint rögzíti a „Bolti tudás" elvet (10. szakasz): a bolt-szintű tény szerkesztett adat, a modell sosem generálja — a `bolt_info` eszköz `v2` sémát kapott (`megjelenes`/`termek`/`ar`, `migrations/0004_bolt_szolgaltatas_tudas.sql`). A **`valasz` modul** (`assistant/valasz/`) adja MINDEN magyar mondatot, a felület egyet sem fogalmaz — beleértve az új „rendszersor" kategóriát (az indító sor). **Szándék rétegzés** (`kovetkezo_kontextus`): a kemény rész (bolt, szolgáltatás) túléli a fordulót, a puha (dátum/napszak/óra) nem; a fordított kaszkádban a kemény rész a MODELL PROMPTJÁBA is bekerül, az elengedést pedig egy külön, zárt kérdés dönti el. **Enumeráció-védelem és rate limiting** a `foglalas_lekerdezes` ágon. **Bizonyosság-küszöbök** (`BizonyossagKuszobok`: eszköz 0,7, kritikus mező 0,6) → zárt kérdés küszöb alatt. **Ismétlésfigyelés**: ugyanaz a válaszfajta legfeljebb kétszer; a harmadikra kiút. **Új eszköz: `legkozelebbi_idopont`** ("mikor tudok legkorábban menni?") — EGY időpont, holddal, pontozás nélkül: erre a kérdésre egyetlen objektív helyes válasz van, és ott az ajánlatpontozó torzítana. **Frusztráció-felismerés** (`assistant/frusztracio.py`): a kimondott panasz, az eredménytelen fordulók és a hossz együtt visz kiúthoz, a MÁSODIK kiút pedig emberhez irányít (a vásárló 8. igénye) — az eddigi ismétlésfigyelő csak a SAJÁT válaszaink ismétlődését látta. **Hiányzik**: determinisztikus kapuőr a modell előtt (l. fent), kötött dekódolás GBNF/XGrammar szinten (ma az Ollama `format` JSON-séma-kényszere adja, ami nem ugyanaz), önkonzisztencia-ellenőrzés, és a bolti tudás (megjelenés/termék) a promptban — enélkül a „csillagos kirakatú bolt" típusú körülírást a modell nem tudja feloldani. |
 | M5 — Dolgozói nézet | **nem kezdődött el** | — |
 | M6 — Dev mód és finomhangolás | **nem kezdődött el** | — |
 
@@ -29,10 +30,13 @@ mérföldköveihez vannak jelölve, még nincs belőlük semmi megépítve.
 
 - **Tesztek:** 467 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`).
 - **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent).
-- **ADR-ek:** 17 dokumentum (001–014, 016–018) + 1 sablon. Ebből **16
+- **ADR-ek:** 18 dokumentum (001–014, 016–019) + 1 sablon. Ebből **17
   elfogadott**, **1 felülírva**: az ADR-016 (kaszkád sorrendje) —
   felülírta az **ADR-018**, amelynek első, elvető változata 2026-08-22-én
-  született, és 2026-08-23-án ÁTFORDULT (l. lent, "A négy felállás").
+  született, és 2026-08-23-án ÁTFORDULT. Az **ADR-019** az ADR-018-at
+  KIEGÉSZÍTI: a sorrend marad, a modell BEMENETE változott meg (a
+  beszélgetés, nem a kontextus adatként), és ezzel az "elengedés"
+  fogalma megszűnt.
   **A 015 szándékosan kimaradt**: ellenőrizve, git-történetben és a
   repóban sosem létezett, a szám emiatt véglegesen kimarad, l. ADR-016
   fejléce és az `adr` skill.
@@ -41,59 +45,54 @@ mérföldköveihez vannak jelölve, még nincs belőlük semmi megépítve.
   séma-kényszerrel: **47,7%** összesített, legrosszabb réteg a szleng
   (16,7%). Részletek és módszertan: `spike/EREDMENY.md`.
 - **Golden set — a négy felállás egymás mellett** (2026-08-23,
-  `qwen3.5:9b`, **45 eset**, 10 réteg: 22 egyfordulós + 6 alkudozás +
-  3 elengedés + 5 nyelvi változatosság + **9 `mintan_tul`**):
+  `qwen3.5:9b`, **45 eset**, 10 réteg, az ADR-019 átépítés UTÁN):
 
   | Értelmező | Összesített | Leggyengébb réteg | Válaszidő | Réteg-megoszlás |
   |---|---|---|---|---|
   | `szabaly` | 78,9% | `elengedes` 0% | ~0,00 s | — |
-  | `llm` (kapuk nélkül) | 25,6% | `alkudozas` 0,0% | ~6,44 s | — |
-  | `kaszkad` (ADR-016, felülírva) | 83,3% | `valtozatossag` 40,0% | ~3,07 s | llm=6, szabaly=39 |
-  | **`forditott`** (ADR-018, **éles**) | **88,9%** | **`koznyelvi` 80,0%** | ~7,83 s | llm=45 |
+  | `llm` (kapuk nélkül) | 18,9% | `alkudozas` 0% | ~6,50 s | — |
+  | `kaszkad` (ADR-016, felülírva) | 76,7% | `elengedes` 0% | ~1,61 s | llm=3, szabaly=42 |
+  | **`forditott`** (ADR-018+019, **éles**) | **81,1%** | **`elengedes` 66,7%** | ~6,48 s | llm=45 |
 
   Rétegenként:
 
   | Réteg | n | `szabaly` | `kaszkad` | `forditott` |
   |---|---|---|---|---|
   | `alkudozas` | 6 | 100,0% | 100,0% | 100,0% |
-  | `egyszerusitett` | 4 | 100,0% | 100,0% | 87,5% |
-  | `elengedes` | 3 | 0,0% | 100,0% | 100,0% |
+  | `egyszerusitett` | 4 | 100,0% | 100,0% | 100,0% |
+  | `elengedes` | 3 | 0,0% | 0,0% | 66,7% |
   | `kapuor` | 2 | 100,0% | 100,0% | **50,0%** |
-  | `koznyelvi` | 5 | 100,0% | 100,0% | 80,0% |
-  | `mintan_tul` | 9 | 72,2% | 72,2% | 83,3% |
-  | `szleng` | 3 | 100,0% | 100,0% | 100,0% |
-  | `tajszolas` | 4 | 100,0% | **50,0%** | 100,0% |
-  | `toredekes` | 4 | 100,0% | 100,0% | 100,0% |
+  | `koznyelvi` | 5 | 100,0% | 100,0% | 70,0% |
+  | `mintan_tul` | 9 | 72,2% | 72,2% | 77,8% |
+  | `szleng` | 3 | 100,0% | 66,7% | 100,0% |
+  | `tajszolas` | 4 | 100,0% | 75,0% | 75,0% |
+  | `toredekes` | 4 | 100,0% | 100,0% | 75,0% |
   | `valtozatossag` | 5 | 20,0% | 40,0% | 80,0% |
 
-  **A döntés MEGFORDULT** (ADR-018). A 2026-08-22-i mérés a fordított
-  kaszkádot elvetette (69,4%) — az a mérés egy **félkész** modult mért:
-  a `--ertelmezo forditott` kapcsoló a futtatóban nem is volt bekötve,
-  és a modell a beszélgetés kontextusát meg sem kapta. A befejezett
-  modul (kontextus a promptban, kontextus-kapu, elengedés-kapu,
-  vagylagos dátum, determinisztikus pótlások, zárt visszakérdezés-
-  halmaz) újramérve **88,9%**, és a leggyengébb rétegen is jobb
-  (80,0% vs 40,0%) — ezért **ez lett az éles út**, az ADR-016 sorrendje
-  pedig a visszaút.
+  **A szám ROSSZABB lett, mint az ADR-018 csúcsa (88,9% → 81,1%)** — ezt
+  ki kell mondani. A fordított kaszkád továbbra is a legjobb a három
+  felállás közül, és a leggyengébb rétege sokkal jobb a másik kettőnél
+  (66,7% vs 0%), de a saját korábbi eredményét nem hozta. Az ADR-019
+  tételesen felsorolja a három okot: a golden set szigorodott
+  (`koznyelvi-02` új eszközt vár), a biztonsági háló (elengedés-hívás)
+  elvesztése valódi ár, és a futásonkénti szórás 2-4 pontot magyaráz.
 
-  **Amit ezért feladunk, kimondva:**
-  - **Kapuőr 100% → 50%.** A hibázás módja a kevésbé káros fajta (nem
-    talál ki árat, hanem feleslegesen visszakérdez), de a blueprint
-    10. szakasza szerint a témán belül tartás NEM múlhat a modell
-    prompt-fegyelmén. **Ez a legfontosabb nyitott pont**; a
-    determinisztikus kapuőr a modell elé emelése külön ADR-t igényel,
-    mert az már hibrid architektúra.
-  - **Válaszidő ~3,07 s → ~7,83 s**, és minden forduló hív modellt
-    (llm=45/45). A hangcsatorna SLO-ja (blueprint §12) ma felfüggesztve
-    van — amint érvénybe lép, ez a felállás nem tartható.
-  - **Áthelyezés-felismerés**: a "Át tudnám tenni szerdára…" mondatot a
-    modell keresésnek érti (koznyelvi-05). Nem káros, de rossz élmény.
+  **Ami nem a mérésben látszik, mégis javult:** a válaszidő 7,83 s →
+  6,48 s (nincs többé második modellhívás), a kód rövidebb két
+  függvénnyel és egy fogalommal, és az `alkudozas` réteg — a
+  beszélgetés-értés tulajdonképpeni mérőszáma — 100%.
 
-  **Mérési figyelmeztetés:** a szórás nem elhanyagolható. A `forditott`
-  `mintan_tul` rétege UGYANAZZAL a kóddal két futáson 94,4% és 83,3%
-  volt (`temperature: 0` mellett is). Egy 45 eses halmazon egy eset 2,2
-  százalékpont — a fenti számok ±1 eset pontossággal olvasandók, és a
-  roadmap 150-200 eses kilépési feltétele emiatt is fontos.
+  **Mérési korlát, ami ALÁbecsli a fordított kaszkádot:** a golden
+  futtató az értelmezőt méri, az orchestrator bizonyosság-kapuját nem.
+  A `tajszolas-02` eseten a modell 0,58-as bizonyossággal tippelt boltot
+  — élesben ez a 0,6-os küszöb alatt zárt kérdéssé alakulna, vagyis
+  helyes válasszá. A mérésben bukásként számít.
+
+  **Amit ezért feladunk, kimondva:** a **kapuőr** (50% — a "Mennyibe
+  kerül?" kérdésre visszakérdez, ahelyett hogy elhárítaná; nem talál ki
+  árat, de feleslegesen kérdez), az **áthelyezés-felismerés**, és a
+  **bolt megjelenés szerinti azonosítása**. Mindhárom ismert, egyik sem
+  a sorrend hibája.
 
 ## Mi hiányzik az M1 lezárásához (konkrétan)
 
