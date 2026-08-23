@@ -7,10 +7,14 @@ mihez mérni (roadmap M4: "modellválasztás méréssel"). A golden set
 
 A feldolgozás sorrendje (mindegyik az előzőt kizárva):
 
-1. kapuőr — nem foglalással kapcsolatos kérés (időjárás, ár) → `nincs`
-2. tényválasz-szándék (nyitvatartás/cím/megjelenés/termék) → `bolt_info`
-   ("ár" a séma szintjén létezik, de ide sosem jut el — a kapuőr korábban
-   elkapja, l. 1. pont)
+1. **kapuőr** (`assistant/kapuor/`, ADR-020) — hatókör-döntés zárt,
+   három elemű osztályozással. Kívül eső kérés → `nincs`. **A minták
+   nem itt vannak**: a kapuőr önálló modul, mert a modell-elsőbbségű
+   úton (`forditott_kaszkad.py`) a modell ELŐTT kell futnia, és a két
+   útnak ugyanazt a döntést kell hoznia.
+2. tényválasz-szándék (nyitvatartás/cím/időtartam/megjelenés/termék) →
+   `bolt_info`. Ezt is a kapuőr dönti el (második kategória) — az "ár"
+   a séma szintjén létezik, de ide sosem jut el, a kapuőr elhárítja.
 3. lemondás-szándék → `foglalas_lemondas`, vagy `visszakerdez` kód nélkül
 4. áthelyezés-szándék → `visszakerdez` (a v1 nem keres új időpontot
    automatikusan egy mondatból — lásd `assistant/orchestrator.py`
@@ -30,19 +34,11 @@ from datetime import datetime, timedelta
 
 from hun_date_parser import text2datetime
 
+from assistant import kapuor
 from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.normalizalo import normalizal
 from assistant.tools import katalogus
 
-_KAPUOR_MINTAK = re.compile(r"milyen id[őo]\b|id[őo]j[áa]r[áa]s|mennyibe ker[üu]l|mibe ker[üu]l")
-_NYITVATARTAS_MINTA = re.compile(r"nyitva|nyitvatart[áa]s|mikor nyit|mikor z[áa]r")
-_CIM_MINTA = re.compile(r"\bhol van\b|merre van|\bc[íi]m\b")
-_MEGJELENES_KOZVETLEN_MINTA = re.compile(r"n[ée]z\s*ki|ismerem\s*fel|ismerni\s*fel")
-_MEGJELENES_MILYEN_MINTA = re.compile(r"\bmilyen\b")
-_MEGJELENES_TARGY_MINTA = re.compile(r"bolt|kirakat|c[ée]g[ée]r|homlokzat")
-_TERMEK_MINTA = re.compile(
-    r"mit\s*[áa]rul|milyen\s*term[ée]k|mit\s*lehet\s*kapni|mit\s*lehet\s*venni|mit\s*kapni"
-)
 _LEMONDAS_MINTA = re.compile(r"le\s*szeretn[ée]m\s*mondani|\blemond")
 _ATHELYEZES_MINTA = re.compile(r"[áa]thelyez|[áa]t\s*tudn[áa]m\s*tenni|[áa]ttenni|[áa]t\s*tenni")
 _KOD_MINTA = re.compile(r"\b[A-Z0-9]{6,10}\b")
@@ -108,30 +104,21 @@ _LEGKORABBI_MINTA = re.compile(r"legkor[áa]bb|legel[őo]bb|legk[öo]zelebb|legh
 
 _PREFERALT_ORA_MINTA = re.compile(r"\b(\d{1,2})\s*(?:óra|körül)")
 
-
-def _kapuor_talalat(also: str) -> bool:
-    return _KAPUOR_MINTAK.search(also) is not None
-
-
-def _megjelenes_kerdes(also: str) -> bool:
-    if _MEGJELENES_KOZVETLEN_MINTA.search(also):
-        return True
-    # "milyen" és a tárgy (bolt/kirakat/...) nem feltétlenül szomszédos
-    # szavak ("Milyen a Szundi kirakata?") — külön keresett, nem egy
-    # összefüggő mintaként.
-    return bool(_MEGJELENES_MILYEN_MINTA.search(also) and _MEGJELENES_TARGY_MINTA.search(also))
-
-
-def _bolt_info_mezo(also: str) -> str | None:
-    if _NYITVATARTAS_MINTA.search(also):
-        return "nyitvatartas"
-    if _CIM_MINTA.search(also):
-        return "cim"
-    if _megjelenes_kerdes(also):
-        return "megjelenes"
-    if _TERMEK_MINTA.search(also):
-        return "termek"
-    return None
+# MÚLTRA mutató időkifejezés: múltat jelölő szó + az utána álló
+# időszavak (l. `_mult_ido_kifejezesek_nelkul`). Az időszó-lista zárt,
+# és a `\w*` a magyar toldalékolást fedi ("héten", "hétre", "kedden").
+# A jelző UTÁN álló összes időszót elnyeli, hogy a "múlt hét pénteken"
+# egészében kiessen, ne csak a "hét".
+_MULT_JELZO = r"m[úu]lt|el[őo]z[őo]|tavalyi|legut[óo]bbi"
+_IDO_SZO = (
+    r"h[ée]t\w*|h[ée]tf[őo]\w*|kedd\w*|szerd[áa]?\w*|cs[üu]t[öo]rt[öo]k\w*|"
+    r"p[ée]ntek\w*|szombat\w*|vas[áa]rnap\w*|nap\w*|h[óo]nap\w*|[ée]v\w*|"
+    r"alkalom\w*|alkalommal|h[ée]tv[ée]g\w*"
+)
+_MULT_IDO_MINTA = re.compile(
+    rf"\b({_MULT_JELZO})\s+(?:(?:{_IDO_SZO})\s*)+",
+    re.IGNORECASE,
+)
 
 
 def _bolt_azonositas(also: str) -> str | None:
@@ -194,11 +181,36 @@ def _datum_talalatok(szoveg: str, most_dt: datetime) -> list[dict]:
     return []
 
 
+def _mult_ido_kifejezesek_nelkul(szoveg: str) -> str:
+    """A MÚLTRA mutató időkifejezéseket kiveszi a szövegből, MIELŐTT a
+    dátumfeloldás elkezdődne.
+
+    **Miért kell.** A robusztussági halmaz (`hosszu-01-tobb-tema`) fogta
+    meg: a *„a szomszédom … így csinálta a múlt héten"* mondatrészből a
+    `_HET_JELZO_MINTA` egy KERESÉSI ABLAKOT csinált a folyó hétre. A
+    vásárló egy szót sem mondott arról, hogy MIKOR akar menni — a
+    dátum tehát kitalált tény volt, egy szomszéd korábbi látogatásából.
+
+    Ugyanez a hibaosztály, mint a `nyelvi_alap.yaml::egyszerusitett-03`
+    („Múltkor is voltam… Az délelőtt volt", `tilos: kitalalt_datum`) —
+    az csak azért nem bukott, mert ott a mondatban nem volt hét- vagy
+    napnév, amibe a parser belekapaszkodhatott volna. A védelem ott
+    tehát véletlen volt, nem elvi; ez a függvény teszi elvivé.
+
+    **A mondat többi része érintetlen marad.** Nem az egész mondatot
+    dobjuk el, csak a múltra mutató KIFEJEZÉST — így a vegyes mondat is
+    helyesen működik: *„múlt kedden voltam, de szerdán mennék"* → a
+    „múlt kedden" kiesik, a „szerdán" feloldódik. Egy „ha múltbeli
+    utalás van, nincs dátum" szabály ezt elrontaná."""
+    return _MULT_IDO_MINTA.sub(" ", szoveg)
+
+
 def _datum_ablak_explicit(szoveg: str, most_iso: str) -> tuple[str | None, str | None]:
     """Ténylegesen a mondatból kinyert dátumablak — `(None, None)`, ha
     semmi nem oldható fel. NEM tartalmaz tartalék/alapértelmezett
     ablakot (azt a hívó adja hozzá, ha kell)."""
     most_dt = datetime.fromisoformat(most_iso.replace("Z", "+00:00")).replace(tzinfo=None)
+    szoveg = _mult_ido_kifejezesek_nelkul(szoveg)
     also = szoveg.lower()
 
     # HÉT-kifejezés (a héten / jövő hétre / következő hét folyamán) csak
@@ -291,13 +303,22 @@ class SzabalyAlapuErtelmezo:
         szoveg = normalizal(mondat)
         also = szoveg.lower()
 
-        if _kapuor_talalat(also):
-            # A kapuőr pozitív mintaillesztés — determinisztikusan biztos.
-            return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {"eszkoz": 1.0}}
+        # KAPUŐR (ADR-020) — hatókör-döntés a feldolgozás elején, zárt
+        # osztályozással. Ugyanaz a modul dönt itt és a modell-elsőbbségű
+        # úton (`forditott_kaszkad.py`), hogy a két út ne mondhasson mást
+        # ugyanarra a mondatra.
+        kapuor_dontes = kapuor.dontes(mondat)
+        if kapuor_dontes.kivul:
+            return {
+                "eszkoz": "nincs",
+                "parameterek": {},
+                # A kapuőr pozitív mintaillesztés — determinisztikusan biztos.
+                "bizonyossag": {"eszkoz": 1.0},
+                "kapuor_ok": kapuor_dontes.ok,
+            }
 
-        bolt_info_mezo = _bolt_info_mezo(also)
-        if bolt_info_mezo is not None:
-            return self._bolt_info(szoveg, also, most, bolt_info_mezo)
+        if kapuor_dontes.kategoria == kapuor.ENGEDELYEZETT_TENYVALASZ:
+            return self._bolt_info(szoveg, also, most, kapuor_dontes.ok)
 
         if _LEMONDAS_MINTA.search(also):
             kod = _foglalasi_kod(mondat)
@@ -484,16 +505,16 @@ def datum_ablak_feloldas(kifejezes: str, most: str) -> tuple[str | None, str | N
 
 def bolt_info_mezo_feloldas(mondat: str) -> str | None:
     """Melyik TÉNYRE kérdez a mondat (`nyitvatartas` | `cim` |
-    `megjelenes` | `termek`), vagy `None`, ha nem tényválasz-kérdés —
-    nyilvános alak (`_bolt_info_mezo`).
+    `idotartam` | `megjelenes` | `termek`), vagy `None`, ha nem
+    tényválasz-kérdés.
 
-    Ezek POZITÍV, nagy pontosságú mintaillesztések ("hogy néz ki",
-    "meddig van nyitva", "hol van"), és a `mit` zárt halmaz. A fordított
-    kaszkád ezért ezt a mezőt a szabálytól veszi, ha van találat: egy
-    rossz `mit` azt jelenti, hogy a rendszer MÁS kérdésre válaszol
-    szerkesztett bolti adattal (a végigjátszás megfogta: a "Hogy néz ki
-    a Törpilla bolt?" kérdésre a címet olvasta fel)."""
-    return _bolt_info_mezo(normalizal(mondat).lower())
+    **A minták a `assistant/kapuor/`-ban vannak, nem itt** (ADR-020): a
+    kapuőr második kategóriája ("engedélyezett tényválasz, zárt
+    listából") és a `bolt_info.mit` mező UGYANAZ a döntés. Ez a
+    függvény megmaradt átjáróként, mert a `forditott_kaszkad.py` és a
+    tesztek erre a névre hivatkoznak — de nem tart saját mintalistát,
+    ami szétdrifthetne a kapuőrétől."""
+    return kapuor.tenyvalasz_mezo(mondat)
 
 
 def preferalt_ora_feloldas(mondat: str) -> int | None:

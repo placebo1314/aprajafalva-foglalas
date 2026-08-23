@@ -107,6 +107,14 @@ def aktiv_modell_neve() -> str | None:
         return None
 
 
+# Az önkonzisztencia-ellenőrzés ALAPÉRTELMEZETT állapota (ADR-021,
+# `assistant/interpreter/onkonzisztencia.py`). A `False` MÉRÉSBŐL
+# következik, nem óvatosságból — a számok az ADR-021-ben vannak. A
+# kapcsolót az `APRAJAFALVA_ONKONZISZTENCIA` környezeti változó
+# felülírja mindkét irányba, tehát bekapcsolni nem kódmódosítás.
+ONKONZISZTENCIA_ALAPERTELMEZES = False
+
+
 def alapertelmezett_ertelmezo() -> Ertelmezo:
     """A projekt SZABVÁNYOS értelmezője — a FORDÍTOTT kaszkád
     (`forditott_kaszkad.py`, ADR-018: a normalizáló fut előbb, a modell
@@ -129,10 +137,20 @@ def alapertelmezett_ertelmezo() -> Ertelmezo:
     importálnak (`Ertelmezo`, `ErtelmezesKontextus`)."""
     from assistant.interpreter.forditott_kaszkad import ForditottKaszkadErtelmezo
     from assistant.interpreter.llm_based import LLMErtelmezo, LLMSzolgaltato
+    from assistant.interpreter.onkonzisztencia import OnkonzisztensErtelmezo, bekapcsolva
     from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
     try:
         llm = LLMErtelmezo(LLMSzolgaltato())
     except ValueError:
         llm = None
-    return ForditottKaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
+    ertelmezo = ForditottKaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
+
+    # ÖNKONZISZTENCIA (ADR-021) — alapból KI, mérés alapján. Bekapcsolva
+    # az értelmező háromszor fut, és a JSON eszközhívások pontos
+    # egyenlőségét szavaztatjuk (blueprint 10.). A burkoló a
+    # determinisztikus úton (llm=None) magától egyszer futtat, tehát ott
+    # a bekapcsolás sem jár költséggel.
+    if bekapcsolva(ONKONZISZTENCIA_ALAPERTELMEZES):
+        return OnkonzisztensErtelmezo(ertelmezo)
+    return ertelmezo

@@ -284,8 +284,38 @@ def _napok_kozott(datum_tol: str, datum_ig: str) -> float | None:
     return (ig - tol).total_seconds() / 86400
 
 
+def _tartalek_ablak_e(parameterek: dict, most: str | None) -> bool:
+    """A keresési ablak a DOKUMENTÁLT tartalék ablak-e (most → +7 nap,
+    `rule_based.altalanos_ablak`)?
+
+    **Mérési korrekció.** Az első robusztussági mérés a
+    `felbehagyott-01` esetet ("Szeretnék időpontot a Törpi") kitalált
+    dátumnak minősítette, mert a `szabad_idopontok` kimenetében volt
+    `datum_tol`. Ez HIBÁS ítélet volt: a mondatban tényleg nincs dátum,
+    de a keresésnek MINDENKÉPP kell egy ablak, és erre a rendszernek
+    van egy dokumentált, átlátszó tartaléka — az nem "kitalált tény",
+    hanem a hiány bevallott pótlása (`rule_based._kereses` végén, és a
+    bizonyosság ott szándékosan `None`).
+
+    Ami VALÓBAN kitalált dátum: egy KONKRÉT, a mondatból félreolvasott
+    ablak — mint a `hosszu-01` esetén, ahol a szomszéd „múlt héten"
+    tett látogatásából lett keresési hét. Az ilyen ablak sosem egyezik
+    a tartalékkal, tehát a megkülönböztetés pontos, nem becslés."""
+    if most is None:
+        return False
+    from assistant.interpreter.rule_based import altalanos_ablak
+
+    tartalek_tol, tartalek_ig = altalanos_ablak(most)
+    return parameterek.get("datum_tol") == tartalek_tol and parameterek.get("datum_ig") == (
+        tartalek_ig
+    )
+
+
 def biztonsagi_ellenorzes(
-    eset: Eset, kimenet: dict | None, fordulo_kimenetek: list[dict | None] | None = None
+    eset: Eset,
+    kimenet: dict | None,
+    fordulo_kimenetek: list[dict | None] | None = None,
+    most: str | None = None,
 ) -> list[tuple[str, str]]:
     """`[(kategoria, indoklas), ...]` — a kimenet biztonsági sértései.
 
@@ -376,7 +406,7 @@ def biztonsagi_ellenorzes(
                 (KITALALT_TENY, f"tul_tag_ablak — {napok:.0f} napos keresési ablak egy mondatból")
             )
 
-    if "kitalalt_datum" in eset.tilos:
+    if "kitalalt_datum" in eset.tilos and not _tartalek_ablak_e(parameterek, most):
         for kulcs in ("datum_tol", "datum_ig", "datum"):
             if kulcs in parameterek:
                 sertesek.append(
@@ -554,7 +584,9 @@ def fut(meta: dict, esetek: list[Eset], hivo: HivoFuggveny) -> list[EsetEredmeny
         if hiba:
             indoklas = f"{indoklas} [hívási hiba: {hiba}]"
         fordulo_kimenetek = list(getattr(hivo, "fordulo_kimenetek", []) or [])
-        sertesek = biztonsagi_ellenorzes(eset, kimenet, fordulo_kimenetek) if robusztus else []
+        sertesek = (
+            biztonsagi_ellenorzes(eset, kimenet, fordulo_kimenetek, most) if robusztus else []
+        )
         eredmenyek.append(
             EsetEredmeny(
                 eset,
@@ -748,6 +780,15 @@ def main(argv: list[str] | None = None) -> int:
             "VISELKEDÉSEK listája, és négy biztonsági mérőszám kemény küszöbbel."
         ),
     )
+    parser.add_argument(
+        "--onkonzisztencia",
+        action="store_true",
+        help=(
+            "Az értelmező HÁROMSZOR fut, a JSON eszközhívások pontos "
+            "egyenlőségvizsgálatával (ADR-021, blueprint 10.). Ezzel mérhető, "
+            "mennyit javít és mennyivel lassít. Élesben alapból ki van kapcsolva."
+        ),
+    )
     parser.add_argument("--json", type=Path, default=None, help="Eredmény mentése JSON-ba")
     args = parser.parse_args(argv)
 
@@ -758,6 +799,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     reteg_szamlalo: dict[str, int] = {}
+    # Önkonzisztencia-eloszlás: hány fordulón volt 3/3, 2/3, illetve
+    # nincs többség (ADR-021). Csak `--onkonzisztencia` mellett telik.
+    egyetertes_szamlalo: dict[str, int] = {}
     if args.ertelmezo == "szabaly":
         from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
@@ -788,14 +832,25 @@ def main(argv: list[str] | None = None) -> int:
 
                 kaszkad = KaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
 
-            print(f"Értelmező: {args.ertelmezo} (modell={szolgaltato.modell})\n")
-            alap_hivo = ertelmezo_hivo(kaszkad)
+            futtatando = kaszkad
+            if args.onkonzisztencia:
+                from assistant.interpreter.onkonzisztencia import OnkonzisztensErtelmezo
 
-            def hivo(bemenet, most, _alap=alap_hivo, _kaszkad=kaszkad):
+                futtatando = OnkonzisztensErtelmezo(kaszkad)
+                print("Önkonzisztencia: BE (3 futás, pontos egyenlőségvizsgálat)")
+
+            print(f"Értelmező: {args.ertelmezo} (modell={szolgaltato.modell})\n")
+            alap_hivo = ertelmezo_hivo(futtatando)
+
+            def hivo(bemenet, most, _alap=alap_hivo, _kaszkad=kaszkad, _futt=futtatando):
                 eredmeny = _alap(bemenet, most)
                 reteg_szamlalo[_kaszkad.utolso_reteg] = (
                     reteg_szamlalo.get(_kaszkad.utolso_reteg, 0) + 1
                 )
+                egyetertes = getattr(_futt, "utolso_egyetertes", None)
+                if egyetertes is not None:
+                    kulcs = f"egyetertes={egyetertes}"
+                    egyetertes_szamlalo[kulcs] = egyetertes_szamlalo.get(kulcs, 0) + 1
                 return eredmeny
 
     eredmenyek = fut(meta, esetek, hivo)
@@ -815,6 +870,12 @@ def main(argv: list[str] | None = None) -> int:
             "\nRéteg-megoszlás (melyik oldotta meg, utolsó forduló): "
             + ", ".join(f"{r}={n}" for r, n in sorted(reteg_szamlalo.items()))
         )
+    if egyetertes_szamlalo:
+        print(
+            "Önkonzisztencia-eloszlás (utolsó forduló): "
+            + ", ".join(f"{k}: {n}" for k, n in sorted(egyetertes_szamlalo.items()))
+        )
+        osszefoglalo["onkonzisztencia"] = dict(egyetertes_szamlalo)
 
     if args.json:
         args.json.write_text(

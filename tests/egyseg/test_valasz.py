@@ -20,6 +20,7 @@ Két külön szempont fut végig a teszteken:
 from __future__ import annotations
 
 import random
+import re
 
 from assistant import valasz
 from assistant.valasz.sablonok import SABLONOK
@@ -61,10 +62,30 @@ def test_hiba_szoveg_ismeretlen_kulcsnal_a_kulcsot_irja_ki():
 
 
 def test_hiba_szoveg_ismert_kulcs():
-    assert (
-        valasz.hiba_szoveg("nem_foglalasi_kerdes")
-        == "Ez a kérdés nem foglalással kapcsolatos, ebben nem tudok segíteni."
+    assert valasz.hiba_szoveg("nem_foglalasi_kerdes").startswith(
+        "Ez a kérdés nem foglalással kapcsolatos"
     )
+
+
+def test_kapuor_elharito_mondatok_kiutat_is_adnak():
+    """ADR-020: a kapuőr három elhárító mondata. Az elhárítás attól
+    udvarias, hogy KIUTAT is ad (blueprint 7. szakasz, "Négy technika"),
+    nem attól, hogy szépen fogalmaz — mindhárom mondatnak meg kell
+    mondania, mire tudunk válaszolni."""
+    for kulcs in ("nem_foglalasi_kerdes", "ertelmezhetetlen_bemenet", "ar_nem_adhato"):
+        mondat = valasz.hiba_szoveg(kulcs)
+        assert not mondat.startswith("Hiba:"), f"hiányzó sablon: {kulcs}"
+        assert "időpont" in mondat.lower() or "bolt" in mondat.lower(), mondat
+
+
+def test_ar_elharitas_nem_tartalmaz_arat():
+    """Az elhárító mondat sem közölhet árat — az ár nem engedélyezett
+    tényválasz ezen a csatornán (blueprint 10.), és ez a mondat épp
+    ezt mondja ki. Egy "kb. 500 Ft" típusú kiegészítés itt a legrosszabb
+    helyen lenne."""
+    mondat = valasz.hiba_szoveg("ar_nem_adhato")
+    assert not re.search(r"\d", mondat), mondat
+    assert "forint" not in mondat.lower() and " ft" not in mondat.lower()
 
 
 # --- visszaigazolas --------------------------------------------------------

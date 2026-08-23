@@ -79,6 +79,24 @@ _ISMETLES_KUSZOB = 2
 # dimenziók, amelyek mentén a vásárló ténylegesen tud lazítani.
 _KIUT_DIMENZIOK = ("bolt", "het", "napszak")
 
+# A kapuőr `ok`-kulcsa (`assistant/kapuor/`) → melyik magyar mondat
+# menjen ki (`assistant/valasz/sablonok.py`). Ami nincs benne, arra az
+# általános elhárítás megy.
+#
+# **Miért nem egy mondat mindenre.** Az "udvarias elhárítás" akkor
+# udvarias, ha VÁLASZOL a kérdésre — akár nemmel. Egy értelmezhetetlen
+# bemenetre ("?????") a "ez nem foglalással kapcsolatos" válasz
+# értelmetlen: a vásárló nem kérdezett semmit, csak nem értett. Egy
+# ár-kérdésre pedig meg lehet mondani, hogy MIÉRT nem válaszolunk, és
+# hogy mire igen. A leképezés ZÁRT: a kapuőr `ok`-készlete zárt, a
+# sablonoké is.
+_ELUTASITAS_UZENET = {
+    "ertelmezhetetlen": "ertelmezhetetlen_bemenet",
+    "ar": "ar_nem_adhato",
+    "utasitas_feluliras": "nem_foglalasi_kerdes",
+    "sema_kenyszerites": "nem_foglalasi_kerdes",
+}
+
 
 @dataclass(frozen=True)
 class BizonyossagKuszobok:
@@ -272,7 +290,16 @@ class Orchestrator:
 
         if eszkoz == "nincs":
             allapot.sikertelen_ertelmezesek = 0
-            return {"tipus": "elutasitas", "uzenet_kulcs": "nem_foglalasi_kerdes"}
+            return {
+                "tipus": "elutasitas",
+                "uzenet_kulcs": _ELUTASITAS_UZENET.get(
+                    ertelmezes.get("kapuor_ok"), "nem_foglalasi_kerdes"
+                ),
+                # A kapuőr oka a naplóba is bekerül (`tools/naplo_elemzo.py`)
+                # — abból derül ki, MIÉRT hárítottunk el, nem csak hogy
+                # elhárítottunk.
+                "kapuor_ok": ertelmezes.get("kapuor_ok"),
+            }
 
         if eszkoz == "visszakerdez":
             return self._visszakerdez(allapot, parameterek)

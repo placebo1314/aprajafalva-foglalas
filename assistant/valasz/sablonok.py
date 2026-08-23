@@ -31,8 +31,30 @@ SABLONOK: dict[str, dict[str, object]] = {
         # "nincs_folyamatban_levo_valasztas").
         # ------------------------------------------------------------
         "hiba": {
+            # A KAPUŐR három elhárító mondata (ADR-020,
+            # `assistant/orchestrator.py::_ELUTASITAS_UZENET`). Mind a
+            # három megmondja, MIRE tudunk válaszolni — az elhárítás
+            # attól udvarias, hogy kiutat is ad (blueprint 7. szakasz,
+            # "Négy technika"), nem attól, hogy szépen fogalmaz.
             "nem_foglalasi_kerdes": (
-                "Ez a kérdés nem foglalással kapcsolatos, ebben nem tudok segíteni."
+                "Ez a kérdés nem foglalással kapcsolatos, ebben nem tudok segíteni. "
+                "Időpontot viszont szívesen keresek — melyik boltba és mikorra szeretnél?"
+            ),
+            # Üres, zajos vagy értelmezhetetlen bemenet. Itt a vásárló
+            # nem kérdezett rosszat — nem kérdezett SEMMIT. A "nem
+            # foglalással kapcsolatos" mondat erre értelmetlen volna.
+            "ertelmezhetetlen_bemenet": (
+                "Ezt nem sikerült értelmeznem. Mondd meg, melyik boltba szeretnél "
+                "menni és körülbelül mikor — a többit elintézem."
+            ),
+            # Ár. Kimondjuk, hogy MIÉRT nem válaszolunk (nem "nem
+            # tudom" — nem is szabad), és hogy hol lehet megtudni.
+            # Konkrét árat ez a mondat sem tartalmaz, és nem is
+            # tartalmazhat: az ár nem engedélyezett tényválasz ezen a
+            # csatornán (blueprint 10.).
+            "ar_nem_adhato": (
+                "Az árakról itt nem tudok tájékoztatást adni — azt a boltban mondják meg. "
+                "Időpontot viszont szívesen keresek."
             ),
             "nincs_szabad_hely_az_ablakban": "Sajnos nincs szabad időpont ebben az ablakban.",
             # NEM szűkösség — a bolt nem hirdetett meg beosztást. Ezt

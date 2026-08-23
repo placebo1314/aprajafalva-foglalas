@@ -20,6 +20,14 @@ volt: a gyökérok az volt, hogy a modell nem látta a beszélgetést.
 ```
 mondat + előzmények
   │
+  ├─ 0. KAPUŐR (assistant/kapuor/, ADR-020) — HATÓKÖR-döntés
+  │      zárt, három elemű osztályozás: foglalási szándék /
+  │      engedélyezett tényválasz / azon kívüli. Kívül esőnél a
+  │      modell MEG SEM SZÓLAL — `nincs` megy vissza, modellhívás
+  │      nélkül. Engedélyezett tényválasznál, ha a bolt is
+  │      determinisztikusan feloldható, egyenesen a szerkesztett
+  │      adathoz megyünk (szintén modellhívás nélkül).
+  │
   ├─ 1. NORMALIZÁLÓ (determinisztikus szótár, normalizalo.py)
   │      tájszólás/szleng/csapdaszó → köznyelvi alak
   │
@@ -60,12 +68,13 @@ mintaillesztéssé nőtt (bolt-, napszak-, lemondás-, áthelyezés-minták
 listája), és a nyelvi változatosságot elvi okból nem tudja lefedni:
 minden új megfogalmazás új mintát igényelne.
 
-**Ami MÉG NEM determinisztikus, pedig kellene** (ADR-018, "A következő
-lépés"): a **kapuőr**. A "Mennyibe kerül a nagy petárda?" mondatra ma a
-modell dönt, és a mérésen 50%-ot ad — a blueprint 10. szakasza szerint a
-témán belül tartás kifejezetten NEM múlhat a modell prompt-fegyelmén. A
-kapuőr-minták a modell ELÉ emelése külön ADR-t igényel, mert az már
-hibrid architektúra, nem "fordított kaszkád".
+**A kapuőr azóta determinisztikus** (ADR-020, 2026-08-23). Az ADR-018
+"A következő lépés" szakasza ezt jelölte ki nyitott pontnak: a
+"Mennyibe kerül a nagy petárda?" mondatra a modell döntött, és a
+mérésen 50%-ot adott. Azóta a hatókör-döntés a modell ELŐTT fut
+(`assistant/kapuor/`), zárt osztályozással, és a kívül eső kérésnél a
+modell meg sem szólal. Ez ténylegesen hibrid architektúra — a fordított
+kaszkád a hatókörön BELÜLI kérésekre vonatkozik, nem mindenre.
 
 **Amit a fordítás NEM változtat meg** — ezek továbbra is
 determinisztikusak, és a modell nem kerülheti meg őket:
@@ -89,8 +98,9 @@ from __future__ import annotations
 
 import logging
 
+from assistant import kapuor
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, rule_based
-from assistant.interpreter.llm_based import LLMErtelmezo
+from assistant.interpreter.llm_based import LLMErtelmezo, Mintavetel
 from assistant.interpreter.normalizalo import normalizal
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 from assistant.tools import katalogus
@@ -124,17 +134,53 @@ class ForditottKaszkadErtelmezo:
     hívni — ez teszi lehetővé, hogy a felület modell nélkül is működjön
     (`ui/vasarlo.py`)."""
 
+    # Az önkonzisztencia-burkoló ebből tudja, hogy a mintavétel átmegy
+    # rajta a modellig (`onkonzisztencia.py`, ADR-021).
+    TAMOGAT_MINTAVETELT = True
+
     def __init__(self, szabaly: Ertelmezo | None = None, llm: LLMErtelmezo | None = None):
         self.szabaly = szabaly or SzabalyAlapuErtelmezo()
         self.llm = llm
-        # "llm" | "szabaly" — melyik réteg adta az utolsó választ.
+        # "kapuor" | "llm" | "szabaly" — melyik réteg adta az utolsó
+        # választ. A "kapuor" azt jelenti, hogy a modell meg sem szólalt.
         self.utolso_reteg: str | None = None
+        # Az utolsó kapuőr-döntés — megfigyelhetőséghez (napló,
+        # `tools/naplo_elemzo.py`). Nem a protokoll része.
+        self.utolso_kapuor: kapuor.KapuorDontes | None = None
         # Az utolsó mondat normalizált alakja — megfigyelhetőséghez
         # (`ui/vasarlo.py` próba-naplója: mit LÁTOTT a modell). Nem a
         # protokoll része, a hívók `getattr`-ral olvassák.
         self.utolso_normalizalt: str | None = None
 
-    def ertelmez(self, mondat: str, *, most: str, kontextus: ErtelmezesKontextus) -> dict:
+    def ertelmez(
+        self,
+        mondat: str,
+        *,
+        most: str,
+        kontextus: ErtelmezesKontextus,
+        mintavetel: Mintavetel | None = None,
+    ) -> dict:
+        """`mintavetel`: az önkonzisztencia-burkoló
+        (`onkonzisztencia.py`, ADR-021) adja át — a MODELLIG megy le
+        változatlanul, a determinisztikus kapukat nem érinti. `None`
+        esetén minden pontosan úgy fut, mint eddig (`temperature: 0`)."""
+        # 0. KAPUŐR — hatókör-döntés a modell ELŐTT (ADR-020, blueprint
+        # 10.). Kívül eső kérésnél a modell MEG SEM SZÓLAL: nem hívjuk
+        # meg. Ez nem prompt-fegyelem kérdése, hanem architektúráé — és
+        # egyben a leggyorsabb ág is (nulla modellhívás).
+        kapuor_dontes = kapuor.dontes(mondat)
+        if kapuor_dontes.kivul:
+            self.utolso_reteg = "kapuor"
+            self.utolso_normalizalt = normalizal(mondat)
+            self.utolso_kapuor = kapuor_dontes
+            return {
+                "eszkoz": "nincs",
+                "parameterek": {},
+                "bizonyossag": {"eszkoz": 1.0},
+                "kapuor_ok": kapuor_dontes.ok,
+            }
+        self.utolso_kapuor = kapuor_dontes
+
         # 1. NORMALIZÁLÓ — determinisztikus szótár a modell ELŐTT
         # (blueprint 7., "Négy technika" 1. pont). A tájszólási és
         # szleng-alakokat nem a modellnek kell kitalálnia. A
@@ -148,7 +194,26 @@ class ForditottKaszkadErtelmezo:
             self.utolso_reteg = "szabaly"
             return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
 
-        llm_eredmeny = self.llm.ertelmez(normalizalt, most=most, kontextus=kontextus)
+        # A KAPUŐR MÁSODIK KATEGÓRIÁJA: engedélyezett tényválasz, zárt
+        # listából. A blueprint 10. szakasza szerint ez "nem hívja az
+        # értelmezőt tartalmi kérdésben, egyenesen a szerkedett
+        # adathoz megy" — és itt ez ténylegesen megtehető, mert a
+        # tényválaszhoz kellő MINDKÉT adat determinisztikus: a `mit`-et
+        # a kapuőr adja (a modell válaszát amúgy is felülírtuk vele), a
+        # boltot a zárt halmazú `bolt_feloldas`.
+        #
+        # Ha a bolt NEM oldható fel determinisztikusan (pl. a
+        # megjelenésével körülírva — "a csillagos kirakatú bolt"), az ág
+        # nem szólal meg, és a mondat megy a modellhez, ahogy eddig.
+        if kapuor_dontes.kategoria == kapuor.ENGEDELYEZETT_TENYVALASZ:
+            bolt_id = rule_based.bolt_feloldas(mondat)
+            if bolt_id is not None:
+                self.utolso_reteg = "szabaly"
+                return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
+
+        llm_eredmeny = self.llm.ertelmez(
+            normalizalt, most=most, kontextus=kontextus, mintavetel=mintavetel
+        )
         if self.llm.utolso_hiba is not None:
             # TARTALÉK: az Ollama nem elérhető vagy értelmezhetetlen
             # választ adott — a determinisztikus réteg veszi át, HIBA

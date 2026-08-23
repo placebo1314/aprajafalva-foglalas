@@ -37,11 +37,21 @@ def _ertelmez(mondat: str, kontextus: ErtelmezesKontextus | None = None) -> dict
 
 
 def test_kapuor_idojaras():
-    assert _ertelmez("Milyen idő lesz holnap?") == {"eszkoz": "nincs", "parameterek": {}}
+    assert _ertelmez("Milyen idő lesz holnap?") == {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        # ADR-020: a kapuőr az OKOT is visszaadja, hogy az elhárító
+        # mondat konkrét lehessen (`orchestrator._ELUTASITAS_UZENET`).
+        "kapuor_ok": "idojaras",
+    }
 
 
 def test_kapuor_ar():
-    assert _ertelmez("Mennyibe kerül a nagy petárda?") == {"eszkoz": "nincs", "parameterek": {}}
+    assert _ertelmez("Mennyibe kerül a nagy petárda?") == {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        "kapuor_ok": "ar",
+    }
 
 
 def test_kapuor_nem_akad_fenn_a_holnap_szon():
@@ -106,7 +116,7 @@ def test_bolt_info_ar_kapuornel_akad_el_nem_jut_el_bolt_infoig():
     is elutasítja — a golden set kapuor-02 esete (docs/blueprint.md
     10. szakasz, "Bolti tudás")."""
     eredmeny = _ertelmez("Mennyibe kerül a nagy petárda?")
-    assert eredmeny == {"eszkoz": "nincs", "parameterek": {}}
+    assert eredmeny == {"eszkoz": "nincs", "parameterek": {}, "kapuor_ok": "ar"}
 
 
 def test_bolt_info_bolt_nelkul_visszakerdez():

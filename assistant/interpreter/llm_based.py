@@ -384,6 +384,25 @@ class LLMSzolgaltato:
             object.__setattr__(self, "modell", nev)
 
 
+@dataclass(frozen=True)
+class Mintavetel:
+    """Egy MINTAVÉTELES futás paraméterei — az önkonzisztencia-
+    ellenőrzéshez (`assistant/interpreter/onkonzisztencia.py`, ADR-021).
+
+    Alaphelyzetben a rendszer `temperature: 0`-val dolgozik, ami a
+    lehető legkiszámíthatóbb. Az önkonzisztencia viszont pont a modell
+    BIZONYTALANSÁGÁT akarja láthatóvá tenni — ahhoz mintavételezni
+    kell: három futás `temperature: 0`-val három (majdnem) azonos
+    választ adna, amiből semmi nem derül ki.
+
+    A `seed` a reprodukálhatóságért van: ugyanaz a mondat ugyanazokkal a
+    magokkal ugyanazt a három futást adja, tehát a mérés
+    megismételhető."""
+
+    temperature: float
+    seed: int
+
+
 class LLMErtelmezo:
     """Az `Ertelmezo` protokoll LLM-alapú implementációja — Ollama
     `/api/chat`, `format` paraméterrel séma-kényszerítve.
@@ -392,11 +411,23 @@ class LLMErtelmezo:
     nem dob kivételt, hanem `{"eszkoz": "nincs", "parameterek": {}}`-et ad,
     és az `utolso_hiba` mezőn jelzi, mi történt (l. modul docstring)."""
 
+    # Az önkonzisztencia-burkoló ebből tudja, hogy érdemes-e többször
+    # futtatni (`onkonzisztencia.py`). A determinisztikus értelmezőn a
+    # három futás azonos lenne, tehát ott a burkoló nem is próbálkozik.
+    TAMOGAT_MINTAVETELT = True
+
     def __init__(self, szolgaltato: LLMSzolgaltato | None = None):
         self.szolgaltato = szolgaltato or LLMSzolgaltato()
         self.utolso_hiba: str | None = None
 
-    def ertelmez(self, mondat: str, *, most: str, kontextus: ErtelmezesKontextus) -> dict:
+    def ertelmez(
+        self,
+        mondat: str,
+        *,
+        most: str,
+        kontextus: ErtelmezesKontextus,
+        mintavetel: Mintavetel | None = None,
+    ) -> dict:
         self.utolso_hiba = None
         payload = {
             "model": self.szolgaltato.modell,
@@ -413,7 +444,11 @@ class LLMErtelmezo:
             "format": FORMAT_SEMA,
             "stream": False,
             "think": False,  # explicit — l. modul docstring
-            "options": {"temperature": 0},
+            "options": (
+                {"temperature": 0}
+                if mintavetel is None
+                else {"temperature": mintavetel.temperature, "seed": mintavetel.seed}
+            ),
             # A bizonyosság a TÉNYLEGES dekódolási valószínűségekből jön,
             # nem a modell önbevallásából (`bizonyossag_szamol`).
             "logprobs": True,

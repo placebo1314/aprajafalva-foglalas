@@ -84,7 +84,35 @@ def test_fordulo_nincs_elutasitas(tmp_path):
 
     valasz = orch.fordulo("session-1", "Milyen idő lesz holnap?", _MOST)
 
-    assert valasz == {"tipus": "elutasitas", "uzenet_kulcs": "nem_foglalasi_kerdes"}
+    assert valasz == {
+        "tipus": "elutasitas",
+        "uzenet_kulcs": "nem_foglalasi_kerdes",
+        "kapuor_ok": None,
+    }
+
+
+def test_fordulo_nincs_elutasitas_kapuor_okkal(tmp_path):
+    """ADR-020: a kapuőr `ok`-kulcsa KONKRÉT elhárító mondatot választ.
+
+    Az "ez nem foglalással kapcsolatos" mondat egy értelmezhetetlen
+    bemenetre ("?????") értelmetlen lenne — a vásárló nem kérdezett
+    rosszat, egyáltalán nem kérdezett. A leképezés zárt
+    (`_ELUTASITAS_UZENET`); ismeretlen okra az általános mondat megy."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {"eszkoz": "nincs", "parameterek": {}, "kapuor_ok": "ertelmezhetetlen"},
+            {"eszkoz": "nincs", "parameterek": {}, "kapuor_ok": "ar"},
+            {"eszkoz": "nincs", "parameterek": {}, "kapuor_ok": "politika"},
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    assert orch.fordulo("s", "?????", _MOST)["uzenet_kulcs"] == "ertelmezhetetlen_bemenet"
+    assert orch.fordulo("s", "Mennyibe kerül?", _MOST)["uzenet_kulcs"] == "ar_nem_adhato"
+    # Ismeretlen (nem leképezett) ok → az általános elhárítás.
+    assert orch.fordulo("s", "Kire szavazzak?", _MOST)["uzenet_kulcs"] == "nem_foglalasi_kerdes"
 
 
 def test_fordulo_utolso_ertelmezes_a_nyers_kimenetet_orzi(tmp_path):

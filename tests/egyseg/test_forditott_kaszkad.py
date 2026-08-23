@@ -20,15 +20,28 @@ _MOST = "2026-08-17T09:00:00Z"  # hétfő
 class _FakeLLM:
     """Az `LLMErtelmezo`-t helyettesíti — nincs Ollama-hívás."""
 
+    TAMOGAT_MINTAVETELT = True
+
     def __init__(self, valasz: dict | None = None, hiba: str | None = None):
         self.valasz = valasz or {"eszkoz": "nincs", "parameterek": {}}
         self.utolso_hiba = hiba
         self.kapott_mondatok: list[str] = []
         self.kapott_kontextusok: list[ErtelmezesKontextus] = []
+        # Az önkonzisztencia-burkoló által átadott mintavételek
+        # (ADR-021) — `None` a kanonikus, `temperature: 0` futás.
+        self.kapott_mintavetelek: list[object] = []
 
-    def ertelmez(self, mondat: str, *, most: str, kontextus: ErtelmezesKontextus) -> dict:
+    def ertelmez(
+        self,
+        mondat: str,
+        *,
+        most: str,
+        kontextus: ErtelmezesKontextus,
+        mintavetel=None,
+    ) -> dict:
         self.kapott_mondatok.append(mondat)
         self.kapott_kontextusok.append(kontextus)
+        self.kapott_mintavetelek.append(mintavetel)
         return self.valasz
 
 
@@ -531,11 +544,22 @@ def test_bizonyossag_atmegy_a_kapukon():
     assert eredmeny["bizonyossag"]["eszkoz"] == 0.42
 
 
-def test_kapuor_dontes_atmegy():
-    llm = _FakeLLM({"eszkoz": "nincs", "parameterek": {}})
-    eredmeny = _ertelmez(_kaszkad(llm), "Milyen idő lesz holnap?")
+def test_kapuor_a_modell_elott_dont_es_a_modell_meg_sem_szolal():
+    """ADR-020: a hatókör-döntés a modell ELŐTT fut, és kívül eső
+    kérésnél a modellt meg sem hívjuk.
 
-    assert eredmeny == {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {}}
+    A hamis modell itt szándékosan olyan választ adna, ami helytelen
+    lenne (keresés egy időjárás-kérdésre) — a teszt épp azt bizonyítja,
+    hogy ez a válasz meg sem születik: a `hivasok` számláló nulla
+    marad."""
+    llm = _FakeLLM({"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "szundi"}})
+    kaszkad = _kaszkad(llm)
+    eredmeny = _ertelmez(kaszkad, "Milyen idő lesz holnap?")
+
+    assert eredmeny["eszkoz"] == "nincs"
+    assert eredmeny["kapuor_ok"] == "idojaras"
+    assert kaszkad.utolso_reteg == "kapuor"
+    assert llm.kapott_mondatok == []
 
 
 def test_bolt_info_datum_csak_naptari_nap():
