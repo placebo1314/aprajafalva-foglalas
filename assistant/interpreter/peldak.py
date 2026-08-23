@@ -88,6 +88,13 @@ PELDAK: list[tuple[str, dict]] = [
             "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
         },
     ),
+    # "legkorábban" — saját eszköz, nem időszak-keresés. A különbség a
+    # kérdésben van: itt nincs időszak, egyetlen válasz jár rá
+    # (`assistant/tools/legkozelebbi_idopont.py`).
+    (
+        "Mikor tudok leghamarabb bemenni a Szundihoz?",
+        {"eszkoz": "legkozelebbi_idopont", "parameterek": {"bolt_id": "szundi"}},
+    ),
     # vagylagos/feltételes időpont — KÉT dátumkifejezés egy mondatban.
     # A modell mindkettőt IDÉZI; az ablakot a determinisztikus dátum-kapu
     # vonja össze (`forditott_kaszkad.py::_datum_ablak`), nem a modell.

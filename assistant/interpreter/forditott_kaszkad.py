@@ -317,6 +317,31 @@ class ForditottKaszkadErtelmezo:
         return ""
 
     @staticmethod
+    def _mondatbeli_napszak(napszak: str | None, mondat: str) -> str | None:
+        """A modell napszaka, HA az aktuális mondat egyáltalán beszél
+        napszakról — különben `None`.
+
+        A napszak is a szándék PUHA része, ugyanaz a szabály vonatkozik
+        rá, mint a dátumra (`_mondatbeli_kifejezes`): nem szivároghat át
+        egy korábbi fordulóból. A mérés ezt meg is fogta: a *„kedden
+        délelőtt" → „bármikor a jövő héten"* menetben a dátum már
+        helyesen a jövő hétre ugrott, de a `delelott` továbbjött, és
+        némán leszűkítette a kitágított ablakot.
+
+        **A DÖNTÉST nem vesszük el a modelltől**, csak a forrást
+        kötjük meg: ha a mondat beszél napszakról, a modell választása
+        érvényes (ez kell az „azért délután, mert délelőtt dolgozom"
+        szerkezethez, ahol KÉT napszak-szó van, és a mondattan dönt). Ha
+        a mondat egyáltalán nem beszél napszakról, nincs mit
+        választania."""
+        if not napszak:
+            return None
+        if rule_based.napszak_feloldas(mondat) is None:
+            _LOG.info("kaszkád: a modell napszaka nem az aktuális mondatból való (%r)", napszak)
+            return None
+        return napszak
+
+    @staticmethod
     def _datum_ablak(
         nyers: dict, mondat: str, most: str
     ) -> tuple[str | None, str | None, str | None]:
@@ -402,7 +427,7 @@ class ForditottKaszkadErtelmezo:
             )
 
         datum_tol, datum_ig, kifejezes_napszak = self._datum_ablak(nyers, mondat, most)
-        napszak = parameterek.get("napszak") or kifejezes_napszak
+        napszak = self._mondatbeli_napszak(parameterek.get("napszak"), mondat) or kifejezes_napszak
 
         vegleges: dict = {"bolt_id": bolt_id}
         if datum_tol:

@@ -706,3 +706,49 @@ def test_toldalekolt_alak_meg_elfogadott_idezet():
     eredmeny = _ertelmez(_kaszkad(llm), "és jövő héten pénteken?")
 
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-28T00:00:00Z"
+
+
+def test_korabbi_fordulo_napszaka_nem_szivarog_at():
+    """A napszak is a PUHA rész: a "kedden délelőtt" → "bármikor a jövő
+    héten" menetben a délelőtt némán leszűkítette a kitágított ablakot."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "ugyifogyi",
+                "datum_kifejezes": "jövő héten",
+                "napszak": "delelott",  # az ELŐZŐ fordulóból
+            },
+        }
+    )
+
+    eredmeny = _ertelmez(
+        _kaszkad(llm),
+        "bármikor a jövő héten",
+        elozmenyek=[(KI_VASARLO, "Szeretnék petárdázni kedden délelőtt.")],
+    )
+
+    assert eredmeny["parameterek"]["napszak"] == "barmikor"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-30T23:59:59Z"
+
+
+def test_a_modell_napszak_dontese_megmarad_ha_a_mondat_beszel_rola():
+    """A DÖNTÉST nem vesszük el: ha a mondatban két napszak-szó is van,
+    a modell választása érvényes — épp ez a tükörpár lényege."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "ugyifogyi",
+                "datum_kifejezes": "holnap",
+                "napszak": "delutan",
+            },
+        }
+    )
+
+    eredmeny = _ertelmez(
+        _kaszkad(llm), "A petárdáshoz azért délután mennék holnap, mert délelőtt dolgozom."
+    )
+
+    assert eredmeny["parameterek"]["napszak"] == "delutan"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-18T17:59:59Z"
