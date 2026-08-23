@@ -20,6 +20,7 @@ működik: **`docs/TESZTELES.md`**. Ha azt akarod tudni, hol tartunk: **`docs/AL
 | `docs/roadmap.md` | mérföldkövek és az első lépések |
 | `docs/domain.md` | a domain-fogalmak szótára (magyar), és a magyar↔angol kódnév-táblázat |
 | `docs/KOMPONENSEK.md` | újrahasznosítható komponensek, licencekkel |
+| `docs/ALTALANOSITAS.md` | mi javul elvileg, és mi marad ismert korlát — a strukturális javítás és a ráigazítás különbsége |
 | `docs/adr/` | döntési feljegyzések kiváltó feltétellel |
 | `docs/PLATFORM_TANULSAGOK.md` | mit tanulhatunk a Cal.com és a Vapi platformoktól — a saját terveink szemüvegén át |
 | `docs/CLAUDE_KISOKOS.md` | gyakorlati jegyzet a Claude Code használatáról ebben a projektben |
