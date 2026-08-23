@@ -74,7 +74,11 @@ trace → annotálás → golden set"), és tesztelés közben ez mutatja meg,
 MI történt — a szöveges fülön a "Napló megnyitása" gomb olvashatóan
 kiírja. **Vásárlóazonosító ide sosem jut el** — a megerősítéshez
 használt azonosító-mező (`_megerosit`) egy KÜLÖN út a `privacy/`
-hash-hívásba, nem érinti ezt a naplót.
+hash-hívásba, nem érinti ezt a naplót. Ami viszont KÉRETLENÜL
+elhangozhat a szabad szövegben (telefonszám, TAJ, e-mail), az
+**redaktálva** kerül lemezre: a `bemenet`, a `normalizalt` és a
+`parameterek` mind átmegy a `privacy/redakcio`-n a kiírás előtt
+(CLAUDE.md 2. invariáns).
 
 Indítás:
     python -m ui.vasarlo
@@ -104,6 +108,7 @@ from assistant.tools import katalogus  # noqa: E402
 from core.azonosito import new_uuid  # noqa: E402
 from core.repo import migracio, muszak_repo, torzsadat_repo  # noqa: E402
 from privacy.hash_ideiglenes import ideiglenes_hash  # noqa: E402
+from privacy.redakcio import redaktal, redaktal_ertekek  # noqa: E402
 from seed.betolt import ALAP_DB_PATH  # noqa: E402
 
 _NAPSZAKOK = [
@@ -184,15 +189,23 @@ def _proba_naplo_ir(
     külön felmerül: mit írtam be, mit LÁTOTT belőle a rendszer
     (`normalizalt`), ki oldotta meg (`reteg`), minek értette (`eszkoz`,
     `parameterek`), mennyire volt biztos benne (`bizonyossag`), mi lett
-    belőle (`valasz_tipus`), és mikor (`idobelyeg`)."""
+    belőle (`valasz_tipus`), és mikor (`idobelyeg`).
+
+    **REDAKTÁLÁS TÁROLÁS ELŐTT** (CLAUDE.md 2. invariáns, ADR-005): a
+    vásárló mondata és az abból kinyert paraméterek egyaránt átmennek a
+    `privacy/redakcio`-n, MIELŐTT lemezre kerülnének. Ez nem elméleti
+    óvatosság: a robusztussági halmaz "személyes adat" kategóriája
+    pontosan azt méri, mi történik, ha valaki KÉRETLENÜL bediktálja a
+    telefonszámát — enélkül a szám nyersen kerülne a naplófájlba, és
+    soha nem kértük."""
     _PROBA_NAPLO_UTVONAL.parent.mkdir(parents=True, exist_ok=True)
     sor = {
         "idobelyeg": _most_iso(),
-        "bemenet": bemenet,
-        "normalizalt": normalizalt,
+        "bemenet": redaktal(bemenet),
+        "normalizalt": redaktal(normalizalt),
         "reteg": reteg,
         "eszkoz": (ertelmezes or {}).get("eszkoz"),
-        "parameterek": (ertelmezes or {}).get("parameterek"),
+        "parameterek": redaktal_ertekek((ertelmezes or {}).get("parameterek")),
         "bizonyossag": (ertelmezes or {}).get("bizonyossag"),
         "valasz_tipus": valasz_tipus,
     }
