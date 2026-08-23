@@ -171,11 +171,17 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   megjelenés-adatot nem látja, ezért visszakérdez). Az első kettőre a
   determinisztikus réteg mintája már megvan; a modell ELÉ emelésük külön
   ADR-t igényel, mert az már hibrid architektúra.
-- **Az ár a modell felé strukturálisan le van zárva.** A fej nélküli
-  végigjátszás megfogta, hogy a modell egy megjelenés-kérdésre
-  `mit: "ar"`-t adott, és a felület az árat olvasta fel. Az `"ar"` azóta
-  nincs benne a modellnek adott `mit` enumban (`llm_based.py`) — az
-  eszköz maga továbbra is tud árat adni admin-oldali használatra.
+- **Az ár KÉT ponton is le van zárva a vásárlói csatornán.** A fej
+  nélküli végigjátszás előbb azt fogta meg, hogy a modell egy
+  megjelenés-kérdésre `mit: "ar"`-t adott (azóta az `"ar"` nincs a
+  modellnek adott enumban), majd azt, hogy a `mit: "termek"` úton a
+  termékleírás MELLETT az ár is kiment volna — ezért a
+  `valasz.tenyvalasz_szoveg` sem írja ki. Az eszköz adata továbbra is
+  tartalmazza, admin-oldali használatra. A **kapuőr** viszont továbbra
+  is a modellen múlik (50%), ezért a "Mennyibe kerül?" kérdésre ma
+  termékleírás megy udvarias elhárítás helyett — nem káros, de nem is
+  helyes; a determinisztikus kapuőr külön ADR (l. ADR-018,
+  "A következő lépés").
 - **A vásárlói felület a BEOSZTÁSHOZ horgonyoz, nem a rendszerórához.**
   A demóadat egy fix, 2026-12-21-gyel kezdődő hétre és EGYETLEN boltra
   (Törpilla) generál beosztást; a felület ezért a nap-választót és a
