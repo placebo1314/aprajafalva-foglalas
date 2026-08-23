@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 import tkinter as tk
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -183,13 +184,27 @@ def _proba_naplo_ir(
     *,
     normalizalt: str | None = None,
     valasz_tipus: str | None = None,
+    valaszido_masodperc: float | None = None,
+    uzenet_kulcs: str | None = None,
+    kapuor_ok: str | None = None,
+    egyetertes: int | None = None,
 ) -> None:
     """Egy fordulót ír a `naplo/probak.jsonl`-be — l. modul docstring,
-    "Próba-napló". Nyolc mező, mert tesztelés közben mind a nyolc kérdés
-    külön felmerül: mit írtam be, mit LÁTOTT belőle a rendszer
-    (`normalizalt`), ki oldotta meg (`reteg`), minek értette (`eszkoz`,
-    `parameterek`), mennyire volt biztos benne (`bizonyossag`), mi lett
-    belőle (`valasz_tipus`), és mikor (`idobelyeg`).
+    "Próba-napló". A mezők azért ennyien vannak, mert tesztelés közben
+    mindegyik kérdés külön felmerül: mit írtam be, mit LÁTOTT belőle a
+    rendszer (`normalizalt`), ki oldotta meg (`reteg`), minek értette
+    (`eszkoz`, `parameterek`), mennyire volt biztos benne
+    (`bizonyossag`), mi lett belőle (`valasz_tipus`, `uzenet_kulcs`),
+    mennyi ideig tartott (`valaszido_masodperc`), és mikor
+    (`idobelyeg`).
+
+    **Az utolsó négy mező a napló-elemzőért került be**
+    (`tools/naplo_elemzo.py`, `python feladat.py naplo`): válaszidő
+    nélkül nem lehet átlagot és p95-öt számolni, `uzenet_kulcs` és
+    `kapuor_ok` nélkül a hibaminták csak típus-szinten látszanának
+    ("elutasítás" — de miért?), `egyetertes` nélkül pedig az
+    önkonzisztencia hatása mérhetetlen lenne éles használat közben.
+    Mind a négy opcionális: a régi naplósorok is olvashatók maradnak.
 
     **REDAKTÁLÁS TÁROLÁS ELŐTT** (CLAUDE.md 2. invariáns, ADR-005): a
     vásárló mondata és az abból kinyert paraméterek egyaránt átmennek a
@@ -208,6 +223,12 @@ def _proba_naplo_ir(
         "parameterek": redaktal_ertekek((ertelmezes or {}).get("parameterek")),
         "bizonyossag": (ertelmezes or {}).get("bizonyossag"),
         "valasz_tipus": valasz_tipus,
+        "uzenet_kulcs": uzenet_kulcs,
+        "kapuor_ok": kapuor_ok,
+        "egyetertes": egyetertes,
+        "valaszido_masodperc": (
+            None if valaszido_masodperc is None else round(valaszido_masodperc, 3)
+        ),
     }
     with _PROBA_NAPLO_UTVONAL.open("a", encoding="utf-8") as fajl:
         fajl.write(json.dumps(sor, ensure_ascii=False) + "\n")
@@ -252,6 +273,13 @@ def proba_naplo_szoveg(sorok: list[dict]) -> str:
             f"   paraméterek:  {parameterek}\n"
             f"   bizonyosság:  {bizonyossag}\n"
             f"   válasz:       {sor.get('valasz_tipus')}"
+            + (f" ({sor['uzenet_kulcs']})" if sor.get("uzenet_kulcs") else "")
+            + (f"\n   kapuőr:       {sor['kapuor_ok']}" if sor.get("kapuor_ok") else "")
+            + (
+                f"\n   válaszidő:    {sor['valaszido_masodperc']} s"
+                if sor.get("valaszido_masodperc") is not None
+                else ""
+            )
         )
     return "\n\n".join(darabok)
 
@@ -657,9 +685,13 @@ class VasarloApp(tk.Tk):
         self.szo_allapot.config(text=valasz_szoveg.nyugtazo_szoveg({}))
         self.update_idletasks()
 
+        # A válaszidő a TELJES fordulót méri (értelmezés + eszközhívás),
+        # mert a vásárló is ezt érzékeli — nem csak a modellhívást.
+        kezdet = time.monotonic()
         valasz = self.orchestrator.fordulo(
             self.session_id, szoveg, self._most_iso(), elozmenyek=elozmenyek
         )
+        valaszido = time.monotonic() - kezdet
         self.szo_allapot.config(text="")
         _proba_naplo_ir(
             szoveg,
@@ -667,6 +699,10 @@ class VasarloApp(tk.Tk):
             getattr(self.orchestrator.ertelmezo, "utolso_reteg", None),
             normalizalt=getattr(self.orchestrator.ertelmezo, "utolso_normalizalt", None),
             valasz_tipus=valasz.get("tipus") or ("sikeres" if valasz.get("sikeres") else "hiba"),
+            valaszido_masodperc=valaszido,
+            uzenet_kulcs=valasz.get("uzenet_kulcs"),
+            kapuor_ok=valasz.get("kapuor_ok"),
+            egyetertes=getattr(self.orchestrator.ertelmezo, "utolso_egyetertes", None),
         )
         self._szoveges_valasz_kezel(valasz)
 

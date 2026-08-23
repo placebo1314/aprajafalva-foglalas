@@ -7,6 +7,7 @@ python feladat.py golden [--json UTVONAL]
 python feladat.py migracio "<leiras>"
 python feladat.py seed [--ujra]
 python feladat.py vegigjatszas [--db UTVONAL]
+python feladat.py naplo [--utolso N] [--golden SOR]
 python feladat.py lint
 
 A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
@@ -25,6 +26,12 @@ Két halmaz van (`--halmaz nyelvi|robusztus`):
 
 A `vegigjatszas` a vásárlói felületet hajtja végig Tkinter-eseményhurok
 nélkül (`tools/vegigjatszas.py`) — önellenőrzés, mielőtt kézzel leülnél elé.
+
+A `naplo` a próba-naplót (`naplo/probak.jsonl`) összesíti
+(`tools/naplo_elemzo.py`): fordulószám, réteg-megoszlás, átlag és p95
+válaszidő, bizonyosság-eloszlás, leggyakoribb hibaminták. A
+`--golden <sor>` egy naplósorból golden teszteset-vázat ír, a `varhato`
+mezőt ÜRESEN hagyva — a helyes választ embernek kell beírnia.
 """
 
 from __future__ import annotations
@@ -83,6 +90,10 @@ def vegigjatszas(argv: list[str]) -> int:
     return fut([sys.executable, "-m", "tools.vegigjatszas", *argv])
 
 
+def naplo(argv: list[str]) -> int:
+    return fut([sys.executable, "-m", "tools.naplo_elemzo", *argv])
+
+
 def lint(_: list[str]) -> int:
     for parancs in (
         [sys.executable, "-m", "ruff", "format", "--check", "."],
@@ -100,6 +111,7 @@ FELADATOK = {
     "migracio": migracio,
     "seed": seed,
     "vegigjatszas": vegigjatszas,
+    "naplo": naplo,
     "lint": lint,
 }
 
