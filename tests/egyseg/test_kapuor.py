@@ -184,7 +184,7 @@ def test_idotartam_kerdes_nem_ar_kerdes() -> None:
         ("Fog-e esni a hétvégén?", kapuor.OK_IDOJARAS),
         ("Kire szavazzak a következő választáson?", kapuor.OK_POLITIKA),
         ("Szerinted el kellene költöznöm Aprajafalvából?", kapuor.OK_SZEMELYES_TANACS),
-        ("Mit tegyek, ha nem tudok dönteni?", kapuor.OK_SZEMELYES_TANACS),
+        ("Adj egy tanácsot, kérlek.", kapuor.OK_SZEMELYES_TANACS),
         ("Számold ki, mennyi 17 * 23!", kapuor.OK_MATEMATIKA),
         ("Írj nekem egy verset a törpökről.", kapuor.OK_KREATIV_KERES),
         ("Fordítsd le ezt angolra.", kapuor.OK_KREATIV_KERES),
@@ -199,6 +199,33 @@ def test_hatokoron_kivuli_temak(bemenet: str, varhato_ok: str) -> None:
 
 
 # --- 6. a bizonytalanság NEM elzárás ---------------------------------
+
+
+def test_valodi_mondat_nem_akad_fenn_egy_kivul_eso_mintan() -> None:
+    """A TÉVES KIZÁRÁS ellen — a súlyosabb hibairány (l. modul
+    docstring). Ezek mind valódi, hétköznapi foglalási mondatok, amik
+    egy-egy hatókörön kívüli minta bővebb változatára ráilleszkednének:
+
+    - „mostantól hétfőn **vagy** kedden" → a "vagy" itt KÖTŐSZÓ, nem
+      létige (az utasítás-felülírás mintája erre épült);
+    - „a **part**on lévő bolt" → a "part" nem "párt";
+    - „**Mit tegyek**, hogy időpontot kapjak?" → tanácstalanság, nem
+      tanácskérés;
+    - „**Ki volt** az a kolléga…" → panasz, nem általános tudás.
+
+    Mindegyik konkrét mintaszűkítést rögzít, amit a kód kommentje
+    indokol — ezért van mindegyikre saját sor."""
+    mondatok = [
+        "Mostantól hétfőn vagy kedden érek rá, jó lenne egy időpont.",
+        "A parton lévő boltba mennék holnap.",
+        "Mit tegyek, hogy időpontot kapjak a Törpillához?",
+        "Ki volt az a kolléga, aki múltkor kiszolgált? Hozzá mennék újra.",
+        "Beteg vagyok, le kell mondanom a foglalásomat.",
+        "Fáj a lábam, ezért inkább délután mennék.",
+    ]
+    for mondat in mondatok:
+        dontes = kapuor.dontes(mondat)
+        assert not dontes.kivul, f"{mondat!r} tévesen kizárva ({dontes.ok})"
 
 
 @pytest.mark.parametrize(
