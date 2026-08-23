@@ -13,6 +13,16 @@ A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
 — nem indít Ollamát, nem hív modellt. A modell-összehasonlítás ugyanennek a
 parancsnak a `--ertelmezo llm|kaszkad|forditott` kapcsolójával megy.
 
+Két halmaz van (`--halmaz nyelvi|robusztus`):
+
+- `nyelvi` (alapértelmezett) — nyelvi megértés, EGY helyes válasz esetenként.
+- `robusztus` — mi történik, amikor NEM az történik, amire számítunk: üres
+  bemenet, zaj, idegen nyelv, ellentmondás, hatókörön kívüli kérés,
+  prompt injection, érzelem, abszurd kérés, kéretlen személyes adat. Itt
+  nem pontosságot mérünk elsősorban, hanem NÉGY biztonsági számot
+  (kivétel / hatókörön kívüli válasz / kitalált tény / instabil ismétlés),
+  mindet 0-s kemény küszöbbel.
+
 A `vegigjatszas` a vásárlói felületet hajtja végig Tkinter-eseményhurok
 nélkül (`tools/vegigjatszas.py`) — önellenőrzés, mielőtt kézzel leülnél elé.
 """
