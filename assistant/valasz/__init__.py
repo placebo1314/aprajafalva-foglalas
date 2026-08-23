@@ -128,8 +128,18 @@ def tenyvalasz_szoveg(valasz: dict, *, nyelv: str = _NYELV_ALAPERTELMEZETT) -> s
             reszek = [sz["nev"]]
             if sz.get("termekleiras"):
                 reszek.append(sz["termekleiras"])
-            if sz.get("ar"):
-                reszek.append(f"({sz['ar']})")
+            # AZ ÁR SZÁNDÉKOSAN KIMARAD. Az ár nem engedélyezett
+            # tényválasz a vásárlói csatornán (blueprint 7. és 10.
+            # szakasz; golden set `kapuor-02`) — az eszköz adata
+            # tartalmazza (admin-oldali használatra), ez a mondat nem.
+            #
+            # A fej nélküli végigjátszás fogta meg, miért nem elég a
+            # kapuőr: a "Mennyibe kerül a nagy petárda?" kérdésre a
+            # modell `mit: "termek"`-et adott — érvényes tényválasz-
+            # típus —, és a termékleírás mellett az ÁR is kiment volna.
+            # A tiltást ezért nem az útvonal elején, hanem itt, a
+            # kimeneti oldalon is érvényesítjük: bárhonnan is jön a
+            # kérés, ár nem hagyja el a rendszert.
             if "idotartam_perc" in sz:
                 reszek.append(f"{sz['idotartam_perc']} perc")
             sorok.append(" — ".join(reszek))

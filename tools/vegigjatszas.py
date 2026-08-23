@@ -140,6 +140,10 @@ def vegigjatszas(db_path: str) -> int:
         # elintézi (ADR-019: az előzmény a beszélgetés bemenete, nem
         # szabad átcsordulnia a következő próbába).
         app._uj_beszelgetes()
+        # Az `_uj_beszelgetes` a szöveges naplót is üríti — az
+        # újdonság-számlálót ezért nullázni kell, különben a következő
+        # beszélgetés rendszer-sorai kimaradnának a kiírásból.
+        naplo_hossz = 0
         for mondat in mondatok:
             app._szo_kuldes(mondat)
             uj_sorok, naplo_hossz = _naplo_ujdonsag(app, naplo_hossz)

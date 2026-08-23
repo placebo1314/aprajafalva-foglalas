@@ -131,12 +131,29 @@ def test_tenyvalasz_szoveg_megjelenes_ures():
     )
 
 
-def test_tenyvalasz_szoveg_termek_es_ar():
+def test_tenyvalasz_szoveg_termek_arat_nem_ir_ki():
+    """Az ár NEM engedélyezett tényválasz a vásárlói csatornán
+    (blueprint 7. és 10. szakasz, golden set `kapuor-02`). Az eszköz
+    adata tartalmazza — admin-oldali használatra —, ez a mondat nem.
+    A fej nélküli végigjátszás fogta meg, hogy a `mit: "termek"` úton
+    az ár kiszivárgott."""
     eredmeny = {
         "sikeres": True,
         "szolgaltatasok": [{"nev": "petárda", "termekleiras": "durranó", "ar": "50 arany"}],
     }
-    assert valasz.tenyvalasz_szoveg(eredmeny) == "petárda — durranó — (50 arany)"
+
+    szoveg = valasz.tenyvalasz_szoveg(eredmeny)
+
+    assert "50 arany" not in szoveg
+    assert szoveg == "petárda — durranó"
+
+
+def test_tenyvalasz_szoveg_termek_es_idotartam():
+    eredmeny = {
+        "sikeres": True,
+        "szolgaltatasok": [{"nev": "petárda", "termekleiras": "durranó", "idotartam_perc": 10}],
+    }
+    assert valasz.tenyvalasz_szoveg(eredmeny) == "petárda — durranó — 10 perc"
 
 
 def test_tenyvalasz_szoveg_idotartam():
