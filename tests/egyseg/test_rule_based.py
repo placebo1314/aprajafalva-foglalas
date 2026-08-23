@@ -159,18 +159,37 @@ def test_kereses_relativ_datum_es_szolgaltatas():
     }
 
 
-def test_kereses_nyitott_intervallum_egyertelmu_szolgaltatassal():
+def test_legkorabbi_kerdes_sajat_eszkozre_megy():
+    """ "Mikor tudok legkorábban menni?" — ez nem időszak-keresés: egy
+    konkrét kérdés, egy konkrét válasszal (`legkozelebbi_idopont`).
+    Dátumablak SZÁNDÉKOSAN nincs a paraméterek közt: a kérdésben sincs."""
     eredmeny = _ertelmez("Mikor tudok legkorábban menni Törpillához?")
     assert eredmeny == {
-        "eszkoz": "szabad_idopontok",
-        "parameterek": {
-            "bolt_id": "torpilla",
-            "szolgaltatas_id": "nagy_orom",
-            "datum_tol": "2026-08-17T09:00:00Z",
-            "datum_ig": "2026-08-24T23:59:59Z",
-            "napszak": "barmikor",
-        },
+        "eszkoz": "legkozelebbi_idopont",
+        "parameterek": {"bolt_id": "torpilla", "szolgaltatas_id": "nagy_orom"},
     }
+
+
+def test_legkorabbi_kerdes_napszakkal():
+    eredmeny = _ertelmez("Mikor tudok legkorábban menni Törpillához délelőtt?")
+    assert eredmeny["eszkoz"] == "legkozelebbi_idopont"
+    assert eredmeny["parameterek"]["napszak"] == "delelott"
+
+
+def test_legkorabbi_kerdes_bolt_nelkul_visszakerdez():
+    """Bolt nélkül nincs mit megkeresni — a szokásos zárt kérdés megy,
+    nem egy találgatott bolt legkorábbi időpontja."""
+    eredmeny = _ertelmez("Mikor tudok legkorábban menni?")
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["hianyzo_mezo"] == "bolt_id"
+
+
+def test_sima_mikor_kerdes_marad_kereses():
+    """A szűk minta ellenpróbája: a "leg…" nélküli kérdés továbbra is
+    időszak-keresés, nyitott ablakkal."""
+    eredmeny = _ertelmez("Mikor mehetek Törpillához?")
+    assert eredmeny["eszkoz"] == "szabad_idopontok"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-24T23:59:59Z"
 
 
 def test_kereses_ma_a_jelen_pillanattol_indul():

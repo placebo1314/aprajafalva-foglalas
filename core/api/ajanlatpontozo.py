@@ -136,3 +136,38 @@ def _tenyleges_lefedettseg(conn, shift_id: str) -> float:
         return 0.0
     foglalt_vagy_holdolt = sum(1 for s in statuszok if s["allapot"] != "szabad")
     return foglalt_vagy_holdolt / len(statuszok)
+
+
+def earliest_free(
+    conn,
+    *,
+    org_id: str,
+    shop_id: str,
+    service_id: str | None = None,
+    tol_iso: str,
+    ig_iso: str,
+    napszak: str = "barmikor",
+) -> dict | None:
+    """A LEGKORÁBBI szabad slot a megadott ablakban — `{"slot_id",
+    "kezdet", "veg"}`, vagy `None`, ha nincs.
+
+    **Nem pontoz, és ez szándékos.** Az ajánlatpontozó (ADR-006) akkor
+    kell, amikor a vásárló VÁLASZT néhány jelölt közül: ott számít, hogy
+    melyik slot töri szét kevésbé a napot. A "mikor tudok legkorábban
+    menni?" kérdésnek viszont egyetlen, objektív helyes válasza van — a
+    legkorábbi —, és ott a pontozás nemhogy nem segít, hanem torzítana:
+    egy jobban pontozott, de KÉSŐBBI időpontot ajánlana a kérdésre, ami
+    nem arra kérdezett.
+
+    A `free_slots_search` már kezdet szerint rendezve ad vissza, és
+    kizárja az érvényes holdokat és aktív foglalásokat — az első
+    napszaknak megfelelő találat a válasz."""
+    org = torzsadat_repo.org_load(conn, org_id)
+    zona = ZoneInfo(org["idozona"]) if org else ZoneInfo("UTC")
+
+    for slot_id, kezdet, veg in foglalas_repo.free_slots_search(
+        conn, org_id=org_id, shop_id=shop_id, service_id=service_id
+    ):
+        if tol_iso <= kezdet <= ig_iso and _napszaknak_megfelel(kezdet, napszak, zona):
+            return {"slot_id": slot_id, "kezdet": kezdet, "veg": veg}
+    return None

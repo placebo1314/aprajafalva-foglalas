@@ -19,6 +19,7 @@ from assistant.tools import (
     foglalas_letrehozas,
     hiba,
     katalogus,
+    legkozelebbi_idopont,
     semaellenorzo,
     semak,
     szabad_idopontok,
@@ -605,3 +606,126 @@ def test_bolt_info_ismeretlen_bolt(tmp_path):
     )
     assert eredmeny["sikeres"] is False
     assert eredmeny["ok"] == "ismeretlen_bolt"
+
+
+# --- legkozelebbi_idopont ----------------------------------------------
+
+
+def test_legkozelebbi_idopont_a_legkorabbi_szabad_slotot_adja(tmp_path):
+    """A "mikor tudok legkorábban?" kérdésnek EGY objektív helyes
+    válasza van — a legkorábbi szabad slot, nem a legjobban pontozott."""
+    conn = _conn(tmp_path)
+    adat = _seed(conn)
+
+    eredmeny = legkozelebbi_idopont.hivas(
+        conn,
+        {"bolt_id": "ugyifogyi", "most": "2026-08-18T00:00:00Z", "session_id": "s1"},
+        org_id=adat["org_id"],
+    )
+
+    assert eredmeny["sikeres"] is True
+    assert len(eredmeny["jeloltek"]) == 1
+    assert eredmeny["jeloltek"][0]["kezdet"] == "2026-08-18T06:00:00Z"
+    assert eredmeny["legkozelebbi"] is True
+
+
+def test_legkozelebbi_idopont_holdot_tesz_a_slotra(tmp_path):
+    """CLAUDE.md 6. invariáns: csak olyan időpontot mutatunk, amit
+    tartani is tudunk — a hold az eszköz dolga, nem a hívóé."""
+    conn = _conn(tmp_path)
+    adat = _seed(conn)
+
+    eredmeny = legkozelebbi_idopont.hivas(
+        conn,
+        {"bolt_id": "ugyifogyi", "most": "2026-08-18T00:00:00Z", "session_id": "s1"},
+        org_id=adat["org_id"],
+    )
+    slot_id = eredmeny["jeloltek"][0]["slot_id"]
+
+    # Egy MÁSIK session ugyanarra a slotra már nem kap holdot.
+    assert foglalas_repo.hold_create(conn, slot_id, "s2", _jovoben(10)) is not (
+        foglalas_repo.Result.SUCCESS
+    )
+
+
+def test_legkozelebbi_idopont_a_holdolt_slotot_atugorja(tmp_path):
+    """A második hívás (másik session) a KÖVETKEZŐ szabadot adja — a
+    `free_slots_search` az érvényes holdot kizárja."""
+    conn = _conn(tmp_path)
+    adat = _seed(conn)
+    kerdes = {"bolt_id": "ugyifogyi", "most": "2026-08-18T00:00:00Z"}
+
+    elso = legkozelebbi_idopont.hivas(conn, {**kerdes, "session_id": "s1"}, org_id=adat["org_id"])
+    masodik = legkozelebbi_idopont.hivas(
+        conn, {**kerdes, "session_id": "s2"}, org_id=adat["org_id"]
+    )
+
+    assert masodik["sikeres"] is True
+    assert masodik["jeloltek"][0]["kezdet"] > elso["jeloltek"][0]["kezdet"]
+
+
+def test_legkozelebbi_idopont_horizonton_tul_nincs_talalat(tmp_path):
+    """A horizont (60 nap) nem díszlet: egy régi `most`-tal a slot még
+    beleesik, egy sokkal korábbival már nem."""
+    conn = _conn(tmp_path)
+    adat = _seed(conn)
+
+    eredmeny = legkozelebbi_idopont.hivas(
+        conn,
+        {"bolt_id": "ugyifogyi", "most": "2026-01-01T00:00:00Z", "session_id": "s1"},
+        org_id=adat["org_id"],
+    )
+
+    assert eredmeny["sikeres"] is False
+
+
+def test_legkozelebbi_idopont_ures_naptar_nem_szukosseg(tmp_path):
+    """Őszinteség-ág (blueprint 7.): ha a bolt nem hirdetett meg
+    időpontot, az NEM "megtelt"."""
+    conn = _conn(tmp_path)
+    org_id = torzsadat_repo.org_create(conn, name="Aprajafalva", timezone="Europe/Budapest")
+    torzsadat_repo.shop_create(conn, org_id=org_id, name="Ügyifogyi")
+
+    eredmeny = legkozelebbi_idopont.hivas(
+        conn,
+        {"bolt_id": "ugyifogyi", "most": "2026-08-18T00:00:00Z", "session_id": "s1"},
+        org_id=org_id,
+    )
+
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["uzenet_kulcs"] == "nincs_meghirdetett_idopont"
+
+
+def test_legkozelebbi_idopont_ismeretlen_bolt(tmp_path):
+    conn = _conn(tmp_path)
+    adat = _seed(conn)
+
+    eredmeny = legkozelebbi_idopont.hivas(
+        conn,
+        {"bolt_id": "torpilla", "most": "2026-08-18T00:00:00Z", "session_id": "s1"},
+        org_id=adat["org_id"],
+    )
+
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["uzenet_kulcs"] == "ismeretlen_bolt"
+
+
+def test_legkozelebbi_idopont_datumablakot_nem_fogad_el(tmp_path):
+    """A séma zárt: dátumablak nem tartozik ehhez a kérdéshez, és a
+    `additionalProperties: false` ezt ki is kényszeríti."""
+    conn = _conn(tmp_path)
+    adat = _seed(conn)
+
+    eredmeny = legkozelebbi_idopont.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "most": "2026-08-18T00:00:00Z",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "session_id": "s1",
+        },
+        org_id=adat["org_id"],
+    )
+
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["uzenet_kulcs"] == "ervenytelen_kereses"

@@ -698,7 +698,12 @@ class VasarloApp(tk.Tk):
             self._naplo_ir(
                 "Rendszer", valasz_szoveg.nyugtazo_szoveg(valasz.get("felismert_ablak", {}))
             )
-            self._naplo_ir("Rendszer", valasz_szoveg.ajanlat_bevezetes_szoveg())
+            self._naplo_ir(
+                "Rendszer",
+                valasz_szoveg.ajanlat_bevezetes_legkozelebbi_szoveg()
+                if valasz.get("legkozelebbi")
+                else valasz_szoveg.ajanlat_bevezetes_szoveg(),
+            )
             self._eredmeny_render(self.szo_jelolt_keret, valasz, self.szo_uzenet)
             return
 

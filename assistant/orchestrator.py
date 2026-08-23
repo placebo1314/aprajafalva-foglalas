@@ -39,6 +39,7 @@ from assistant.tools import (
     foglalas_lekerdezes,
     foglalas_lemondas,
     foglalas_letrehozas,
+    legkozelebbi_idopont,
     szabad_idopontok,
 )
 from assistant.tools.katalogus import BOLT_SLUGOK
@@ -142,7 +143,7 @@ def kovetkezo_kontextus(elozo_megorzott: dict, ertelmezes: dict) -> dict:
         }
         return {**elozo_megorzott, **megorzendo}
 
-    if eszkoz == "szabad_idopontok":
+    if eszkoz in ("szabad_idopontok", "legkozelebbi_idopont"):
         teljes = {**elozo_megorzott, **parameterek}
         return {k: v for k, v in teljes.items() if k in _KEMENY_MEZOK}
 
@@ -269,6 +270,8 @@ class Orchestrator:
 
         if eszkoz == "szabad_idopontok":
             return self._szabad_idopontok(allapot, parameterek)
+        if eszkoz == "legkozelebbi_idopont":
+            return self._legkozelebbi_idopont(allapot, parameterek, most)
         if eszkoz == "bolt_info":
             teljes = {**parameterek, "session_id": session_id}
             return bolt_info.hivas(self.conn, teljes, org_id=self.org_id)
@@ -466,6 +469,42 @@ class Orchestrator:
             "tipus": "ajanlat",
             "jeloltek": eredmeny["jeloltek"],
             "felismert_ablak": felismert_ablak,
+        }
+
+    def _legkozelebbi_idopont(self, allapot: _SessionAllapot, parameterek: dict, most: str) -> dict:
+        """ "Mikor tudok legkorábban menni?" — EGY időpont, holddal.
+
+        Ugyanaz a válaszalak (`ajanlat`, `jeloltek` listával), mint a
+        keresésé, hogy a hívó ne ágazzon szét: a felület ugyanúgy
+        gombként jeleníti meg, ugyanúgy a `valaszt()` → `megerosit()`
+        úton megy tovább. A `legkozelebbi` jelzés csak a bevezető mondat
+        megválasztásához kell (`assistant/valasz/`).
+
+        A `most` az orchestratortól jön, nem a mondatból: a horizont
+        kezdőpontja rendszeridő, nem vásárlói adat."""
+        teljes = {
+            **{k: v for k, v in allapot.megorzott_parameterek.items() if k in _KEMENY_MEZOK},
+            **parameterek,
+            "most": most,
+            "session_id": allapot.session_id,
+        }
+        felismert_ablak = {k: teljes[k] for k in ("bolt_id", "napszak") if k in teljes}
+        eredmeny = legkozelebbi_idopont.hivas(self.conn, teljes, org_id=self.org_id)
+
+        allapot.megorzott_parameterek = kovetkezo_kontextus(
+            allapot.megorzott_parameterek,
+            {"eszkoz": "szabad_idopontok", "parameterek": teljes},
+        )
+        if not eredmeny["sikeres"]:
+            return {"tipus": "eszkoz_hiba", "felismert_ablak": felismert_ablak, **eredmeny}
+
+        allapot.aktualis_jeloltek = eredmeny["jeloltek"]
+        allapot.allapot = "valasztasra_var"
+        return {
+            "tipus": "ajanlat",
+            "jeloltek": eredmeny["jeloltek"],
+            "felismert_ablak": felismert_ablak,
+            "legkozelebbi": True,
         }
 
     def alternativa_kereses(self, session_id: str, dimenzio: str) -> dict:

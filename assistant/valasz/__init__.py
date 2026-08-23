@@ -146,6 +146,11 @@ def _ablak_datum_szoveg(datum_tol: str, datum_ig: str, napszak: str) -> str:
     return f"{alap} {nap_resz}".strip()
 
 
+def ajanlat_bevezetes_legkozelebbi_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
+    """A `legkozelebbi_idopont` válaszának bevezetője — l. sablon."""
+    return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_bevezetes_legkozelebbi"]
+
+
 def rendszersor_szoveg(
     idoszak: dict | None,
     horgony: str,

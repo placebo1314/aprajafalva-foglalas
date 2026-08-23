@@ -83,6 +83,11 @@ SABLONOK: dict[str, dict[str, object]] = {
             "sikeres_foglalas": "Foglalás létrejött! Foglalási kód: {foglalasi_kod}",
             "elvetve": "Rendben, nem foglaltuk le. Kereshetsz újra.",
             "ajanlat_bevezetes": "Ezeket az időpontokat találtam — melyik jó?",
+            # A `legkozelebbi_idopont` eszköz válasza: EGY időpont,
+            # a feltett kérdésre adott közvetlen felelet. Külön
+            # mondat, mert a "melyik jó?" itt félrevezető lenne —
+            # nincs miből választani, és nem is kértek választékot.
+            "ajanlat_bevezetes_legkozelebbi": "A legkorábbi szabad időpont:",
         },
         # ------------------------------------------------------------
         # alternativa — "ha nincs hely, alternatíva jöjjön" (blueprint

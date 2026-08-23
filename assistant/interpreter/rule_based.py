@@ -100,6 +100,12 @@ _NAPSZAK_MINTAK: list[tuple[re.Pattern, str]] = [
 # tajszolas-01, szleng-01, toredekes-03).
 _NAPSZAK_VEGORA = {"delelott": 11, "delutan": 17, "este": 22}
 
+# LEGKORÁBBI-kérdés: nem időszakot kér, hanem EGY időpontot — erre a
+# `legkozelebbi_idopont` eszköz válaszol (`assistant/tools/`). Pozitív,
+# szűk minta: csak akkor vált ágat, ha a mondat kifejezetten a
+# "leg…"-et kéri; a "mikor mehetek?" továbbra is sima keresés.
+_LEGKORABBI_MINTA = re.compile(r"legkor[áa]bb|legel[őo]bb|legk[öo]zelebb|leghamarabb")
+
 _PREFERALT_ORA_MINTA = re.compile(r"\b(\d{1,2})\s*(?:óra|körül)")
 
 
@@ -371,6 +377,24 @@ class SzabalyAlapuErtelmezo:
 
         datum_tol, datum_ig = _datum_ablak_explicit(szoveg, most)
         napszak = _napszak_explicit(also)
+
+        # LEGKORÁBBI-ág: "mikor tudok legkorábban menni?" — ez nem
+        # dátumablak-keresés, hanem egyetlen konkrét kérdés, amire egy
+        # konkrét válasz jár (`assistant/tools/legkozelebbi_idopont.py`).
+        # Csak akkor, ha a bolt ismert; enélkül a szokásos
+        # visszakérdezés megy.
+        if _LEGKORABBI_MINTA.search(also) and bolt_id:
+            legkozelebbi: dict = {"bolt_id": bolt_id}
+            if napszak:
+                legkozelebbi["napszak"] = napszak
+            szolg = szolgaltatas_id or katalogus.BOLT_EGYERTELMU_SZOLGALTATAS.get(bolt_id)
+            if szolg:
+                legkozelebbi["szolgaltatas_id"] = szolg
+            return {
+                "eszkoz": "legkozelebbi_idopont",
+                "parameterek": legkozelebbi,
+                "bizonyossag": {"eszkoz": 1.0, "bolt_id": 1.0},
+            }
         if datum_tol and napszak:
             datum_ig = _napszak_ig_clip(datum_tol, datum_ig, napszak)
         preferalt_ora = _preferalt_ora(also)

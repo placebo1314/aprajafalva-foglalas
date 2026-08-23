@@ -46,6 +46,24 @@ SEMAK: dict[str, dict[str, dict]] = {
             "additionalProperties": False,
         }
     },
+    "legkozelebbi_idopont": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
+                "szolgaltatas_id": {"type": "string", "enum": sorted(SZOLGALTATAS_SLUGOK)},
+                "napszak": {"type": "string", "enum": _NAPSZAKOK},
+                # Dátumablak SZÁNDÉKOSAN nincs: a "mikor tudok
+                # legkorábban?" kérdésben nincs ablak. A `most`-tól néz
+                # előre egy rögzített horizontig
+                # (`legkozelebbi_idopont._HORIZONT_NAP`).
+                "most": {"type": "string", "format": "date-time"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["bolt_id", "most", "session_id"],
+            "additionalProperties": False,
+        }
+    },
     "foglalas_letrehozas": {
         "v1": {
             "type": "object",

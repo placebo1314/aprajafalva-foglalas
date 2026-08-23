@@ -58,23 +58,25 @@ esetek:
   - id: koznyelvi-02
     bemenet: "Mikor tudok legkorábban menni Törpillához?"
     varhato:
-      eszkoz: szabad_idopontok
+      eszkoz: legkozelebbi_idopont
       parameterek:
         bolt_id: torpilla
         szolgaltatas_id: nagy_orom
-        datum_tol: "2026-08-17T09:00:00Z"
-        datum_ig: "2026-08-24T23:59:59Z"
-        napszak: barmikor
     megjegyzes: >
-      A "legkorábban" nyitott intervallum a mától. A boltnak egy szolgáltatása
-      van, ezért a szolgáltatás egyértelmű — ez a bolt-profil szétválasztás
-      haszna (blueprint 3. szakasz). Vitatható, hogy a nyitott intervallum
-      helyett egy visszakérdezés (pl. "mikorra gondolt?") is elfogadható
-      válasz-e — ezért részleges pontot ad rá, a toredekes-01 mintájára.
+      **Ez az eset megváltozott** (2026-08-23): korábban `szabad_idopontok`-ot
+      várt egy nyitott (mától +7 nap) ablakkal. A "mikor tudok legkorábban
+      menni?" azonban nem időszak-kérdés — egyetlen objektív helyes válasza
+      van, a legkorábbi szabad időpont —, és erre azóta saját eszköz van
+      (`assistant/tools/legkozelebbi_idopont.py`). Dátumablak szándékosan
+      nincs a paraméterek közt: a kérdésben sincs. A boltnak egy
+      szolgáltatása van, ezért az egyértelmű (blueprint 3. szakasz).
+      A tág ablakos keresés nem hibás válasz, csak gyengébb (a vásárlónak
+      három jelöltből kell kiválasztania azt, amit kérdezett) — ezért kap
+      fél pontot.
     reszleges_elfogadas:
-      eszkoz: visszakerdez
+      eszkoz: szabad_idopontok
       pontszam: 0.5
-    cimkek: [koznyelvi, nyitott_intervallum]
+    cimkek: [koznyelvi, legkorabbi_kerdes]
 
   - id: koznyelvi-03
     bemenet: "Meddig van nyitva a Szundi bolt szombaton?"

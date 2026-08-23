@@ -66,7 +66,14 @@ _LOG = logging.getLogger(__name__)
 # hitelesített hash — egyik sem nyerhető ki szövegből). Az áthelyezés-
 # szándék ezért itt is `visszakerdez`-re fut (ugyanaz a v1 hatókör-korlát,
 # mint `rule_based.py`-ben, `assistant/orchestrator.py` dokumentálja).
-ESZKOZOK = ["szabad_idopontok", "bolt_info", "foglalas_lemondas", "visszakerdez", "nincs"]
+ESZKOZOK = [
+    "szabad_idopontok",
+    "legkozelebbi_idopont",
+    "bolt_info",
+    "foglalas_lemondas",
+    "visszakerdez",
+    "nincs",
+]
 
 _NAPSZAK_ENUM = semak.SEMAK["szabad_idopontok"]["v1"]["properties"]["napszak"]["enum"]
 _BOLT_INFO_MIT_TELJES = semak.SEMAK["bolt_info"][semak.legutobbi_verzio("bolt_info")]["properties"][
@@ -169,7 +176,10 @@ _RENDSZER_PROMPT = """Aprajafalva foglalási asszisztens vagy. A vásárló egy 
 mondatát EGY eszközhívássá alakítod, kizárólag a séma szerint.
 
 Eszközök:
-- szabad_idopontok: szabad időpont keresése (bolt, datum_tol, datum_ig, napszak)
+- szabad_idopontok: szabad időpont keresése egy IDŐSZAKBAN (bolt, napszak,
+  datum_kifejezes)
+- legkozelebbi_idopont: CSAK a "mikor tudok legkorábban / leghamarabb menni?"
+  kérdésre — nincs benne időszak, egyetlen legkorábbi időpont a válasz
 - bolt_info: bolt/szolgáltatás adata (nyitvatartás, cím, termék, időtartam)
 - foglalas_lemondas: meglévő foglalás lemondása (kell a foglalási kód)
 - visszakerdez: ha egy kritikus adat (jellemzően a bolt) hiányzik a mondatból —
