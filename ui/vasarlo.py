@@ -46,6 +46,15 @@ Ez **kizárólag a felület horgonya** — a `core/` és az eszközök továbbra
 is a kapott ISO-időbélyeggel dolgoznak, semmilyen idő-eltolás nem kerül
 beléjük (CLAUDE.md 4. invariáns: minden idő UTC-ben tárolódik).
 
+**A beszélgetés-előzményt EZ A MODUL vezeti** (`szo_elozmenyek`,
+ADR-019). Az értelmező a beszélgetést látja, nem a megőrzött
+paramétereket adatként — és a ténylegesen kimondott magyar mondatokat
+csak a felület ismeri (az orchestrator strukturált választ ad, amit az
+`assistant/valasz/` fogalmaz mondattá). Ezért minden képernyőre kerülő
+sor (a vásárlóé és a rendszeré egyaránt) bekerül az előzménybe, és a
+`fordulo()` hívás átadja az utolsó néhányat. Az "Új beszélgetés" gomb
+üríti.
+
 **Az értelmezőt az `assistant/interpreter/__init__.py::
 alapertelmezett_ertelmezo()` építi fel** (fordított kaszkád, ADR-018: a
 normalizáló fut előbb, a modell értelmez kötött dekódolással, a dátumot
@@ -84,7 +93,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from assistant import valasz as valasz_szoveg  # noqa: E402
-from assistant.interpreter import aktiv_modell_neve, alapertelmezett_ertelmezo  # noqa: E402
+from assistant.interpreter import (  # noqa: E402
+    KI_RENDSZER,
+    KI_VASARLO,
+    aktiv_modell_neve,
+    alapertelmezett_ertelmezo,
+)
 from assistant.orchestrator import Orchestrator  # noqa: E402
 from assistant.tools import katalogus  # noqa: E402
 from core.azonosito import new_uuid  # noqa: E402
@@ -100,6 +114,16 @@ _NAPSZAKOK = [
 ]
 
 _PROBA_NAPLO_UTVONAL = ROOT / "naplo" / "probak.jsonl"
+
+# A szöveges napló "Te:" előtagja — ebből tudja a `_naplo_ir`, hogy a
+# sor a vásárlóé-e vagy a rendszeré (a beszélgetés-előzményhez, ADR-019).
+_TE_CIMKE = "Te"
+
+# Hány NAPLÓSOR megy át előzményként az értelmezőnek. Négy forduló =
+# négy vásárlói sor + a rájuk adott rendszer-sorok; a rendszer egy
+# fordulóban több sort is írhat (nyugtázó + eredmény), ezért nem
+# fordulót, hanem sort számolunk, bőven a négy forduló fölé kerekítve.
+_ELOZMENY_SOROK = 12
 
 
 def _most_iso() -> str:
@@ -232,6 +256,10 @@ class VasarloApp(tk.Tk):
         orgs = torzsadat_repo.orgs_list(self.conn)
         self.org_id = orgs[0]["id"] if orgs else None
         self.session_id = new_uuid()
+        # A beszélgetés eddigi sorai (ki, mit) — ezt kapja meg az
+        # értelmező (ADR-019). A felület vezeti, mert csak ő ismeri a
+        # ténylegesen kimondott magyar mondatokat.
+        self.szo_elozmenyek: list[tuple[str, str]] = []
         self.orchestrator = Orchestrator(self.conn, alapertelmezett_ertelmezo(), org_id=self.org_id)
 
         # A beosztás időszaka — ehhez igazodik a nap-választó és a
@@ -515,6 +543,7 @@ class VasarloApp(tk.Tk):
         A szöveges naplót is üríti, hogy látszódjon, hol kezdődik az új
         próba."""
         self.session_id = new_uuid()
+        self.szo_elozmenyek.clear()
         for keret in (self.szo_gombsor, self.szo_jelolt_keret):
             for widget in keret.winfo_children():
                 widget.destroy()
@@ -577,13 +606,30 @@ class VasarloApp(tk.Tk):
         self.szo_naplo.insert("end", f"{ki_be}: {szoveg}\n")
         self.szo_naplo.config(state="disabled")
         self.szo_naplo.see("end")
+        # Ami a képernyőn megjelenik, az kerül a beszélgetés-előzménybe
+        # is (ADR-019) — a rendszer mondatai ugyanúgy, mint a vásárlóé:
+        # enélkül a modell nem tudná, MIÉRT kérdez a vásárló másik napot
+        # ("nincs szabad időpont kedden").
+        self._elozmenyhez_ad(KI_VASARLO if ki_be == _TE_CIMKE else KI_RENDSZER, szoveg)
+
+    def _elozmenyhez_ad(self, ki: str, szoveg: str) -> None:
+        """Egy sor a beszélgetés-előzményhez, a legutóbbi fordulókra
+        vágva. A vágás azért kell, mert a prompt hossza latencia
+        (`docs/PLATFORM_TANULSAGOK.md`), és mert négy fordulónál régebbi
+        előzmény már ritkán befolyásolja az aktuális mondatot."""
+        self.szo_elozmenyek.append((ki, szoveg))
+        del self.szo_elozmenyek[:-_ELOZMENY_SOROK]
 
     def _szo_kuldes(self, elore_kitoltott: str | None = None) -> None:
         szoveg = elore_kitoltott if elore_kitoltott is not None else self.szo_beviteli_valto.get()
         if not szoveg.strip():
             return
         self.szo_beviteli_valto.set("")
-        self._naplo_ir("Te", szoveg)
+        # Az értelmező az ELŐZŐ fordulókat kapja meg — az aktuális
+        # mondat külön megy (`beszelgetes_szovege` teszi a végére), így
+        # nem duplázódik.
+        elozmenyek = list(self.szo_elozmenyek)
+        self._naplo_ir(_TE_CIMKE, szoveg)
 
         # MINDKÉT gombkeretet ürítjük, nem csak a kiút-gombokat: a
         # korábbi forduló időpont-gombjai különben a képernyőn maradnának
@@ -598,7 +644,9 @@ class VasarloApp(tk.Tk):
         self.szo_allapot.config(text=valasz_szoveg.nyugtazo_szoveg({}))
         self.update_idletasks()
 
-        valasz = self.orchestrator.fordulo(self.session_id, szoveg, self._most_iso())
+        valasz = self.orchestrator.fordulo(
+            self.session_id, szoveg, self._most_iso(), elozmenyek=elozmenyek
+        )
         self.szo_allapot.config(text="")
         _proba_naplo_ir(
             szoveg,

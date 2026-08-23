@@ -194,3 +194,43 @@ def test_proba_naplo_szoveg_minden_mezot_megmutat():
     )
     for reszlet in ("petárda holnap", "llm", "szabad_idopontok", "ugyifogyi", "ajanlat"):
         assert reszlet in szoveg
+
+
+# --- beszélgetés-előzmény (ADR-019) -----------------------------------
+#
+# A felület vezeti, mert csak ő ismeri a ténylegesen kimondott magyar
+# mondatokat. A Tkinter-widgeteket itt sem teszteljük — az
+# `_elozmenyhez_ad` tiszta listakezelés, ez tesztelhető önmagában.
+
+
+class _ElozmenyGazda:
+    """A `VasarloApp` előzmény-kezelő részének minimális mása — a
+    metódus maga a valódi (`VasarloApp._elozmenyhez_ad`), csak a Tkinter
+    örökség nélkül."""
+
+    _elozmenyhez_ad = vasarlo_modul.VasarloApp._elozmenyhez_ad
+
+    def __init__(self):
+        self.szo_elozmenyek: list[tuple[str, str]] = []
+
+
+def test_elozmeny_gyujti_a_ket_oldalt():
+    gazda = _ElozmenyGazda()
+
+    gazda._elozmenyhez_ad("vasarlo", "Törpillához mennék")
+    gazda._elozmenyhez_ad("rendszer", "Nincs szabad időpont.")
+
+    assert gazda.szo_elozmenyek == [
+        ("vasarlo", "Törpillához mennék"),
+        ("rendszer", "Nincs szabad időpont."),
+    ]
+
+
+def test_elozmeny_a_legutobbi_sorokra_vagodik():
+    """A prompt hossza latencia — a régi fordulók kiesnek."""
+    gazda = _ElozmenyGazda()
+    for i in range(30):
+        gazda._elozmenyhez_ad("vasarlo", f"{i}")
+
+    assert len(gazda.szo_elozmenyek) == vasarlo_modul._ELOZMENY_SOROK
+    assert gazda.szo_elozmenyek[-1] == ("vasarlo", "29")

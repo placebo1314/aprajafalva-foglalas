@@ -191,20 +191,31 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
     (`assistant.orchestrator.kovetkezo_kontextus` — kemény rész marad,
     puha rész mozog), hogy a golden set és a valódi orchestrator-
     viselkedés ne driftelhessen szét. A visszaadott kimenet az UTOLSÓ
-    forduló eredménye — a `kiertekel()` erre a `varhato`-t veti."""
-    from assistant.interpreter import ErtelmezesKontextus
+    forduló eredménye — a `kiertekel()` erre a `varhato`-t veti.
+
+    **Az előzményekben CSAK a vásárlói sorok szerepelnek** (ADR-019). A
+    mérés nem hívja az eszközöket, tehát nincsenek valódi rendszer-
+    válaszok; kitalálni őket hamisítás lenne. Az éles út (`ui/
+    vasarlo.py`) a rendszer sorait is átadja, tehát a modell OTT többet
+    lát, mint itt — a mérés ebben az irányban téved, vagyis konzervatív:
+    a mért érték a valós képesség alsó becslése, nem felső."""
+    from assistant.interpreter import KI_VASARLO, ErtelmezesKontextus
     from assistant.orchestrator import kovetkezo_kontextus
 
     def hivo(bemenet: str | list[str], most: str) -> tuple[dict | None, float, int, str | None]:
         kezdet = time.monotonic()
         fordulok = bemenet if isinstance(bemenet, list) else [bemenet]
         megorzott: dict = {}
+        elozmenyek: list[tuple[str, str]] = []
         kimenet: dict | None = None
         try:
             for mondat in fordulok:
-                kontextus = ErtelmezesKontextus(megorzott_parameterek=dict(megorzott))
+                kontextus = ErtelmezesKontextus(
+                    megorzott_parameterek=dict(megorzott), elozmenyek=list(elozmenyek)
+                )
                 kimenet = ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
                 megorzott = kovetkezo_kontextus(megorzott, kimenet)
+                elozmenyek.append((KI_VASARLO, mondat))
         except Exception as exc:  # noqa: BLE001 - a mérés szempontjából a kivétel is bukás
             return None, time.monotonic() - kezdet, 0, str(exc)
         return kimenet, time.monotonic() - kezdet, 0, None

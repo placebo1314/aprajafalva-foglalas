@@ -211,15 +211,38 @@ class Orchestrator:
 
     # -- szabad szöveges forduló ------------------------------------
 
-    def fordulo(self, session_id: str, mondat: str, most: str) -> dict:
+    def fordulo(
+        self,
+        session_id: str,
+        mondat: str,
+        most: str,
+        elozmenyek: list[tuple[str, str]] | None = None,
+    ) -> dict:
+        """`elozmenyek`: a beszélgetés utolsó fordulói `(ki, mit)`
+        párokként — ezt az értelmező kapja meg (ADR-019: a modell a
+        beszélgetést látja, nem a kontextust adatként).
+
+        **A hívó vezeti, nem az orchestrator**: a ténylegesen kimondott
+        magyar mondatokat csak a felület ismeri (az orchestrator
+        strukturált választ ad, amit az `assistant/valasz/` fogalmaz
+        mondattá). `None` esetén az értelmező előzmények nélkül dolgozik
+        — ez a determinisztikus út és az egyfordulós mérés esete."""
         allapot = self._allapot(session_id)
-        valasz = self._fordulo_belso(allapot, session_id, mondat, most)
+        valasz = self._fordulo_belso(allapot, session_id, mondat, most, elozmenyek or [])
         return self._ismetlest_figyel(allapot, valasz)
 
     def _fordulo_belso(
-        self, allapot: _SessionAllapot, session_id: str, mondat: str, most: str
+        self,
+        allapot: _SessionAllapot,
+        session_id: str,
+        mondat: str,
+        most: str,
+        elozmenyek: list[tuple[str, str]],
     ) -> dict:
-        kontextus = ErtelmezesKontextus(megorzott_parameterek=dict(allapot.megorzott_parameterek))
+        kontextus = ErtelmezesKontextus(
+            megorzott_parameterek=dict(allapot.megorzott_parameterek),
+            elozmenyek=list(elozmenyek),
+        )
         ertelmezes = self.ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
         self.utolso_ertelmezes = ertelmezes
         eszkoz = ertelmezes.get("eszkoz")
