@@ -26,13 +26,21 @@ válaszidőt, kikapcsolva viszont a mező kihagyása kontrollálatlan
 gondolkodásba futtatja a modellt (megfigyelt eset: ~7680 tokenes válasz,
 JSON parse hiba a séma helyett) — a mezőt mindig explicit kell küldeni.
 
+**A modell a BESZÉLGETÉST látja, nem a kontextust adatként** (ADR-019).
+A bemenet az utolsó néhány forduló párbeszédként (`Vásárló:` /
+`Rendszer:` sorok, l. `beszelgetes_szovege`), a végén az aktuális
+mondattal — és a modell EGY hívásban adja vissza a teljes kérést. Ha a
+beszélgetésből az derül ki, hogy egy adat már nem érvényes, egyszerűen
+nem tölti ki a mezőt. Korábban ehelyett a megőrzött paraméterek mentek
+be adatként, és egy KÜLÖN, zárt modellhívás ("melyik mező esik ki?")
+próbálta utólag korrigálni — az a gépezet megszűnt.
+
 **Ha az Ollama nem elérhető, ez a réteg nem dob kivételt** — `{"eszkoz":
 "nincs", "parameterek": {}}`-et ad vissza (a legártalmatlanabb kimenet:
 az orchestrator ezt egyszerű elutasításként kezeli, nem foglal és nem
-töröl semmit), és a hibát az `utolso_hiba` mezőn jelzi — ezt a
-`kaszkad.py` arra használja, hogy megkülönböztesse "a modell szerint ez
-nem foglalási kérés" és "a modell technikailag nem is válaszolt"
-között."""
+töröl semmit), és a hibát az `utolso_hiba` mezőn jelzi — ezt a hívó
+kaszkád arra használja, hogy megkülönböztesse "a modell szerint ez nem
+foglalási kérés" és "a modell technikailag nem is válaszolt" között."""
 
 from __future__ import annotations
 
@@ -44,7 +52,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-from assistant.interpreter import ErtelmezesKontextus
+from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
 from assistant.interpreter.peldak import PELDAK
 from assistant.tools import semak
 from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
@@ -180,34 +188,36 @@ a "datum_kifejezes_2" mezőbe másold, szintén szó szerint.
 Lemondáshoz a foglalási kód kell — ha nincs a mondatban, visszakerdez \
 (hianyzo_mezo: foglalasi_kod).
 
+BESZÉLGETÉS: a bemenet a beszélgetés utolsó fordulói. A VÁSÁRLÓ UTOLSÓ
+mondatát alakítsd eszközhívássá — de a TELJES beszélgetés fényében: ami
+korábban elhangzott és még érvényes (pl. a bolt), azt töltsd ki akkor is,
+ha az utolsó mondat nem ismétli meg. Ha viszont a beszélgetésből az derül
+ki, hogy egy adat MÁR NEM érvényes — a vásárló mást kér, vagy azt mondja,
+hogy mindegy —, akkor egyszerűen NE töltsd ki azt a mezőt.
+
 Példák:
-{peldak}{kontextus}"""
+{peldak}"""
 
-# A szándék KEMÉNY része (bolt, szolgáltatás) — csak ezt adjuk át a
-# modellnek a korábbi fordulókból. A PUHA rész (dátum, napszak) minden
-# fordulóban frissen dől el (`orchestrator.kovetkezo_kontextus`), ezért
-# azt átadni félrevezető lenne: a modell azt hihetné, hogy egy korábbi
-# dátumot kell megismételnie.
-_KEMENY_KONTEXTUS_MEZOK = ("bolt_id", "szolgaltatas_id")
+# Ki mondta -> ahogy a promptban megjelenik. A modell párbeszédet lát,
+# nem adatszerkezetet (ADR-019).
+_BESZELO_CIMKE = {KI_VASARLO: "Vásárló", KI_RENDSZER: "Rendszer"}
 
 
-def _kontextus_szovege(megorzott: dict) -> str:
-    """A korábbi fordulók kemény része a promptban — enélkül a modell
-    minden fordulót nulláról kezd, és egy alkudozó follow-up mondatra
-    ("talán jövő héten") a boltra kérdez rá, amit a beszélgetés két
-    mondattal korábban már tisztázott."""
-    kemeny = [
-        f"{mezo}={megorzott[mezo]}" for mezo in _KEMENY_KONTEXTUS_MEZOK if megorzott.get(mezo)
-    ]
-    if not kemeny:
-        return ""
-    return (
-        "\n\nA beszélgetés eddig ezt tudta: "
-        + ", ".join(kemeny)
-        + ". Ha az új mondat nem mond mást erről, TARTSD MEG (ne kérdezz rá újra). "
-        "Ha viszont a mondat azt mondja, hogy mindegy melyik, vagy másikat kér, "
-        "akkor hagyd ki a mezőt, illetve add meg az újat."
-    )
+def beszelgetes_szovege(elozmenyek: list[tuple[str, str]], mondat: str) -> str:
+    """A modellnek átadott bemenet: a beszélgetés utolsó fordulói
+    párbeszédként, a végén az AKTUÁLIS vásárlói mondattal.
+
+    Előzmények nélkül csak maga a mondat megy — így az egyfordulós
+    esetek pontosan úgy futnak, mint korábban, és a mérésük
+    összehasonlítható marad.
+
+    Ismeretlen `ki` értéket kihagyunk: a prompt alakja nem múlhat azon,
+    hogy egy hívó elgépelt-e egy címkét."""
+    sorok = [f"{_BESZELO_CIMKE[ki]}: {szoveg}" for ki, szoveg in elozmenyek if ki in _BESZELO_CIMKE]
+    if not sorok:
+        return mondat
+    sorok.append(f"{_BESZELO_CIMKE[KI_VASARLO]}: {mondat}")
+    return "\n".join(sorok)
 
 
 def _peldak_szovege() -> str:
@@ -377,13 +387,12 @@ class LLMErtelmezo:
             "messages": [
                 {
                     "role": "system",
-                    "content": _RENDSZER_PROMPT.format(
-                        most=most,
-                        peldak=_peldak_szovege(),
-                        kontextus=_kontextus_szovege(kontextus.megorzott_parameterek),
-                    ),
+                    "content": _RENDSZER_PROMPT.format(most=most, peldak=_peldak_szovege()),
                 },
-                {"role": "user", "content": mondat},
+                {
+                    "role": "user",
+                    "content": beszelgetes_szovege(kontextus.elozmenyek, mondat),
+                },
             ],
             "format": FORMAT_SEMA,
             "stream": False,
@@ -424,90 +433,3 @@ class LLMErtelmezo:
         ertelmezes.setdefault("parameterek", {})
         ertelmezes["bizonyossag"] = bizonyossag_szamol(valasz.get("logprobs"), ertelmezes)
         return ertelmezes
-
-    def valtozas_elemzes(self, mondat: str, megorzott_parameterek: dict) -> dict | None:
-        """**Mi változott?** — a modell egyetlen, szigorúan zárt
-        feladata a kaszkádban (`kaszkad.py`, ADR-016): megmondja, hogy a
-        beszélgetés eddigi, MEGŐRZÖTT paramétereiből melyiket tartja meg
-        a mondat, és melyiket engedi el.
-
-        A kimenet kizárólag **mezőnevek** két listája — a modell SOSEM
-        ad értéket. Emiatt nem is tud rossz boltot vagy dátumot
-        hallucinálni: az értékek továbbra is a determinisztikus
-        parserből, illetve a zárt katalógusból jönnek. Ez a szűk szerep
-        teszi ellenőrizhetővé a hozzájárulását.
-
-        A választható mezőnevek halmaza a ténylegesen meglévő
-        kontextuskulcsokra szűkül (`enum`), tehát olyan mezőt sem tud
-        megnevezni, ami nincs is a kontextusban.
-
-        Visszatérési érték: `{"megtart": [...], "elenged": [...]}`, vagy
-        `None`, ha nincs mit elemezni / a hívás nem sikerült (ilyenkor a
-        hívó a szabály-alapú viselkedésnél marad)."""
-        self.utolso_hiba = None
-        kulcsok = sorted(k for k in megorzott_parameterek if k != "session_id")
-        if not kulcsok:
-            return None
-
-        sema = {
-            "type": "object",
-            "properties": {
-                "elenged": {
-                    "type": "array",
-                    "items": {"type": "string", "enum": kulcsok},
-                },
-            },
-            "required": ["elenged"],
-            "additionalProperties": False,
-        }
-        # A megfogalmazás mérésből származik: az első változat ("melyik
-        # adat nem érvényes már?") a modellt túl-elengedésre vitte —
-        # minden olyan mezőt eldobott, amit a mondat NEM EMLÍTETT, nem
-        # csak amit ELLENTMONDOTT neki. Emiatt a "bármikor a jövő héten"
-        # (ami a dátumot változtatja) a boltot is eldobta. A kimondott
-        # alapszabály + a két eset szembeállítása ezt a hibaosztályt
-        # célozza, nem egy-egy konkrét mondatot.
-        prompt = (
-            "Egy foglalási beszélgetés eddig ezeket tudta a vásárlóról:\n"
-            + "\n".join(f"- {k}: {megorzott_parameterek[k]}" for k in kulcsok)
-            + "\n\nA vásárló új mondata: "
-            + mondat
-            + "\n\nVedd sorra a fenti adatokat egyenként. Egy adatot akkor "
-            "sorolj fel, ha a mondat AZ ADOTT ADATRÓL szól, és mást kér, mint "
-            "ami fent szerepel (akár konkrét másikat, akár azt, hogy mindegy). "
-            "Ha a mondat nem erről az adatról szól, hagyd ki.\n\n"
-            "Példa a gondolatmenetre: ha a mondat egy másik napról szól, akkor "
-            "a dátum szerepel a listában, a bolt viszont nem — a mondat nem a "
-            "boltról szólt."
-        )
-        payload = {
-            "model": self.szolgaltato.modell,
-            "messages": [{"role": "user", "content": prompt}],
-            "format": sema,
-            "stream": False,
-            "think": False,
-            "options": {"temperature": 0},
-        }
-        req = urllib.request.Request(
-            self.szolgaltato.url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=self.szolgaltato.timeout_masodperc) as resp:
-                valasz = json.loads(resp.read().decode("utf-8"))
-            eredmeny = json.loads(valasz.get("message", {}).get("content", ""))
-        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            self.utolso_hiba = f"változás-elemzés sikertelen: {exc}"
-            _LOG.warning(self.utolso_hiba)
-            return None
-
-        if not isinstance(eredmeny, dict):
-            self.utolso_hiba = f"Váratlan alak a változás-elemzésben: {eredmeny!r}"
-            return None
-
-        # Védőháló: a zárt halmazon kívüli mezőnevet eldobjuk, akkor is,
-        # ha a séma elvileg kizárta.
-        elenged = [m for m in (eredmeny.get("elenged") or []) if m in kulcsok]
-        return {"megtart": [k for k in kulcsok if k not in elenged], "elenged": elenged}

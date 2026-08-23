@@ -24,15 +24,40 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
+# Az `elozmenyek` első elemének megengedett értékei — ki mondta.
+KI_VASARLO = "vasarlo"
+KI_RENDSZER = "rendszer"
+
 
 @dataclass(frozen=True)
 class ErtelmezesKontextus:
-    """Amit az értelmezőnek tudnia kell a session korábbi állapotából —
-    a golden set "megorzott_parameterek" elve: a korábban megadott, de
-    még fel nem használt adatot NEM szabad elveszíteni egy újabb
-    fordulóban (pl. a dátum megmarad, miközben a boltot újrakérdezzük)."""
+    """Amit az értelmezőnek tudnia kell a session korábbi állapotából.
+
+    **Két, egymástól élesen elváló mező, és a sorrendjük számít:**
+
+    `elozmenyek` — a beszélgetés utolsó néhány fordulója `(ki, mit)`
+    párokként, ahol `ki` a `KI_VASARLO` vagy a `KI_RENDSZER`. Ez az
+    ELSŐDLEGES forrás: az LLM-alapú értelmező ezt párbeszédként kapja
+    meg, és a teljes kérést egyetlen hívásban adja vissza. Ha a
+    beszélgetésből az derül ki, hogy egy korábbi adat már nem érvényes
+    (a vásárló mást kér, vagy azt mondja, mindegy), a modell egyszerűen
+    NEM tölti ki azt a mezőt — nincs külön "elengedés"-fogalom, nincs
+    külön hívás rá (ADR-019).
+
+    `megorzott_parameterek` — a korábbi fordulóból megőrzött, MÁR
+    FELOLDOTT paraméterek. A szerepe **tartalék**, nem bemenet: akkor
+    tölt ki egy mezőt, ha a modell nem látta a beszélgetést (nincs
+    `elozmenyek` — pl. determinisztikus út, gombnyomás, első forduló).
+    Ha a modell LÁTTA a beszélgetést és mégis üresen hagyott egy mezőt,
+    az a döntése — a `None` erősebb, mint a megőrzött érték.
+
+    Ez a megkülönböztetés az ADR-019 lényege: korábban a megőrzött
+    paraméterek adatként mentek a promptba, és a modellnek külön, zárt
+    kérdésben kellett megmondania, mit "enged el". Az a gépezet
+    megszűnt."""
 
     megorzott_parameterek: dict = field(default_factory=dict)
+    elozmenyek: list[tuple[str, str]] = field(default_factory=list)
 
 
 @runtime_checkable

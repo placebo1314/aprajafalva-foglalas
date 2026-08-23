@@ -10,7 +10,7 @@ réteg veszi át hiba nélkül."""
 
 from __future__ import annotations
 
-from assistant.interpreter import ErtelmezesKontextus
+from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
 from assistant.interpreter.forditott_kaszkad import ForditottKaszkadErtelmezo
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
@@ -20,40 +20,29 @@ _MOST = "2026-08-17T09:00:00Z"  # hétfő
 class _FakeLLM:
     """Az `LLMErtelmezo`-t helyettesíti — nincs Ollama-hívás."""
 
-    def __init__(
-        self,
-        valasz: dict | None = None,
-        hiba: str | None = None,
-        elenged: list[str] | None = None,
-    ):
+    def __init__(self, valasz: dict | None = None, hiba: str | None = None):
         self.valasz = valasz or {"eszkoz": "nincs", "parameterek": {}}
         self.utolso_hiba = hiba
         self.kapott_mondatok: list[str] = []
-        # A szűk, zárt "mi esik ki?" hívás szkriptelt válasza — alapból
-        # semmi nem esik ki.
-        self.elenged = elenged or []
-        self.valtozas_hivasok: list[str] = []
+        self.kapott_kontextusok: list[ErtelmezesKontextus] = []
 
     def ertelmez(self, mondat: str, *, most: str, kontextus: ErtelmezesKontextus) -> dict:
         self.kapott_mondatok.append(mondat)
+        self.kapott_kontextusok.append(kontextus)
         return self.valasz
-
-    def valtozas_elemzes(self, mondat: str, megorzott_parameterek: dict) -> dict | None:
-        self.valtozas_hivasok.append(mondat)
-        kulcsok = sorted(k for k in megorzott_parameterek if k != "session_id")
-        elenged = [m for m in self.elenged if m in kulcsok]
-        return {"megtart": [k for k in kulcsok if k not in elenged], "elenged": elenged}
 
 
 def _kaszkad(llm=None) -> ForditottKaszkadErtelmezo:
     return ForditottKaszkadErtelmezo(SzabalyAlapuErtelmezo(), llm)
 
 
-def _ertelmez(kaszkad, mondat, megorzott=None):
+def _ertelmez(kaszkad, mondat, megorzott=None, elozmenyek=None):
     return kaszkad.ertelmez(
         mondat,
         most=_MOST,
-        kontextus=ErtelmezesKontextus(megorzott_parameterek=megorzott or {}),
+        kontextus=ErtelmezesKontextus(
+            megorzott_parameterek=megorzott or {}, elozmenyek=elozmenyek or []
+        ),
     )
 
 
@@ -294,6 +283,90 @@ def test_ervenytelen_szolgaltatast_eldobunk():
     assert eredmeny["parameterek"]["szolgaltatas_id"] == "altato"
 
 
+# --- a beszélgetés a bemenet, a kontextus csak tartalék (ADR-019) -----
+
+
+def test_a_beszelgetes_atmegy_az_ertelmezonek():
+    """A kaszkád nem nyeli el az előzményeket — a modell azt kapja, amit
+    a hívó adott."""
+    llm = _FakeLLM({"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "szundi"}})
+    elozmenyek = [(KI_VASARLO, "Szundihoz mennék"), (KI_RENDSZER, "Nincs szabad időpont.")]
+
+    _ertelmez(_kaszkad(llm), "és holnap?", elozmenyek=elozmenyek)
+
+    assert llm.kapott_kontextusok[0].elozmenyek == elozmenyek
+
+
+def test_elozmeny_nelkul_a_megorzott_bolt_kitolt():
+    """Tartalék-ág: a modell nem látta a beszélgetést, ezért a megőrzött
+    bolt kitölthet — különben újra rákérdeznénk arra, amit tudunk."""
+    llm = _FakeLLM({"eszkoz": "szabad_idopontok", "parameterek": {"datum_kifejezes": "holnap"}})
+
+    eredmeny = _ertelmez(_kaszkad(llm), "és holnap?", megorzott={"bolt_id": "torpilla"})
+
+    assert eredmeny["parameterek"]["bolt_id"] == "torpilla"
+
+
+def test_elozmennyel_a_modell_ures_mezoje_eros():
+    """ADR-019 magja: ha a modell LÁTTA a beszélgetést, és mégis üresen
+    hagyta a boltot, az a DÖNTÉSE — a beszélgetésből nyilván az derült
+    ki, hogy a korábbi bolt már nem érvényes ("és bármelyik másik
+    boltban?"). A megőrzött értéket ilyenkor NEM csempésszük vissza:
+    pontosan ez az a hiba, amiért korábban külön elengedés-hívás kellett."""
+    llm = _FakeLLM({"eszkoz": "szabad_idopontok", "parameterek": {}})
+
+    eredmeny = _ertelmez(
+        _kaszkad(llm),
+        "és bármelyik másik boltban?",
+        megorzott={"bolt_id": "ugyifogyi"},
+        elozmenyek=[(KI_VASARLO, "Petárdázni szeretnék kedden.")],
+    )
+
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["hianyzo_mezo"] == "bolt_id"
+
+
+def test_elozmennyel_a_modell_altal_megadott_bolt_ervenyes():
+    """Az ellenpár: ha a modell a beszélgetésből kiolvasta a boltot, azt
+    használjuk — nem kell hozzá megőrzött paraméter."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "torpilla", "datum_kifejezes": "holnap"},
+        }
+    )
+
+    eredmeny = _ertelmez(
+        _kaszkad(llm),
+        "és holnap?",
+        elozmenyek=[(KI_VASARLO, "Törpillához mennék")],
+    )
+
+    assert eredmeny["parameterek"]["bolt_id"] == "torpilla"
+    assert eredmeny["parameterek"]["datum_tol"] == "2026-08-18T00:00:00Z"
+
+
+def test_elozmennyel_a_modell_visszakerdezese_kimegy():
+    """A tartalék-kapu is csak előzmény NÉLKÜL segít: ha a modell látta
+    a beszélgetést és a boltra kérdez, az érvényes visszakérdezés."""
+    llm = _FakeLLM(
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        }
+    )
+
+    eredmeny = _ertelmez(
+        _kaszkad(llm),
+        "mindegy melyik bolt, csak legyen hely",
+        megorzott={"bolt_id": "szundi"},
+        elozmenyek=[(KI_VASARLO, "Szeretnék időpontot a Szundiba szerdára.")],
+    )
+
+    assert eredmeny["eszkoz"] == "visszakerdez"
+    assert eredmeny["parameterek"]["hianyzo_mezo"] == "bolt_id"
+
+
 # --- foglalási kód: a mondatból, nem a modelltől ----------------------
 
 
@@ -416,66 +489,6 @@ def test_szolgaltatas_a_mondatbol_potlodik_ha_a_modell_kihagyta():
     eredmeny = _ertelmez(_kaszkad(llm), "Szeretnék időpontot kedden nagy petárdához.")
 
     assert eredmeny["parameterek"]["szolgaltatas_id"] == "nagy_petarda"
-
-
-# --- elengedés-kapu: a mondat elvetheti az örökölt boltot -------------
-
-
-def test_a_mondat_elengedheti_a_kontextusbol_orokolt_boltot():
-    """ "és bármelyik másik boltban?" — a modell FŐ hívása hajlamos
-    megtartani a kontextus boltját; a szűk, zárt "mi esik ki?" kérdés
-    dönti el, hogy a mondat elvetette."""
-    llm = _FakeLLM(
-        {"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "ugyifogyi"}},
-        elenged=["bolt_id"],
-    )
-    eredmeny = _ertelmez(
-        _kaszkad(llm), "és bármelyik másik boltban?", megorzott={"bolt_id": "ugyifogyi"}
-    )
-
-    assert eredmeny["eszkoz"] == "visszakerdez"
-    assert eredmeny["parameterek"]["hianyzo_mezo"] == "bolt_id"
-
-
-def test_az_elengedes_nem_kerdez_ra_ha_a_mondat_kimondja_a_boltot():
-    """Ha a mondat MEGNEVEZ egy boltot, nincs mit elengedni — és a plusz
-    modellhívás is elmarad."""
-    llm = _FakeLLM(
-        {"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "torpilla"}},
-        elenged=["bolt_id"],
-    )
-    eredmeny = _ertelmez(
-        _kaszkad(llm), "inkább a Törpillához mennék", megorzott={"bolt_id": "ugyifogyi"}
-    )
-
-    assert eredmeny["eszkoz"] == "szabad_idopontok"
-    assert eredmeny["parameterek"]["bolt_id"] == "torpilla"
-    assert llm.valtozas_hivasok == []
-
-
-def test_az_elengedes_vedohaloja_megvedi_a_boltot_idorol_szolo_mondatnal():
-    """Ha a mondat POZITÍV időbeli jelzést hordoz, akkor időről szól,
-    nem a boltról — a modell túl-elengedését a védőháló kiszűri
-    (`kaszkad.kemeny_reszt_vedd`)."""
-    llm = _FakeLLM(
-        {"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "szundi"}},
-        elenged=["bolt_id"],
-    )
-    eredmeny = _ertelmez(
-        _kaszkad(llm), "talán jövő héten, még nem tudom biztosan", megorzott={"bolt_id": "szundi"}
-    )
-
-    assert eredmeny["eszkoz"] == "szabad_idopontok"
-    assert eredmeny["parameterek"]["bolt_id"] == "szundi"
-
-
-def test_kontextus_nelkul_nincs_elengedes_hivas():
-    """Nulladik forduló: nincs mit elengedni, a plusz modellhívás
-    elmarad — a latencia csak ott nő, ahol tényleg kétes a helyzet."""
-    llm = _FakeLLM({"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "szundi"}})
-    _ertelmez(_kaszkad(llm), "mikor lehet menni?")
-
-    assert llm.valtozas_hivasok == []
 
 
 # --- nem blokkoló mezőre nem kérdezünk vissza -------------------------

@@ -57,7 +57,7 @@ from __future__ import annotations
 
 import logging
 
-from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, rule_based
+from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
 from assistant.interpreter.llm_based import LLMErtelmezo
 from assistant.interpreter.normalizalo import normalizal
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
@@ -74,41 +74,6 @@ _LOG = logging.getLogger(__name__)
 # szellemben, mint az áthelyezés egyfordulós korlátja
 # (assistant/orchestrator.py docstring).
 _KIEGESZITHETO_MEZOK = frozenset({"bolt_id"})
-
-# A szándék KEMÉNY része (ADR-016, `orchestrator.kovetkezo_kontextus`) —
-# ezt egy időről szóló mondat nem engedheti el, l. `kemeny_reszt_vedd`.
-_KEMENY_MEZOK = frozenset({"bolt_id", "szolgaltatas_id"})
-
-
-def kemeny_reszt_vedd(mondat: str, most: str, elenged: list[str]) -> list[str]:
-    """Védőháló a modell túl-elengedése ellen: ha a mondat POZITÍV
-    időbeli jelzést tartalmaz (a determinisztikus parser dátumot vagy
-    napszakot old fel belőle), akkor a mondat IDŐRŐL szól — ilyenkor a
-    KEMÉNY rész (bolt, szolgáltatás) nem eshet ki miatta.
-
-    Ez nem kulcsszólista és nem a mérési halmazhoz igazítás: a
-    szándék-rétegzés doktrínájának (ADR-016,
-    `orchestrator.kovetkezo_kontextus`) közvetlen alkalmazása — a kemény
-    rész csak akkor mozdul, ha a mondat POZITÍVAN mást állít róla, nem
-    pusztán attól, hogy nem említi.
-
-    Miért kell: három különböző promptmegfogalmazással mérve a
-    qwen3.5:9b vagy MINDENT elengedett (a "bármikor a jövő héten"
-    mondatra a boltot is), vagy semmit — a "melyik adatnak mond ellent a
-    mondat" osztályozás ezen a modellméreten önmagában nem megbízható. A
-    védőháló azt a hibaosztályt zárja ki, ami a determinisztikus
-    alapvonalat RONTANÁ.
-
-    Modul szintű függvény, mert MINDKÉT kaszkád használja: az ADR-016
-    sorrendű `KaszkadErtelmezo` és a fordított `ForditottKaszkadErtelmezo`
-    is (ott az elengedés-ellenőrzés ugyanezt a védőhálót kapja) — egy
-    másolat helyett egy hely."""
-    if not rule_based.idobeli_jelzes(mondat, most):
-        return list(elenged)
-    szurt = [m for m in elenged if m not in _KEMENY_MEZOK]
-    if szurt != list(elenged):
-        _LOG.info("kaszkád: a kemény rész védve (a mondat időről szól)")
-    return szurt
 
 
 class KaszkadErtelmezo:
@@ -136,13 +101,10 @@ class KaszkadErtelmezo:
             return szabaly_eredmeny
 
         if szabaly_eredmeny.get("eszkoz") != "visszakerdez":
-            # VAN kontextus és a determinisztikus réteg döntött — de a
-            # döntése némán MEGTARTHATOTT olyan korábbi paramétert, amit
-            # a mondat valójában elenged ("mégis mindegy, mikor"). Ezt a
-            # mintaillesztés nem látja: nincs benne olyan szó, amit egy
-            # szabály kereshetne. Kulcsszólistát írni rá ráigazítás
-            # lenne — ezért ezt a modell dönti el, ZÁRT kimenettel.
-            return self._elengedes_finomitas(mondat, most, kontextus, szabaly_eredmeny)
+            # A determinisztikus réteg döntött — ebben a felállásban a
+            # modellnek nincs több dolga.
+            _LOG.info("kaszkád: réteg=szabaly eszköz=%s", szabaly_eredmeny.get("eszkoz"))
+            return szabaly_eredmeny
 
         hianyzo_mezo = (szabaly_eredmeny.get("parameterek") or {}).get("hianyzo_mezo")
         if hianyzo_mezo not in _KIEGESZITHETO_MEZOK:
@@ -179,54 +141,4 @@ class KaszkadErtelmezo:
         _LOG.info(
             "kaszkád: réteg=llm eszköz=%s (bolt_id=%s kiegészítve)", vegleges.get("eszkoz"), bolt_id
         )
-        return vegleges
-
-    def _elengedes_finomitas(
-        self,
-        mondat: str,
-        most: str,
-        kontextus: ErtelmezesKontextus,
-        szabaly_eredmeny: dict,
-    ) -> dict:
-        """A modell megmondja, a megőrzött kontextusból mi ESIK KI az új
-        mondat után; a determinisztikus parser ezután újrafut a szűkített
-        kontextussal.
-
-        A modell szerepe itt szigorúan zárt: **mezőneveket** ad vissza,
-        soha nem értéket (`LLMErtelmezo.valtozas_elemzes`). A dátum
-        továbbra is a parserből jön, a bolt a zárt katalógusból — a
-        modell csak azt befolyásolja, MELYIK korábbi adatot ne vigyük
-        tovább.
-
-        Ez a "bármelyik másik boltban" típusú mondatok kezelése
-        kulcsszólista NÉLKÜL: nem felsoroljuk a lehetséges
-        megfogalmazásokat (az ráigazítás lenne a mérési halmazra), hanem
-        a modellre bízzuk a döntést egy ellenőrizhető, zárt kimenettel."""
-        megorzott = kontextus.megorzott_parameterek
-        if not megorzott:
-            _LOG.info("kaszkád: réteg=szabaly (nincs megőrzött kontextus)")
-            return szabaly_eredmeny
-
-        valtozas = self.llm.valtozas_elemzes(mondat, megorzott)
-        if not valtozas or not valtozas.get("elenged"):
-            _LOG.info("kaszkád: réteg=szabaly (a modell szerint semmi nem esik ki)")
-            return szabaly_eredmeny
-
-        elenged = kemeny_reszt_vedd(mondat, most, valtozas["elenged"])
-        if not elenged:
-            _LOG.info("kaszkád: réteg=szabaly (a javasolt elengedést a védőháló kiszűrte)")
-            return szabaly_eredmeny
-
-        szukitett = {k: v for k, v in megorzott.items() if k not in elenged}
-        vegleges = self.szabaly.ertelmez(
-            mondat, most=most, kontextus=ErtelmezesKontextus(megorzott_parameterek=szukitett)
-        )
-        if vegleges == szabaly_eredmeny:
-            # Az elengedés nem változtatott az eredményen — akkor a
-            # modell érdemben nem járult hozzá, ne is állítsuk azt.
-            _LOG.info("kaszkád: réteg=szabaly (az elengedés nem változtatott)")
-            return szabaly_eredmeny
-
-        self.utolso_reteg = "llm"
-        _LOG.info("kaszkád: réteg=llm (elengedve: %s)", elenged)
         return vegleges

@@ -11,7 +11,7 @@ from datetime import datetime
 
 import pytest
 
-from assistant.interpreter import ErtelmezesKontextus, rule_based
+from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
 _MOST = "2026-08-17T09:00:00Z"  # hétfő
@@ -400,33 +400,3 @@ def test_bizonyossag_kontextusbol_orokolt_datum_is_tudas():
         ),
     )["bizonyossag"]
     assert b["datum"] == 1.0
-
-
-# --- idobeli_jelzes: "szól-e a mondat időről?" ------------------------
-#
-# Mindkét kaszkád ezzel védi a szándék KEMÉNY részét a modell
-# túl-elengedésétől (`kaszkad.kemeny_reszt_vedd`).
-
-
-def test_idobeli_jelzes_feloldhato_datumra_igaz():
-    assert rule_based.idobeli_jelzes("és jövő héten péntek?", _MOST) is True
-
-
-def test_idobeli_jelzes_napszakra_igaz():
-    assert rule_based.idobeli_jelzes("inkább este", _MOST) is True
-
-
-def test_idobeli_jelzes_altalanos_ido_fonevre_is_igaz():
-    """ "van esetleg más napon?" — nyilván időről szól, de konkrét nap
-    nem oldható fel belőle. Ha ezt nem tekintenénk időbeli jelzésnek, a
-    modell túl-elengedése elvihetné vele a boltot is."""
-    assert rule_based.idobeli_jelzes("van esetleg más napon?", _MOST) is True
-    assert rule_based.idobeli_jelzes("mikor mehetek?", _MOST) is True
-
-
-def test_idobeli_jelzes_bolt_elengedesre_hamis():
-    """Az ellenpár: ezekben a mondatokban NINCS időbeli jelzés, tehát a
-    kemény rész elengedése érvényes lehet."""
-    assert rule_based.idobeli_jelzes("és bármelyik másik boltban?", _MOST) is False
-    assert rule_based.idobeli_jelzes("mindegy melyik bolt, csak legyen hely", _MOST) is False
-    assert rule_based.idobeli_jelzes("mindegy milyen méret", _MOST) is False

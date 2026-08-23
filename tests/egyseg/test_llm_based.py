@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from assistant.interpreter import ErtelmezesKontextus
+from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
 from assistant.interpreter.llm_based import (
     LLMErtelmezo,
     LLMSzolgaltato,
@@ -102,7 +102,59 @@ def test_ertelmez_think_explicit_false():
     assert elkuldott["payload"]["model"] == "teszt-modell"
 
 
-def _elkuldott_rendszer_prompt(megorzott: dict) -> str:
+def _elkuldott_uzenetek(elozmenyek: list[tuple[str, str]], mondat: str = "és jövő héten?") -> dict:
+    ertelmezo = LLMErtelmezo(LLMSzolgaltato(modell="teszt-modell"))
+    elkuldott = {}
+
+    def hamis_urlopen(req, timeout=None):
+        elkuldott["payload"] = json.loads(req.data)
+        return _ollama_valasz({"eszkoz": "nincs", "parameterek": {}})
+
+    with patch("urllib.request.urlopen", side_effect=hamis_urlopen):
+        ertelmezo.ertelmez(
+            mondat,
+            most=_MOST,
+            kontextus=ErtelmezesKontextus(elozmenyek=elozmenyek),
+        )
+    uzenetek = elkuldott["payload"]["messages"]
+    return {"rendszer": uzenetek[0]["content"], "vasarlo": uzenetek[1]["content"]}
+
+
+# --- a modell a BESZÉLGETÉST látja, nem a kontextust adatként (ADR-019)
+
+
+def test_a_beszelgetes_parbeszedkent_megy_at():
+    """Nem adatszerkezet, hanem párbeszéd: a modell ugyanazt látja,
+    amit egy ember látna a képernyőn."""
+    uzenetek = _elkuldott_uzenetek(
+        [
+            (KI_VASARLO, "szeretnék petárdát venni kedden"),
+            (KI_RENDSZER, "nincs szabad időpont kedden"),
+        ],
+        mondat="és bármelyik másik boltban?",
+    )
+
+    assert uzenetek["vasarlo"] == "\n".join(
+        [
+            "Vásárló: szeretnék petárdát venni kedden",
+            "Rendszer: nincs szabad időpont kedden",
+            "Vásárló: és bármelyik másik boltban?",
+        ]
+    )
+
+
+def test_elozmeny_nelkul_csak_a_mondat_megy():
+    """Egyfordulós eset — így a korábbi mérésekkel összehasonlítható
+    marad."""
+    uzenetek = _elkuldott_uzenetek([], mondat="petárdázni szeretnék kedden")
+
+    assert uzenetek["vasarlo"] == "petárdázni szeretnék kedden"
+
+
+def test_a_megorzott_parameterek_nem_kerulnek_a_promptba():
+    """ADR-019: a megőrzött paraméterek szerepe TARTALÉK, nem bemenet —
+    a promptban nincs helyük, különben a modell adatként kapná meg azt,
+    amit a beszélgetésből kell kiolvasnia."""
     ertelmezo = LLMErtelmezo(LLMSzolgaltato(modell="teszt-modell"))
     elkuldott = {}
 
@@ -114,39 +166,32 @@ def _elkuldott_rendszer_prompt(megorzott: dict) -> str:
         ertelmezo.ertelmez(
             "és jövő héten?",
             most=_MOST,
-            kontextus=ErtelmezesKontextus(megorzott_parameterek=megorzott),
+            kontextus=ErtelmezesKontextus(
+                megorzott_parameterek={"bolt_id": "szundi", "szolgaltatas_id": "altato"}
+            ),
         )
-    return elkuldott["payload"]["messages"][0]["content"]
+
+    egyben = " ".join(u["content"] for u in elkuldott["payload"]["messages"])
+    assert "bolt_id=szundi" not in egyben
+    assert "szolgaltatas_id=altato" not in egyben
 
 
-def test_a_kemeny_kontextus_bekerul_a_promptba():
-    """A modell minden fordulót nulláról lát — a korábbi fordulók kemény
-    része (bolt, szolgáltatás) nélkül egy alkudozó follow-up mondatra a
-    boltra kérdezne rá, amit a beszélgetés már tisztázott."""
-    prompt = _elkuldott_rendszer_prompt({"bolt_id": "szundi", "szolgaltatas_id": "altato"})
-
-    assert "bolt_id=szundi" in prompt
-    assert "szolgaltatas_id=altato" in prompt
-
-
-def test_a_puha_kontextus_nem_kerul_a_promptba():
-    """A dátum/napszak MINDEN fordulóban frissen dől el
-    (`orchestrator.kovetkezo_kontextus`) — átadni félrevezető lenne: a
-    modell azt hihetné, hogy a korábbi dátumot kell megismételnie."""
-    prompt = _elkuldott_rendszer_prompt(
-        {"bolt_id": "szundi", "datum_tol": "2026-08-18T00:00:00Z", "napszak": "delelott"}
+def test_ismeretlen_beszelo_cimket_kihagyunk():
+    """A prompt alakja nem múlhat azon, hogy egy hívó elgépelt-e egy
+    címkét."""
+    uzenetek = _elkuldott_uzenetek(
+        [("valaki_mas", "zaj"), (KI_VASARLO, "Szundihoz mennék")], mondat="és holnap?"
     )
-    kontextus_szakasz = prompt[prompt.index("A beszélgetés eddig ezt tudta") :]
 
-    assert "bolt_id=szundi" in kontextus_szakasz
-    assert "2026-08-18" not in kontextus_szakasz
-    assert "napszak" not in kontextus_szakasz
+    assert "zaj" not in uzenetek["vasarlo"]
+    assert uzenetek["vasarlo"] == "\n".join(["Vásárló: Szundihoz mennék", "Vásárló: és holnap?"])
 
 
-def test_ures_kontextusnal_nincs_kontextus_szakasz_a_promptban():
-    prompt = _elkuldott_rendszer_prompt({})
+def test_a_rendszerprompt_a_beszelgetesrol_beszel():
+    uzenetek = _elkuldott_uzenetek([(KI_VASARLO, "bármi")])
 
-    assert "A beszélgetés eddig ezt tudta" not in prompt
+    assert "BESZÉLGETÉS" in uzenetek["rendszer"]
+    assert "NE töltsd ki" in uzenetek["rendszer"]
 
 
 def test_ertelmez_ollama_nem_elerheto_nincs_kivetel(monkeypatch):
