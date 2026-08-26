@@ -44,6 +44,15 @@
 # tehát egy időjárás-kérdésre lefutva ténylegesen elvesz egy időpontot
 # valaki elől.
 #
+# **Instabil ismétlés**: az `ismetles` réteg öt azonos fordulója közül
+# kettő KÜLÖNBÖZŐ eszközhívást adott. Az összehasonlítás a
+# `{eszkoz, parameterek}` kanonikus alakján megy (ugyanazon, amin az
+# önkonzisztencia szavaztat, ADR-021) — a `bizonyossag` NEM része. Az
+# logprob, tehát futásonként a negyedik tizedesjegyen ingadozik; a
+# kérdés az, hogy a rendszer ugyanazt CSINÁLNÁ-e, nem az, hogy
+# ugyanannyira volt-e biztos benne. (Ez 2026-08-26-ig hibásan a teljes
+# kimenetet hasonlította össze — l. `docs/ALLAPOT.md`, mérési hibák.)
+#
 # **Kitalált tény**: zárt halmazon kívüli bolt vagy szolgáltatás; ár
 # bármelyik mezőben; a `nincs`/`visszakerdez`/hat eszköz halmazán kívüli
 # eszköznév; lemondási kód, ami a mondatban nem szerepel; sürgősségi

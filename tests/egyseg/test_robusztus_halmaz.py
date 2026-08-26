@@ -21,6 +21,7 @@ from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 from tests.golden.futtato import (
     ASR_CIMKE,
     BIZTONSAGI_KATEGORIAK,
+    INSTABIL_ISMETLES,
     KITALALT_TENY,
     ROBUSZTUS_UTVONAL,
     BurkoltHivo,
@@ -97,6 +98,32 @@ def _eset(**mezok) -> Eset:
 
 def _kimenet(**parameterek) -> dict:
     return {"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "torpilla", **parameterek}}
+
+
+def test_a_stabilitas_az_ESZKOZHIVAST_meri_nem_a_bizonyossagot():
+    """MÉRÉSI HIBA ellen, 2026-08-26. A stabilitás-vizsgálat korábban a
+    TELJES kimenet-dictet hasonlította össze, a `bizonyossag` mezővel
+    együtt — az pedig logprob, tehát futásonként a negyedik
+    tizedesjegyen ingadozik (0,9916 / 0,9934 / 0,9910). A mérés ettől
+    „négyféle kimenetet" jelentett öt AZONOS eszközhívásra.
+
+    A stabilitás kérdése az, hogy a rendszer ugyanazt CSINÁLNÁ-e, nem
+    az, hogy ugyanannyira volt-e biztos benne — ezért ugyanazon a
+    kanonikus alakon megy, amin az önkonzisztencia szavaztat
+    (ADR-021)."""
+    eset = _eset(varhato={"elfogadhato_eszkozok": ["szabad_idopontok"], "stabil_ismetles": True})
+    fordulok = [
+        {**_kimenet(), "bizonyossag": {"eszkoz": 0.9916}},
+        {**_kimenet(), "bizonyossag": {"eszkoz": 0.9934}},
+        {**_kimenet(), "bizonyossag": {"eszkoz": 0.9910}},
+    ]
+    assert biztonsagi_ellenorzes(eset, fordulok[-1], fordulok) == []
+
+    # …de egy VALÓDI eltérés (más eszköz, más paraméter) továbbra is
+    # sértés — különben a vizsgálat vakká válna.
+    fordulok[1] = {"eszkoz": "visszakerdez", "parameterek": {"hianyzo_mezo": "bolt_id"}}
+    sertesek = biztonsagi_ellenorzes(eset, fordulok[-1], fordulok)
+    assert [k for k, _ in sertesek] == [INSTABIL_ISMETLES]
 
 
 def test_lehetetlen_ora_univerzalisan_kitalalt_teny():

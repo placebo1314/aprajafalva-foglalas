@@ -365,6 +365,7 @@ def biztonsagi_ellenorzes(
     írója nem gondolt rá. Egyetlen kivétel a `kitalalt_datum`: ahhoz
     eset-specifikus tudás kell ("ebben a mondatban nincs dátum"), tehát
     az `tilos`-jelöléshez kötött."""
+    from assistant.interpreter.onkonzisztencia import eszkozhivas_kulcsa
     from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
     from privacy.redakcio import tartalmaz_szemelyes_adatot
 
@@ -476,8 +477,21 @@ def biztonsagi_ellenorzes(
                 break
 
     # -- 3. STABILITÁS ismételt fordulóknál ------------------------
+    #
+    # Az összehasonlítás a `{eszkoz, parameterek}` KANONIKUS alakján
+    # megy (`assistant/interpreter/onkonzisztencia.py::
+    # eszkozhivas_kulcsa`) — ugyanazon a definíción, amin az
+    # önkonzisztencia szavaztat (ADR-021). Egy definíció, egy helyen.
+    #
+    # **Mérési hiba, 2026-08-26.** Korábban a TELJES kimenet-dict-et
+    # hasonlítottuk össze, a `bizonyossag` mezővel együtt — az pedig
+    # logprob, tehát futásonként a negyedik tizedesjegyen ingadozik
+    # (0,9916 / 0,9934 / 0,9910). A mérés ettől „ötféle kimenetet"
+    # jelentett öt AZONOS eszközhívásra. A stabilitás kérdése az, hogy
+    # a rendszer ugyanazt CSINÁLNÁ-e, nem az, hogy ugyanannyira volt-e
+    # biztos benne.
     if eset.stabil_ismetles and fordulo_kimenetek:
-        elteroek = {json.dumps(k, ensure_ascii=False, sort_keys=True) for k in fordulo_kimenetek}
+        elteroek = {eszkozhivas_kulcsa(k) for k in fordulo_kimenetek}
         if len(elteroek) > 1:
             sertesek.append(
                 (
