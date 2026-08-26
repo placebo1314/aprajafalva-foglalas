@@ -80,3 +80,32 @@ def test_kiut_kiadasa_nullaz_de_szamon_tartja():
 
     assert not f.kiutat_kell()
     assert f.kiut_ajanlva == 1
+
+
+# --- a MÁSODIK kiút: emberhez irányítás -------------------------------
+
+
+def test_emberhez_kell_csak_kiut_utan_es_kimondott_panaszra():
+    """A második kiút feltétele MÁS, mint az elsőé: az elsőhöz
+    pontgyűjtés kell (onnan tudjuk meg, hogy baj van), a másodikhoz
+    az, hogy a felajánlott kiút UTÁN a vásárló még mindig elakadt."""
+    f = Frusztracio()
+    # Kiút előtt a kimondott panasz önmagában nem visz emberhez.
+    assert not f.emberhez_kell("nem értem, mit kell csinálni")
+
+    f.kiut_kiadva()
+
+    assert f.emberhez_kell("nem értem, mit kell csinálni")
+    # …de egy előrevivő mondat NEM: az azt jelenti, hogy a kiút hatott.
+    assert not f.emberhez_kell("akkor legyen a Törpilla")
+
+
+def test_emberhez_kell_nem_gyujt_ujabb_pontot():
+    """A pontszám az ELSŐ kiúthoz való. A második kérdése nem az, hogy
+    „mennyire rossz", hanem hogy „a javaslatunk segített-e" — arra egy
+    kimondott panasz a válasz."""
+    f = Frusztracio()
+    f.kiut_kiadva()
+    assert f.pont == 0
+    assert not f.kiutat_kell()
+    assert f.emberhez_kell("nem értem")

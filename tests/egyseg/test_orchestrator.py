@@ -1092,6 +1092,35 @@ def test_frusztracio_masodik_kiutja_emberhez_iranyit(tmp_path):
     assert kiutak[1]["uzenet_kulcs"] == "emberhez_iranyitas"
 
 
+def test_frusztracio_emberhez_iranyit_az_ISMETLES_kiutja_utan_is(tmp_path):
+    """A FEJ NÉLKÜLI VÉGIGJÁTSZÁS találata (2026-08-26).
+
+    A fenti teszt szándékosan VÁLTAKOZÓ hiányzó mezőt használ, hogy az
+    ismétlésfigyelő ne szólaljon meg — csakhogy a valóságban épp a
+    fordítottja történik: aki elakadt, ugyanazt a mondatot ismétli, a
+    rendszer ugyanazt válaszolja, tehát az ismétlésfigyelő ad ki
+    kiutat. A kiút pedig szándékosan nem számít „eredménytelen
+    fordulónak", így a frusztráció-pontszám sosem érte el újra a
+    küszöböt: **az emberhez irányítás a leggyakoribb elakadásban SOSEM
+    szólalt meg.**
+
+    A bemenet szó szerint a `docs/TESZTELES.md` 12. kézi próbája."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    # UGYANAZ a válasz minden fordulóban — ettől szólal meg az
+    # ismétlésfigyelő a harmadikra.
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz(mezo="bolt_id")] * 6)
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    valaszok = [orch.fordulo("s1", "nem értem, mit kell csinálni", _MOST) for _ in range(4)]
+
+    emberhez = [v for v in valaszok if v.get("emberhez")]
+    assert emberhez, [v.get("uzenet_kulcs") for v in valaszok]
+    assert emberhez[0]["uzenet_kulcs"] == "emberhez_iranyitas"
+    # A kiút NEM ajánl újabb szűkítést, amikor embert ajánl.
+    assert emberhez[0]["valaszthato_dimenziok"] == []
+
+
 def test_frusztracio_sikeres_ajanlat_utan_nem_szolal_meg(tmp_path):
     """Egy sikeres ajánlat nullázza a számlálót — a beszélgetés jó
     irányba ment, a korábbi döccenőket nem hordozzuk tovább."""

@@ -100,6 +100,20 @@ BESZELGETESEK: list[tuple[str, list[str]]] = [
     ("tényválasz", ["Hogy néz ki a Törpilla bolt?"]),
     ("lemondás kód nélkül", ["Le szeretném mondani a foglalásomat."]),
     ("ismétlés → kiút", ["mennék", "szeretnék menni", "menni szeretnék"]),
+    # A frusztráció-figyelő MÁSODIK kiútja: emberhez irányít (a vásárló
+    # 8. igénye). Négy forduló kell hozzá — ez a `docs/TESZTELES.md` 12.
+    # kézi próbája, ami eddig CSAK kézzel volt végigjátszható. A
+    # végigjátszás enélkül azt állította magáról, hogy a teljes utat
+    # méri, holott a beszélgetés legrosszabb végkimenetelét kihagyta.
+    (
+        "frusztráció → emberhez",
+        [
+            "nem értem, mit kell csinálni",
+            "nem értem, mit kell csinálni",
+            "nem értem, mit kell csinálni",
+            "nem értem, mit kell csinálni",
+        ],
+    ),
 ]
 
 # A teljes foglalási menet (keresés → jelölt → megerősítés → kód) — ezt

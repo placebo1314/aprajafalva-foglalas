@@ -100,6 +100,25 @@ class Frusztracio:
     def kiutat_kell(self) -> bool:
         return self.pont >= self.kuszob
 
+    def emberhez_kell(self, mondat: str) -> bool:
+        """Már ajánlottunk kiutat, és a vásárló MÉGIS kimondja, hogy
+        elakadt — ilyenkor nem gyűjtünk újabb pontot, hanem embert
+        ajánlunk.
+
+        **Miért van ez külön feltétel.** A pontgyűjtés az ELSŐ kiúthoz
+        való: onnan tudjuk meg, hogy baj van. A második kiút kérdése
+        más — azt már tudjuk, hogy baj van, és azt is, hogy a
+        szűkítési javaslat nem segített. Egy újabb „próbáljunk másik
+        hetet" ilyenkor nem információ, hanem makacsság.
+
+        A FEJ NÉLKÜLI VÉGIGJÁTSZÁS találta meg, hogy enélkül a második
+        kiút a leggyakoribb esetben SOSEM szólal meg: ha a vásárló
+        ugyanazt a mondatot ismétli, a rendszer ugyanazt válaszolja,
+        tehát az ismétlésfigyelő kiutat ad ki — a kiút pedig
+        szándékosan nem számít „eredménytelen fordulónak", így a
+        pontszám sosem éri el újra a küszöböt."""
+        return self.kiut_ajanlva >= 1 and kimondott_jel(mondat)
+
     def kiut_kiadva(self) -> None:
         """A kiút felajánlása után nullázunk, hogy ne minden további
         fordulóban ismételjük — de a `kiut_ajanlva` megmarad, mert a

@@ -442,10 +442,22 @@ class Orchestrator:
         és a MÁSODIK kiút már embert ajánl, nem újabb szűkítést
         (a vásárló 8. igénye: "legyen kiút emberhez")."""
         allapot.frusztracio.fordulo(mondat, valasz.get("tipus"))
-        if valasz.get("tipus") == "kiut" or not allapot.frusztracio.kiutat_kell():
+
+        # A MÁSODIK kiút felülírja az ismétlés-kiutat is. A fej nélküli
+        # végigjátszás mutatta meg, miért kell: ha a vásárló ugyanazt a
+        # mondatot ismétli („nem értem, mit kell csinálni"), a rendszer
+        # ugyanazt válaszolja, tehát az `_ismetlest_figyel` már kiutat
+        # adott ki — és a régi `tipus == "kiut"` korai visszatérés
+        # miatt a frusztráció-figyelő SOSEM jutott el az emberhez
+        # irányításig. Épp a legrosszabb beszélgetésben nem szólalt meg
+        # az, ami arra való.
+        emberhez_kell = allapot.frusztracio.emberhez_kell(mondat)
+        if not emberhez_kell and (
+            valasz.get("tipus") == "kiut" or not allapot.frusztracio.kiutat_kell()
+        ):
             return valasz
 
-        emberhez = allapot.frusztracio.kiut_ajanlva >= 1
+        emberhez = emberhez_kell or allapot.frusztracio.kiut_ajanlva >= 1
         allapot.frusztracio.kiut_kiadva()
         return {
             "tipus": "kiut",
