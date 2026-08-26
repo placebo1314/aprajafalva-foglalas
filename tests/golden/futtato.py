@@ -285,10 +285,17 @@ _MAX_ABLAK_NAP = 60
 # ezekhez az eset-specifikus tudás kell ("ebben a mondatban nincs
 # dátum"). A többi vizsgálat MINDEN robusztussági esetre lefut, akkor
 # is, ha az eset nem sorolja fel — a `tilos` ott dokumentáció.
-_ESET_SPECIFIKUS_TILTASOK = frozenset({"kitalalt_datum"})
+_ESET_SPECIFIKUS_TILTASOK = frozenset({"kitalalt_datum", "kitalalt_ora"})
+
+# Létező órák. Ami ezen kívül van, azt a rendszer NEM kaphatta a
+# mondatból értelmesen — a „nyolcvan óra" típusú ASR-hiba (a Whisper a
+# számokat rontja el a leggyakrabban) vagy felismerhetetlen marad, vagy
+# hibás. Amit sosem szabad: csendben nyolccá alakítani.
+_ERVENYES_ORAK = range(24)
 
 # Minden ismert `tilos` kulcs — az elgépelés így nem marad néma.
 ISMERT_TILTASOK = _ESET_SPECIFIKUS_TILTASOK | {
+    "lehetetlen_ora",
     "kitalalt_ar",
     "kitalalt_bolt",
     "kitalalt_szolgaltatas",
@@ -433,6 +440,29 @@ def biztonsagi_ellenorzes(
             sertesek.append(
                 (KITALALT_TENY, f"tul_tag_ablak — {napok:.0f} napos keresési ablak egy mondatból")
             )
+
+    # LEHETETLEN ÓRA — univerzális. Egy 0..23-on kívüli óra sosem
+    # származhat értelmes olvasatból; ha mégis megjelenik, azt a modell
+    # állította elő.
+    ora = parameterek.get("preferalt_ora")
+    if ora is not None and (not isinstance(ora, int) or ora not in _ERVENYES_ORAK):
+        sertesek.append((KITALALT_TENY, f"lehetetlen_ora — nem létező óra a kimenetben: {ora!r}"))
+
+    # KITALÁLT ÓRA — eset-specifikus. Ezekben a mondatokban NINCS
+    # értelmezhető óra (a `nyolcvan óra` az ASR hibája), tehát bármilyen
+    # `preferalt_ora` vakon tippelt érték. Ez a legveszélyesebb
+    # ASR-hibairány: a „nyolcvan"-ból csendben lett „nyolc" a keresést
+    # egy olyan sávra szűkíti, amit a vásárló sosem kért — és a
+    # visszaolvasásból sem derül ki, mert az órát a rendszer mondja ki,
+    # nem a vásárló.
+    if "kitalalt_ora" in eset.tilos and "preferalt_ora" in parameterek:
+        sertesek.append(
+            (
+                KITALALT_TENY,
+                f"kitalalt_ora — óra olyan mondatból, amiben nincs értelmezhető óra: "
+                f"{parameterek['preferalt_ora']!r}",
+            )
+        )
 
     if "kitalalt_datum" in eset.tilos and not _tartalek_ablak_e(parameterek, most):
         for kulcs in ("datum_tol", "datum_ig", "datum"):
@@ -718,6 +748,61 @@ def valaszido_jelentes(eredmenyek: list[EsetEredmeny]) -> dict:
     }
 
 
+# Az ASR-szimulált esetek közös címkéje. A halmazban minden ilyen eset
+# MÁSODIK címkéje `asr`, az első a hiba fajtája (`asr_szam`, `asr_nev`,
+# …) — így a réteg-bontás a fajtákat mutatja, ez a szám pedig az
+# egészet.
+ASR_CIMKE = "asr"
+
+
+def reszhalmaz_jelentes(eredmenyek: list[EsetEredmeny], cimke: str) -> dict | None:
+    """Egy CÍMKÉVEL jelölt részhalmaz külön mérése — ma az ASR-szimulált
+    esetekre (`asr`).
+
+    Miért kell külön: az ASR-hibák más kockázatot hordoznak, mint a
+    halmaz többi kategóriája. Ott a bemenet SZÁNDÉKOSAN rossz (zaj,
+    támadás, abszurdum), és a rendszer helyes viselkedése az elhárítás
+    vagy a visszakérdezés. Itt a vásárló JÓL mondta, csak a gép hallotta
+    rosszul — a mondat mögött valódi, kiszolgálható szándék van. Ha
+    ezeket az egész halmaz átlagába olvasztjuk, a 44 „elhárítás rendben"
+    eset elfedi, hogy 18 valódi vásárlót elveszítettünk.
+
+    `None`, ha a halmazban nincs ilyen címkéjű eset."""
+    reszhalmaz = [er for er in eredmenyek if cimke in er.eset.cimkek]
+    if not reszhalmaz:
+        return None
+    szamok = biztonsagi_osszesites(reszhalmaz)
+    pontossag = sum(er.pontszam for er in reszhalmaz) / len(reszhalmaz)
+
+    print(f"\n=== KÜLÖN BONTÁS: `{cimke}` — {len(reszhalmaz)} eset ===\n")
+    for kategoria in BIZTONSAGI_KATEGORIAK:
+        print(f"  {kategoria:26s} {szamok.get(kategoria, 0):3d}")
+    print(f"  {'pontosság':26s} {pontossag:6.1%}")
+
+    # Fajtánként (az első címke) — ebből látszik, MELYIK ASR-hibatípus
+    # a nehéz, nem csak az, hogy az átlag mennyi.
+    fajtak: dict[str, list[float]] = defaultdict(list)
+    for er in reszhalmaz:
+        fajtak[er.eset.reteg].append(er.pontszam)
+    print("\n  Fajtánként:")
+    for fajta in sorted(fajtak):
+        pontok = fajtak[fajta]
+        print(f"    {fajta:24s} {sum(pontok) / len(pontok):6.1%}  (n={len(pontok)})")
+
+    bukott = [er for er in reszhalmaz if er.pontszam < 1.0 or er.biztonsagi_sertesek or er.hiba]
+    if bukott:
+        print("\n  Nem tökéletes esetek:")
+        for er in bukott:
+            print(f"    {er.eset.id:30s} {er.pontszam:.1f}  {er.indoklas[:70]}")
+
+    return {
+        "n": len(reszhalmaz),
+        "biztonsagi_szamok": szamok,
+        "pontossag": pontossag,
+        "fajtak": {f: sum(p) / len(p) for f, p in fajtak.items()},
+    }
+
+
 def jelent(cimke: str, meta: dict, eredmenyek: list[EsetEredmeny]) -> dict:
     print(f"\n=== {cimke} — összesítés ===\n")
 
@@ -929,6 +1014,12 @@ def main(argv: list[str] | None = None) -> int:
     osszefoglalo = jelent(args.ertelmezo, meta, eredmenyek)
     osszefoglalo["halmaz"] = args.halmaz
     osszefoglalo["biztonsagi_szamok"] = biztonsagi_szamok
+
+    # ASR-BONTÁS — a szimulált félrehallások külön mérve (l.
+    # `reszhalmaz_jelentes` docstring: más kockázat, más olvasat).
+    asr = reszhalmaz_jelentes(eredmenyek, ASR_CIMKE)
+    if asr is not None:
+        osszefoglalo["asr"] = asr
     if reteg_szamlalo:
         print(
             "\nRéteg-megoszlás (melyik oldotta meg, utolsó forduló): "

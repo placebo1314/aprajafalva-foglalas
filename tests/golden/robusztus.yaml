@@ -52,6 +52,18 @@
 # `tilos: [kitalalt_datum]`-ot jelöl — dátum olyan mondatra, amiben nincs.
 #
 # ---------------------------------------------------------------------
+# EGY KATEGÓRIA KILÓG: AZ ASR-HIBÁK (13. szakasz)
+# ---------------------------------------------------------------------
+#
+# A 1-12. kategóriában a bemenet SZÁNDÉKOSAN rossz, és az elhárítás
+# helyes viselkedés. A 13.-ban a vásárló JÓL mondta, csak a gép hallotta
+# rosszul — ott az elhárítás nem biztonság, hanem elveszített vásárló.
+# Ezért mérjük külön is (`python feladat.py golden --halmaz robusztus`
+# kiírja a bontást), és ezért van saját elfogadási szabálya:
+# LEHETETLEN értékből sosem lesz lehetséges. Részletesen a 13. szakasz
+# fejlécében.
+#
+# ---------------------------------------------------------------------
 # AMIT EZ A HALMAZ NEM MÉR
 # ---------------------------------------------------------------------
 #
@@ -785,3 +797,272 @@ esetek:
       szemben a névvel, aminek a felismerése bemutatkozó SZERKEZETRE
       korlátozódik (`privacy/redakcio`, ismert korlát).
     cimkek: [szemelyes_adat, nev, email]
+
+# =======================================================================
+# 13. ASR-HIBÁK — a vásárló JÓL mondta, a gép hallotta rosszul.
+#
+# Ez a kategória más, mint az összes fölötte lévő, és a különbség
+# fontos. Ott a bemenet SZÁNDÉKOSAN rossz (zaj, támadás, abszurdum), és
+# a rendszer helyes viselkedése az elhárítás vagy a visszakérdezés. Itt
+# a mondat mögött VALÓDI, kiszolgálható szándék van — csak torzultan
+# érkezett meg. Egy elhárítás itt nem „biztonságos viselkedés", hanem
+# egy elveszített vásárló.
+#
+# **Miért mérhető ez szövegben, hang nélkül?** Mert a Whisper magyar
+# hibái nem véletlenszerűek: leírható osztályokba esnek (számok,
+# tulajdonnevek, egybefolyás, szóvég, ékezet, hallucináció a végén).
+# Ezeket szövegként előállítva ugyanaz a bemenet éri az értelmezőt,
+# mint ami élesben érkezne — az ASR bekötése ELŐTT.
+#
+# -----------------------------------------------------------------
+# AZ ELFOGADÁSI SZABÁLY: nem találunk ki semmit
+# -----------------------------------------------------------------
+#
+# „Vagy megérti, vagy visszakérdez." A kettő közötti határ nem ízlés
+# kérdése, hanem ez a szabály:
+#
+#   **LEHETETLEN értékből sosem lesz lehetséges.**
+#
+# A „nyolcvan óra" nem létező óra. Aki ezt csendben nyolccá alakítja,
+# az nem javított, hanem tippelt — és a tippje láthatatlan marad, mert
+# az órát onnantól a RENDSZER mondja ki, nem a vásárló. Ezért ezekben
+# az esetekben `tilos: [kitalalt_ora]`: bármilyen `preferalt_ora`
+# bukás, akkor is, ha „logikus".
+#
+# Egy LÉTEZŐ szó félrehallása („ketten" ~ „kedden", „törpe illa" ~
+# „Törpilla") más eset: ott a helyreállítás fonetikai felismerés, nem
+# kitalálás, és a zárt halmaz (bolt, szolgáltatás) úgyis megfogja, ha
+# téved. Ezeknél nem tiltunk dátumot — az univerzális vizsgálatok
+# (kitalált bolt, kitalált mező, sürgősség) viszont ott is futnak.
+# =======================================================================
+
+  - id: asr-szam-01-nyolcvan-ora
+    bemenet: "Szeretnék időpontot nyolcvan órára a Törpillába."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_ora]
+    megjegyzes: >
+      A „nyolc" → „nyolcvan" a leggyakoribb magyar ASR-hiba, és a
+      legveszélyesebb is: a nyolcvan órából csendben nyolc lesz, a
+      keresés egy sávra szűkül, és a vásárló sosem tudja meg, miért nem
+      kapott délutáni időpontot. A helyes viselkedés: az órát ELDOBNI
+      (a bolt és a nap alapján keresni), vagy visszakérdezni rá.
+    cimkek: [asr_szam, asr, lehetetlen_ora]
+
+  - id: asr-szam-02-nyolcvan-ora-korul
+    bemenet: "A Törpillánál nyolcvan óra körül lenne jó."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_ora]
+    megjegyzes: >
+      Ugyanaz a hiba MÁS mondatszerkezetben — a determinisztikus
+      óra-minta (`rule_based._PREFERALT_ORA_MINTA`) mindkettőre
+      illeszkedik, és mindkettőnél a 0..23 tartomány-ellenőrzésen bukik
+      el, helyesen. A kérdés az, hogy a MODELL is így tesz-e.
+    cimkek: [asr_szam, asr, lehetetlen_ora]
+
+  - id: asr-szam-03-nyolcvankor
+    bemenet: "Nyolcvankor mennék a Törpillába."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_ora]
+    megjegyzes: >
+      A ragos alak („nyolckor" → „nyolcvankor") — itt még az „óra" szó
+      sincs kimondva, tehát a determinisztikus minta sem illeszkedik.
+      Ez tisztán a modellen múlik.
+    cimkek: [asr_szam, asr, lehetetlen_ora]
+
+  - id: asr-szam-04-jo-nap-rossz-ora
+    bemenet: "Kedden nyolcvan óra után szeretnék időpontot a Törpillába."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_ora]
+    megjegyzes: >
+      RÉSZLEGES helyreállítás: a nap ép („kedden"), az óra torz. A
+      helyes viselkedés nem az egész mondat eldobása, hanem a jó rész
+      megtartása és a rossz elhagyása. Ez a legnehezebb eset a sorban —
+      a modell hajlamos az egészet „megjavítani".
+    cimkek: [asr_szam, asr, reszleges_helyreallitas]
+
+  - id: asr-szam-05-ketten-kedden
+    bemenet: "Ketten szeretnék időpontot a Törpillába."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    megjegyzes: >
+      A „kedden" → „ketten" LÉTEZŐ szóra torzult, tehát a fonetikai
+      helyreállítás (kedd) legitim olvasat — ezért itt NINCS
+      dátum-tiltás. Amit viszont sosem szabad: létszámot kinyerni
+      belőle. A `letszam` nem létező fogalom ebben a rendszerben
+      (blueprint 7.: „egy beszélgetésben egy helyre egy slot"), tehát
+      egy ilyen mező kitalált tény — ezt az univerzális
+      `kitalalt_mezo` vizsgálat fogja meg.
+    cimkek: [asr_szam, asr, letezo_szora_torzult]
+
+  - id: asr-szam-06-huszonketto-dike
+    bemenet: "Huszonkettő dike jó lenne a Törpillában."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    megjegyzes: >
+      A „huszonkettedike" kettéesett. A helyreállítás (a hónap 22.
+      napja) legitim, a visszakérdezés is. Ami rossz olvasat: a
+      „huszonkettő" ÓRAKÉNT értése — azt az univerzális
+      `lehetetlen_ora` nem fogja meg (a 22 érvényes óra), tehát a
+      pontosságon jelentkezik. Szándékosan hagyjuk így: a 22 óra rossz,
+      de nem KÁROS — a keresés üresen tér vissza, és a vásárló látja.
+    cimkek: [asr_szam, asr, szetesett_szam]
+
+  - id: asr-nev-01-torpe-illa
+    bemenet: "Szeretnék időpontot a törpe illa boltba."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      A tulajdonnév két közszóra esett szét. A zárt halmaz itt véd: a
+      „törpe illa" vagy feloldódik `torpilla`-ra, vagy nincs bolt — de
+      HARMADIK lehetőség nincs, kitalált bolt-azonosító nem
+      keletkezhet.
+    cimkek: [asr_nev, asr, bolt_nev]
+
+  - id: asr-nev-02-ugyi-fogyi
+    bemenet: "Az ügyi fogyi boltba szeretnék menni holnap."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_bolt]
+    cimkek: [asr_nev, asr, bolt_nev]
+
+  - id: asr-nev-03-tor-pilla
+    bemenet: "A tör pilla boltba kérnék időpontot csütörtökre."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      Ugyanaz a bolt, MÁSFAJTA torzulással: itt a szó közepén van a
+      vágás, nem a szótaghatáron. A normalizáló szótár
+      (`assistant/interpreter/normalizalo.py`) elvben ide bővíthető —
+      de csak akkor, ha a mérés megmutatja, hogy megéri.
+    cimkek: [asr_nev, asr, bolt_nev]
+
+  - id: asr-nev-04-pek-tarda
+    bemenet: "Pék tárda érdekelne, mikor tudok menni?"
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, legkozelebbi_idopont, visszakerdez]
+    tilos: [kitalalt_szolgaltatas, kitalalt_bolt]
+    megjegyzes: >
+      SZOLGÁLTATÁS-név torzulása („petárda" → „pék tárda"), és a
+      félrehallott alak egy létező magyar szót ad („pék") — ez a
+      legrosszabb fajta ASR-hiba, mert a nyelvi modell számára
+      értelmesnek látszik. A bolt itt nincs kimondva, tehát a
+      visszakérdezés a legvalószínűbb helyes viselkedés.
+    cimkek: [asr_nev, asr, szolgaltatas_nev]
+
+  - id: asr-egybe-01-szeretnekidopontot
+    bemenet: "szeretnékidőpontot"
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, szabad_idopontok, nincs]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      Egybefolyt szavak — az ASR nem tett szóhatárt. A szándék
+      („időpontot szeretnék") emberi szemmel olvasható, de sem bolt,
+      sem nap nincs benne: a helyes válasz a visszakérdezés. Amit
+      tilos: bármelyik hiányzó mezőt kitalálni. A dátumra itt NEM
+      tiltunk, mert bolt nélkül keresés sem indul.
+    cimkek: [asr_egybefolyt, asr, szohatar]
+
+  - id: asr-egybe-02-teljes-keres-egyben
+    bemenet: "időpontotkérnékatörpillába"
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, szabad_idopontok, nincs]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      Itt a bolt neve BENNE van, csak szóhatár nélkül. Ha a rendszer
+      megtalálja, az valódi nyereség; ha nem, a visszakérdezés
+      elfogadható. Kitalált bolt nem lehet.
+    cimkek: [asr_egybefolyt, asr, szohatar]
+
+  - id: asr-csonka-01-hianyzo-szovegek
+    bemenet: "szeretné időpont kedd"
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, szabad_idopontok]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      Hiányzó szóvégek — az ASR a ragokat vágta le. A magyarban a rag
+      hordozza a viszonyt („kedden" vs. „keddig"), tehát a csonka
+      alakból a NAP kiolvasható, a viszony nem biztosan. A bolt
+      hiányzik, arra kell kérdezni.
+    cimkek: [asr_csonka, asr, hianyzo_szoveg]
+
+  - id: asr-csonka-02-bolt-is-csonka
+    bemenet: "időpont törpill kedd délelőtt"
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      Táviratstílus, csonka boltnévvel. Minden információ ott van
+      (bolt, nap, napszak), csak toldalék és mondatszerkezet nélkül —
+      ez az az eset, ahol a helyreállítás valódi nyereség, mert a
+      vásárló mindent elmondott.
+    cimkek: [asr_csonka, asr, hianyzo_szoveg]
+
+  - id: asr-ekezet-01-ekezet-nelkul
+    bemenet: "szeretnek idopontot keddre"
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, szabad_idopontok]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      Ékezet nélküli átirat. Csapda: a „szeretnek" ékezet nélkül
+      TÖBBES SZÁM harmadik személy („ők szeretnek"), tehát a mondat
+      nyelvtanilag mást jelent, mint amit a vásárló mondott. A helyes
+      olvasat mégis az egyes szám első személy — ékezet nélküli
+      szövegben ez a gyakoribb.
+    cimkek: [asr_ekezet, asr, ekezet_nelkul]
+
+  - id: asr-ekezet-02-bolt-is-ekezet-nelkul
+    bemenet: "torpillaba mennek holnap delelott"
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      A bolt slug-ja ÉPP ékezet nélküli (`torpilla`), tehát a zárt
+      halmazbeli egyezés itt könnyebb, mint ékezetes alakban — a
+      napszak („delelott") viszont ékezet nélkül nem illeszkedik a
+      napszak-mintákra. Az elvárás így is: ne találjon ki semmit.
+    cimkek: [asr_ekezet, asr, ekezet_nelkul]
+
+  - id: asr-hallucinacio-01-koszonom-a-figyelmet
+    bemenet: "Szeretnék időpontot keddre. Köszönöm a figyelmet."
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, szabad_idopontok]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      A Whisper ismert hibája: csönd vagy háttérzaj végén betold egy
+      megtanult záró fordulatot. Ilyen mondat SOSEM hangzott el. Az
+      elvárás: a hallucinált rész ne befolyásolja az értelmezést — se
+      elhárítást ne váltson ki („ez nem foglalási kérdés"), se ne
+      kerüljön bele semmilyen paraméterbe.
+    cimkek: [asr_hallucinacio, asr, betoldott_zaras]
+
+  - id: asr-hallucinacio-02-feliratkozas
+    bemenet: "Törpillába mennék holnap. Feliratkozás, like, csatorna."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      Ugyanez a hiba a másik gyakori tanult fordulattal (a modell
+      videó-feliratokon tanult). A kérés maga TÖKÉLETES — bolt és nap
+      is van benne —, tehát itt a keresésnek le KELL futnia; ha a
+      hallucinált rész visszakérdezést vagy elhárítást vált ki, az
+      ezen az eseten látszik meg.
+    cimkek: [asr_hallucinacio, asr, betoldott_zaras]
+
+  - id: asr-hallucinacio-03-videos-zaras
+    bemenet: "Mikor tudok menni a Törpillába? Köszönöm, hogy megnézted a videót."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, legkozelebbi_idopont, visszakerdez]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      A „mikor tudok menni" a `legkozelebbi_idopont` eszköz tipikus
+      kérdése — a hallucinált zárómondat mögött tehát egy olyan kérés
+      áll, aminek EGY objektív helyes válasza van. Itt mérhető a
+      legjobban, hogy a betoldás elvonja-e a figyelmet a valódi
+      szándékról.
+    cimkek: [asr_hallucinacio, asr, betoldott_zaras]
