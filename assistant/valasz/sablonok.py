@@ -15,6 +15,11 @@ kategóriánkénti választást az `assistant/valasz/__init__.py` végzi.
                        "Kétlépcsős válasz") — TÖBB változat soronként,
                        véletlenszerű választással, hogy hangcsatornán ne
                        tűnjön fel az ismétlődés
+- `beszelheto`      — a BESZÉLHETŐ kimeneti mód felülíró változatai, a fenti
+                       kategóriák szerint tagolva (`assistant/valasz/
+                       beszelheto.py`). Csak az van benne, ami hangon
+                       MÁSKÉNT hangzik jól — a formázást (szám, zárójel,
+                       gondolatjel) a kimeneti kapu intézi, nem a sablon.
 
 Új nyelv hozzáadása = egy új kulcs a `SABLONOK` szótár tetején, ugyanezekkel
 az alkategóriákkal — a hívó kód (`assistant/valasz/__init__.py`) nem
@@ -238,6 +243,116 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "Egy pillanat, körülnézek {resz}…",
                 "Máris nézem, mi van {resz}…",
             ],
+        },
+        # ------------------------------------------------------------
+        # BESZÉLHETŐ MÓD — felülíró változatok (M6, hang-előkészítés,
+        # `assistant/valasz/beszelheto.py`).
+        #
+        # **Csak az van itt, ami hangon MÁSKÉNT hangzik jól.** Aminek a
+        # szöveges alakja felolvasva is helyes, az nem duplázódik: a
+        # kimeneti kapu (`beszelhetove()`) a számokat, zárójeleket és
+        # gondolatjeleket úgyis elintézi. Ez a szótár a MEGFOGALMAZÁSÉ,
+        # nem a formázásé — azt automatikusan nem lehet előállítani.
+        #
+        # Három visszatérő ok, amiért egy mondat ide kerül:
+        #
+        # 1. **Két kérdés egy mondatban** („melyik boltba és mikorra?").
+        #    Írásban átfutható, hangon a vásárló az egyikre felel, és
+        #    nem tudjuk, melyikre (blueprint 7., „Egy kérdés egy
+        #    fordulóban").
+        # 2. **A felületre hivatkozik** („a másik fülön"). Hangon nincs
+        #    fül.
+        # 3. **Túl hosszú.** Hangon a harmadik tagmondatnál a vásárló
+        #    már belevág (barge-in), és a saját hangunkat is az ASR-be
+        #    küldi.
+        # ------------------------------------------------------------
+        "beszelheto": {
+            "hiba": {
+                # Egy kérdés, nem kettő.
+                "nem_foglalasi_kerdes": (
+                    "Ebben nem tudok segíteni, csak időpontfoglalásban. "
+                    "Melyik boltba szeretnél menni?"
+                ),
+                "ertelmezhetetlen_bemenet": (
+                    "Ezt nem sikerült értenem. Melyik boltba szeretnél menni?"
+                ),
+                "ar_nem_adhato": (
+                    "Az árakról a boltban tudnak felvilágosítást adni. "
+                    "Időpontot viszont szívesen keresek."
+                ),
+                "nincs_meghirdetett_idopont": (
+                    "Erre az időszakra a bolt még nem hirdetett meg időpontokat. "
+                    "Megnézzem a következő hetet?"
+                ),
+                # A szöveges alak a MÁSIK FÜLET ajánlja — hangon nincs
+                # fül. Ami marad: a bolt, élőben.
+                "emberhez_iranyitas": (
+                    "Úgy látom, ez így nem vezet sehova. "
+                    "A boltban élőben is fel tudnak venni időpontot."
+                ),
+                "tul_sok_keres": "Túl sok kérés érkezett rövid idő alatt. Kérlek, várj egy kicsit.",
+                "nincs_szabad_hely_az_ablakban": (
+                    "Ebben az időszakban nincs szabad időpont. Nézzünk másik napot?"
+                ),
+                "nincs_szabad_hely": (
+                    "Ebben az időszakban nincs szabad időpont. Nézzünk másik napot?"
+                ),
+            },
+            "visszaigazolas": {
+                # VISSZAOLVASÁSOS megerősítés (blueprint 7.): hangon a
+                # „biztosan lefoglaljam ezt?" mutató névmása értelmetlen,
+                # mert nincs, amire mutasson — az időpontot ki kell
+                # mondani. Ha a hívó mégsem tudja átadni, marad a
+                # névmás nélküli, rövid alak.
+                "megerosites_ker": "Lefoglaljam?",
+                "megerosites_ker_idoponttal": "{idopont} foglalnám le. Rendben?",
+                "sikeres_foglalas": "Megvan a foglalás. A kódod {foglalasi_kod}.",
+                "ajanlat_egy": "A legkorábbi {elso}. Jó lesz?",
+                # KETTŐ időpont, nem több — l. `beszelheto.py`, 5.
+                # szabály: három felolvasott időpont megjegyezhetetlen.
+                "ajanlat_ketto": "A legkorábbi {elso}, de van {masodik} is. Melyik jó?",
+                "ajanlat_legkozelebbi": "A legkorábbi szabad időpont {elso}. Jó lesz?",
+            },
+            # A visszakérdezés hangon KÉRDÉS, nem bevezetett felsorolás:
+            # a „Ehhez még kellene tudnom: melyik boltba szeretnél
+            # menni." kijelentő mondat, amire a vásárló hallgatással
+            # felel.
+            "zart_kerdes": {
+                "mezo_neve": {
+                    "bolt_id": "Melyik boltba szeretnél menni?",
+                    "szolgaltatas_id": "Melyik szolgáltatást szeretnéd?",
+                    "foglalasi_kod": "Mi a foglalási kódod?",
+                    "datum_tol": "Mikorra szeretnél időpontot?",
+                    "uj_datum": "Melyik napra tegyem át?",
+                },
+                "tartalek": "Mondd el, pontosan mit szeretnél.",
+            },
+            "kiut": {
+                # A szöveges alak „körbe-körbe járunk" — kötőjeles
+                # összetétel, ami hangon szünetet szül a szó közepén. A
+                # kimeneti kapu szóközre cserélné („körbe körbe"), de
+                # egy jó mondatot nem javítgatni kell, hanem megírni.
+                "bevezetes": "Úgy látom, itt körben járunk.",
+                "kerdes": "Próbáljunk {dimenziok}?",
+                "dimenzio": {
+                    "bolt": "másik boltot",
+                    "het": "másik hetet",
+                    "napszak": "másik napszakot",
+                },
+            },
+            "alternativa": {
+                "bevezetes": {
+                    "napszak": "Ebben a napszakban nincs, de aznap máskor van szabad időpont.",
+                    "nap": "Ezen a napon nincs, de a héten másik napon van.",
+                    "het": "Ezen a héten nincs, de a következő héten van.",
+                },
+                "kerdes": "Megnézzem?",
+            },
+            "tenyvalasz": {
+                "nyitvatartas": "A bolt nyitvatartása {ertek}.",
+                "cim": "A bolt címe {ertek}.",
+                "szolgaltatasok": "Ezeket lehet nálunk kérni: {nevek}.",
+            },
         },
     }
 }

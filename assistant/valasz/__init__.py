@@ -26,58 +26,251 @@ ugyanez az elv érvényes a válaszoldalra: a felület nem fordít, csak közvet
 
 Nyelvkulcs: ma csak `"hu"` — minden függvény `nyelv="hu"` alapértelmezéssel,
 hogy egy jövőbeli második nyelv ne igényeljen hívóoldali módosítást, csak
-egy új `SABLONOK["xy"]` bejegyzést."""
+egy új `SABLONOK["xy"]` bejegyzést.
+
+## KÉT KIMENETI MÓD (M6, hang-előkészítés)
+
+Minden mondatot előállító függvény `mod=` kulcsszót fogad:
+
+- `MOD_SZOVEGES` (alapértelmezett) — a mai viselkedés, változatlanul.
+- `MOD_BESZELHETO` — felolvasható alak: egész mondatok, kimondott
+  számokkal, fordulónként legfeljebb két mondattal és egy kérdéssel.
+  A szabályok és az indoklásuk: `assistant/valasz/beszelheto.py`.
+
+A **mód nem stílusváltás**: a beszélhető alak más tényt sosem mond, mint
+a szöveges — ugyanabból az adatból ugyanaz az állítás lesz, csak
+felolvasható alakban. Ahol a megfogalmazás hangon másképp helyes (két
+kérdés helyett egy, felület helyett bolt), ott a `sablonok.py`
+`beszelheto` szótára írja felül a mondatot; ahol csak a formázás
+zavarna (számjegy, zárójel, gondolatjel), ott a kimeneti kapu
+(`beszelheto.beszelhetove`) intézi el.
+
+**Ami MINDKÉT módban ugyanaz:** a `rendszersor_szoveg` (a próbálgatónak
+szóló helyzetjelentés, nem a vásárló válasza) és a `nyugtazo_szoveg` (az
+már eleve felolvasásra készült, blueprint 7.)."""
 
 from __future__ import annotations
 
 import random
 
 from assistant.tools import katalogus
+from assistant.valasz import beszelheto as beszelheto_modul
+from assistant.valasz import szamok
 from assistant.valasz.sablonok import SABLONOK
 
 _NYELV_ALAPERTELMEZETT = "hu"
 
+# A két kimeneti mód zárt halmaza. Zárt, mert a felület (`ui/vasarlo.py`)
+# és a végigjátszás (`tools/vegigjatszas.py`) is ezekre kapcsol, és egy
+# elgépelt módnév némán a szöveges ágra esne vissza.
+MOD_SZOVEGES = "szoveges"
+MOD_BESZELHETO = "beszelheto"
+MODOK = (MOD_SZOVEGES, MOD_BESZELHETO)
+
 _NAPSZAK_SZOVEG = {"delelott": "délelőtt", "delutan": "délután", "este": "este"}
 
 
-def hiba_szoveg(uzenet_kulcs: str, *, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
+def _beszelheto_e(mod: str) -> bool:
+    if mod not in MODOK:
+        raise ValueError(f"ismeretlen kimeneti mód: {mod!r} (a lehetségesek: {MODOK})")
+    return mod == MOD_BESZELHETO
+
+
+def _beszelheto_sablon(nyelv: str, kategoria: str, *kulcsok: str) -> str | None:
+    """Egy felülíró beszélhető sablon, vagy `None`, ha ehhez a kulcshoz
+    nincs — akkor a szöveges alak megy át a kimeneti kapun."""
+    csomopont = SABLONOK[nyelv].get("beszelheto", {}).get(kategoria, {})
+    for kulcs in kulcsok:
+        if not isinstance(csomopont, dict):
+            return None
+        csomopont = csomopont.get(kulcs)
+        if csomopont is None:
+            return None
+    return csomopont if isinstance(csomopont, str) else None
+
+
+def kimenet(szoveg: str, mod: str = MOD_SZOVEGES) -> str:
+    """A KIMENETI KAPU: szöveges módban változatlanul enged át, beszélhető
+    módban átvezet a `beszelhetove()`-n.
+
+    Minden ebben a modulban előálló vásárlói mondat ezen megy keresztül —
+    így egy új, elfelejtett sablon sem tud számjegyet vagy zárójelet
+    kijuttatni a hangcsatornára."""
+    return beszelheto_modul.beszelhetove(szoveg) if _beszelheto_e(mod) else szoveg
+
+
+def fordulo_szoveg(reszek: list[str], mod: str = MOD_SZOVEGES) -> str:
+    """Egy forduló ÖSSZES rendszer-mondatából egy megjeleníthető/
+    felolvasható válasz.
+
+    Szöveges módban ez egyszerű összefűzés (a felület ma is több sort ír
+    ki egy fordulóban). Beszélhető módban itt érvényesül a fordulónkénti
+    két mondat és az egy kérdés — l. `beszelheto.fordulo_szoveg`."""
+    if _beszelheto_e(mod):
+        return beszelheto_modul.fordulo_szoveg(reszek)
+    return "\n".join(r for r in reszek if r)
+
+
+def hiba_szoveg(
+    uzenet_kulcs: str, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
+) -> str:
     """`uzenet_kulcs` egy eszköz (`assistant/tools/hiba.py`) vagy az
     orchestrator saját, zárt hibakulcsa. Ismeretlen kulcsnál a kulcsot
     magát írja ki — ez NEM hallgatólagos hibaelnyelés, hanem jól látható
     jelzés, hogy a sablon hiányzik, pótlásra vár."""
-    return SABLONOK[nyelv]["hiba"].get(uzenet_kulcs, f"Hiba: {uzenet_kulcs}")
+    if _beszelheto_e(mod):
+        felulir = _beszelheto_sablon(nyelv, "hiba", uzenet_kulcs)
+        if felulir is not None:
+            return felulir
+        # A hiányzó sablon jelzése hangon is olvasható marad, de a
+        # kulcs aláhúzásjelei szóközre válnak — a kimeneti kapu
+        # különben markdown-jelölésként törölné őket, és a
+        # `sose_volt_kulcs`-ból egy szó nélküli „sosevoltkulcs" lenne.
+        tartalek = f"Hiba: {uzenet_kulcs.replace('_', ' ')}"
+    else:
+        tartalek = f"Hiba: {uzenet_kulcs}"
+    return kimenet(SABLONOK[nyelv]["hiba"].get(uzenet_kulcs, tartalek), mod)
 
 
-def megerosites_ker_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
-    return SABLONOK[nyelv]["visszaigazolas"]["megerosites_ker"]
+def megerosites_ker_szoveg(
+    idopont_iso: str | None = None,
+    *,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+    mod: str = MOD_SZOVEGES,
+) -> str:
+    """A megerősítést kérő mondat.
+
+    `idopont_iso`: a választott slot kezdete. Szöveges módban nem
+    használjuk (a képernyőn ott áll a kiválasztott gomb felirata),
+    **beszélhető módban viszont ez a visszaolvasás** (blueprint 7.,
+    „Visszaolvasásos megerősítés mindig"): hangon a „biztosan
+    lefoglaljam EZT?" mutató névmása értelmetlen, mert nincs, amire
+    mutasson."""
+    sablonok = SABLONOK[nyelv]["visszaigazolas"]
+    if _beszelheto_e(mod):
+        if idopont_iso:
+            sablon = _beszelheto_sablon(nyelv, "visszaigazolas", "megerosites_ker_idoponttal")
+            return kimenet(sablon.format(idopont=szamok.ido_iso_szoval(idopont_iso)), mod)
+        return kimenet(_beszelheto_sablon(nyelv, "visszaigazolas", "megerosites_ker"), mod)
+    return sablonok["megerosites_ker"]
 
 
-def sikeres_foglalas_szoveg(foglalasi_kod: str, *, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
+def sikeres_foglalas_szoveg(
+    foglalasi_kod: str, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
+) -> str:
+    """A foglalás visszaigazolása. Beszélhető módban a kód
+    KARAKTERENKÉNT hangzik el (`szamok.betuzve`) — a `28SFL8RZ`-t
+    „huszonnyolc"-ként kimondani használhatatlanná tenné azt, amiért a
+    kód egyáltalán van: hogy a vásárló le tudja írni."""
+    if _beszelheto_e(mod):
+        sablon = _beszelheto_sablon(nyelv, "visszaigazolas", "sikeres_foglalas")
+        return sablon.format(foglalasi_kod=szamok.betuzve(foglalasi_kod))
     return SABLONOK[nyelv]["visszaigazolas"]["sikeres_foglalas"].format(foglalasi_kod=foglalasi_kod)
 
 
-def elvetve_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
-    return SABLONOK[nyelv]["visszaigazolas"]["elvetve"]
+def elvetve_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES) -> str:
+    return kimenet(SABLONOK[nyelv]["visszaigazolas"]["elvetve"], mod)
 
 
 def ajanlat_bevezetes_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
     return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_bevezetes"]
 
 
+def ajanlat_mondat(
+    jeloltek: list[dict],
+    *,
+    legkozelebbi: bool = False,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+    mod: str = MOD_SZOVEGES,
+) -> str:
+    """Az ajánlat mondata.
+
+    **A két mód itt tér el a legjobban, és ez a lényeg.** Szöveges
+    csatornán a jelöltek KOPPINTHATÓ gombok, a mondat csak bevezeti
+    őket („Ezeket az időpontokat találtam — melyik jó?"). Hangon nincs
+    gomb, és nincs listázás sem: három felolvasott időpont
+    megjegyezhetetlen. Ezért beszélhető módban **a legkorábbi és EGY
+    alternatíva** hangzik el, kimondott órákkal, egyetlen kérdéssel:
+
+        „A legkorábbi nyolc órakor van, de van kilenc harminckor is.
+         Melyik jó?"
+
+    A többi jelölt nem vész el — a következő fordulóban kérhető
+    („valami későbbit"), és a képernyőn ott is marad. Amit a hang nem
+    bír el, azt nem mondjuk ki, nem pedig gyorsabban mondjuk el."""
+    if not _beszelheto_e(mod):
+        return (
+            ajanlat_bevezetes_legkozelebbi_szoveg(nyelv=nyelv)
+            if legkozelebbi
+            else ajanlat_bevezetes_szoveg(nyelv=nyelv)
+        )
+
+    kezdetek = [j["kezdet"] for j in jeloltek if j.get("kezdet")]
+    if not kezdetek:
+        # Nem hallgatunk el egy üres ajánlatot, de nem is találunk ki
+        # időpontot hozzá: a bevezető mondat megy át a kimeneti kapun.
+        return kimenet(ajanlat_bevezetes_szoveg(nyelv=nyelv), mod)
+
+    elso = szamok.ido_iso_szoval(kezdetek[0], kor=True)
+    if legkozelebbi or len(kezdetek) == 1:
+        kulcs = "ajanlat_legkozelebbi" if legkozelebbi else "ajanlat_egy"
+        sablon = _beszelheto_sablon(nyelv, "visszaigazolas", kulcs)
+        return kimenet(sablon.format(elso=elso), mod)
+
+    # AZONOS NAPON a dátum nem hangzik el kétszer. „December
+    # huszonkettedikén nyolc órakor, de van december huszonkettedikén
+    # kilenc harminckor is" — ez írásban is rossz, hangon pedig azt a
+    # látszatot kelti, hogy a két időpont két KÜLÖNBÖZŐ napra szól, és
+    # a vásárló a dátumot kezdi hallgatni a lényeg helyett.
+    if kezdetek[1][:10] == kezdetek[0][:10]:
+        masodik = szamok.idopont_kor(int(kezdetek[1][11:13]), int(kezdetek[1][14:16]))
+    else:
+        masodik = szamok.ido_iso_szoval(kezdetek[1], kor=True)
+    sablon = _beszelheto_sablon(nyelv, "visszaigazolas", "ajanlat_ketto")
+    return kimenet(sablon.format(elso=elso, masodik=masodik), mod)
+
+
 def kiut_szoveg(
-    dimenziok: list[str], *, nyelv: str = _NYELV_ALAPERTELMEZETT
+    dimenziok: list[str], *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
 ) -> tuple[str, list[tuple[str, str]]]:
     """`(bevezető mondat, [(dimenzió, gombfelirat), ...])` az
     ismétlés-kiúthoz. A `dimenziok` az orchestrator zárt kimenete
     (`_KIUT_DIMENZIOK`) — ismeretlen elemet kihagyunk, nem találunk ki
-    hozzá feliratot."""
+    hozzá feliratot.
+
+    Beszélhető módban a gombfeliratok **beleépülnek a mondatba** („másik
+    boltot, másik hetet vagy másik napszakot") — a gomblista attól még
+    visszajön, mert a szöveges felület beszélhető módban is gombot rajzol
+    belőle. A hangcsatornán ugyanez a lista lesz a felismerendő
+    válaszok halmaza."""
     sablonok = SABLONOK[nyelv]["kiut"]
     gombok = [(d, sablonok["dimenzio"][d]) for d in dimenziok if d in sablonok["dimenzio"]]
-    return sablonok["bevezetes"], gombok
+    if not _beszelheto_e(mod):
+        return sablonok["bevezetes"], gombok
+
+    beszelt = SABLONOK[nyelv]["beszelheto"]["kiut"]
+    nevek = [beszelt["dimenzio"][d] for d, _ in gombok if d in beszelt["dimenzio"]]
+    if not nevek:
+        return kimenet(beszelt["bevezetes"], mod), gombok
+    return (
+        kimenet(
+            f"{beszelt['bevezetes']} {beszelt['kerdes'].format(dimenziok=_felsorolas(nevek))}", mod
+        ),
+        gombok,
+    )
+
+
+def _felsorolas(elemek: list[str]) -> str:
+    """Kimondható felsorolás: `„a, b vagy c"`. Ez NEM az a felsorolás,
+    amit a beszélhető mód tilt — a tiltás a felsorolás-JELÖLÉSRE
+    (pontok, sortörések) vonatkozik, nem a magyar mondatra."""
+    if len(elemek) == 1:
+        return elemek[0]
+    return f"{', '.join(elemek[:-1])} vagy {elemek[-1]}"
 
 
 def alternativa_szoveg(
-    dimenzio: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT
+    dimenzio: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
 ) -> tuple[str, str] | None:
     """`(bevezető mondat, gombfelirat)` a felajánlott alternatívához,
     vagy `None`, ha nincs mit felajánlani.
@@ -85,44 +278,86 @@ def alternativa_szoveg(
     A `dimenzio` az `assistant/tools/szabad_idopontok.py::
     _alternativ_dimenzio` zárt kimenete (`napszak` | `nap` | `het`) — ez
     a függvény csak megfogalmazza, nem dönt: azt, hogy VAN-e alternatíva,
-    a determinisztikus eszköz állapította meg egy tényleges kereséssel."""
+    a determinisztikus eszköz állapította meg egy tényleges kereséssel.
+
+    Beszélhető módban a mondat a kérdést is tartalmazza („Megnézzem?") —
+    hangon a gombfelirat nem látszik, tehát a felajánlásnak a mondatban
+    kell megtörténnie."""
     sablonok = SABLONOK[nyelv]["alternativa"]
     if dimenzio not in sablonok["bevezetes"]:
         return None
-    return sablonok["bevezetes"][dimenzio], sablonok["gomb"][dimenzio]
+    if not _beszelheto_e(mod):
+        return sablonok["bevezetes"][dimenzio], sablonok["gomb"][dimenzio]
+    beszelt = SABLONOK[nyelv]["beszelheto"]["alternativa"]
+    return (
+        f"{beszelt['bevezetes'][dimenzio]} {beszelt['kerdes']}",
+        sablonok["gomb"][dimenzio],
+    )
 
 
-def visszakerdezes_szoveg(hianyzo_mezo: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
+def visszakerdezes_szoveg(
+    hianyzo_mezo: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
+) -> str:
     """A visszakérdezés mondata — a `hianyzo_mezo` (eszkoz-szerzodes skill
     mezőneve) emberi megfogalmazását illeszti a sablonba. Ismeretlen vagy
     hiányzó mezőnévnél a nyers mezőnevet használja tartalékként — kevésbé
-    folyékony, de sosem hamis."""
+    folyékony, de sosem hamis.
+
+    Beszélhető módban a mondat KÉRDÉS („Melyik boltba szeretnél
+    menni?"), nem bevezetett kijelentés: a szöveges alak felolvasva
+    olyan mondat, amire a vásárló hallgatással felel."""
+    if _beszelheto_e(mod):
+        kerdes = _beszelheto_sablon(nyelv, "zart_kerdes", "mezo_neve", hianyzo_mezo or "")
+        return kerdes or _beszelheto_sablon(nyelv, "zart_kerdes", "tartalek")
     sablonok = SABLONOK[nyelv]["zart_kerdes"]
     mezo_szoveg = sablonok["mezo_neve"].get(hianyzo_mezo, hianyzo_mezo or "mit szeretnél")
     return sablonok["bevezetes"].format(mezo_szoveg=mezo_szoveg)
 
 
-def tenyvalasz_szoveg(valasz: dict, *, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
+def tenyvalasz_szoveg(
+    valasz: dict, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
+) -> str:
     """A `bolt_info` sikeres válaszát olvasható mondatba fogalmazza. A
     tényt maga a `bolt_info` kereste ki egy szerkesztett mezőből
     (docs/blueprint.md 10. szakasz, "Bolti tudás") — ez a függvény csak
     megfogalmazza, nem generál új tartalmat: minden kiírt érték
-    szó szerint a `valasz` dict-ből jön."""
+    szó szerint a `valasz` dict-ből jön.
+
+    Beszélhető módban a szerkesztett érték IS átmegy a kimeneti kapun —
+    egy admin által beírt „H-P 8:00-16:00" felolvasva értelmezhetetlen
+    lenne. Ez az egyetlen hely, ahol a kapu nem a mi mondatunkat, hanem
+    idegen adatot alakít: a tényt nem változtatja meg, csak kimondhatóvá
+    teszi."""
     sablonok = SABLONOK[nyelv]["tenyvalasz"]
+    beszelt = _beszelheto_e(mod)
     mezok = {k: v for k, v in valasz.items() if k != "sikeres"}
 
     if "nyitvatartas" in mezok:
-        return sablonok["nyitvatartas"].format(
-            ertek=mezok["nyitvatartas"] or sablonok["ismeretlen_ertek"]
+        sablon = (
+            _beszelheto_sablon(nyelv, "tenyvalasz", "nyitvatartas")
+            if beszelt
+            else sablonok["nyitvatartas"]
+        )
+        return kimenet(
+            sablon.format(ertek=mezok["nyitvatartas"] or sablonok["ismeretlen_ertek"]), mod
         )
     if "cim" in mezok:
-        return sablonok["cim"].format(ertek=mezok["cim"] or sablonok["ismeretlen_ertek"])
+        sablon = _beszelheto_sablon(nyelv, "tenyvalasz", "cim") if beszelt else sablonok["cim"]
+        return kimenet(sablon.format(ertek=mezok["cim"] or sablonok["ismeretlen_ertek"]), mod)
     if "megjelenes" in mezok:
-        return mezok["megjelenes"] or sablonok["megjelenes_ures"]
+        return kimenet(mezok["megjelenes"] or sablonok["megjelenes_ures"], mod)
     if "szolgaltatasok" in mezok:
         szolgaltatasok = mezok["szolgaltatasok"]
         if not szolgaltatasok:
-            return sablonok["szolgaltatasok_ures"]
+            return kimenet(sablonok["szolgaltatasok_ures"], mod)
+        if beszelt:
+            # Hangon a szolgáltatás-lista NEVEKRE szűkül: a leírás és az
+            # időtartam felolvasva három mondatnyi, és a kérdés (melyiket
+            # kéri) elveszne a végén. A részletet a következő forduló
+            # kérdezheti vissza.
+            nevek = [sz["nev"] for sz in szolgaltatasok]
+            sablon = _beszelheto_sablon(nyelv, "tenyvalasz", "szolgaltatasok")
+            return kimenet(sablon.format(nevek=_felsorolas(nevek)), mod)
         sorok = []
         for sz in szolgaltatasok:
             reszek = [sz["nev"]]
@@ -144,6 +379,12 @@ def tenyvalasz_szoveg(valasz: dict, *, nyelv: str = _NYELV_ALAPERTELMEZETT) -> s
                 reszek.append(f"{sz['idotartam_perc']} perc")
             sorok.append(" — ".join(reszek))
         return "; ".join(sorok)
+    # ISMERETLEN mezőalak — védőág. Szöveges csatornán a nyers dict
+    # kiírása a leggyorsabb hibakeresés; hangon viszont felolvashatatlan
+    # (kapcsos zárójel, aposztróf), és nem is segít senkin. Ott inkább
+    # bevalljuk, hogy nem tudjuk megfogalmazni.
+    if beszelt:
+        return hiba_szoveg("ismeretlen_valasz", nyelv=nyelv, mod=mod)
     return str(mezok)
 
 
