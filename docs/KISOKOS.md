@@ -125,9 +125,9 @@ miatt fontos, nem véletlen.
 | Könyvtár | Mire való |
 |---|---|
 | `core/` | A foglalási logika — séma-hozzáférés, slotgenerálás, foglalás, hold, mentés. Ez fut LLM nélkül is. |
-| `ui/` | Az admin felület (Tkinter). |
-| `assistant/` | A leendő magyar nyelvi asszisztens helye — ma még csak üres vázkönyvtárak, nincs benne kód. |
-| `privacy/` | A leendő adatvédelmi réteg (redaktálás) helye — ma még üres vázkönyvtár. |
+| `ui/` | A felületek (Tkinter): admin (`ui/admin/`) és vásárlói (`ui/vasarlo.py`). |
+| `assistant/` | A magyar nyelvi asszisztens: kapuőr, értelmezők (szabály-alapú és modell-elsőbbségű), eszközök, és a magyar mondatokat adó `valasz` modul — **két kimeneti móddal**, szöveges és beszélhető (felolvasásra). |
+| `privacy/` | Az adatvédelmi réteg: redaktálás tárolás előtt, és az ideiglenes hashelés. |
 | `seed/` | A demóadat betöltője. |
 | `tests/` | A tesztkészlet, benne a golden set is (`tests/golden/`). |
 | `migrations/` | Sorszámozott adatbázis-migrációk. |

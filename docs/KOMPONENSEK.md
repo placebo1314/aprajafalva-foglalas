@@ -128,6 +128,19 @@ viselkedés), mint amennyi munkát megspórol.
 | F5-TTS magyar | beszédszintézis | ellenőrizni |
 | Profivox (BME SmartLab) | szűk tématerületen kiváló minőség | ellenőrizni |
 
+**A négyből egyik sincs bekötve — és ez szándékos** (`docs/roadmap.md`,
+M6: „configure, do not build"). Ami 2026-08-26-ig elkészült, az a hang
+két SZÖVEGOLDALI fele, mert az kész van akkor is, ha a hangkeretrendszer
+választása még odébb van:
+
+- **beszélhető kimeneti mód** (`assistant/valasz/beszelheto.py`) — a TTS
+  BEMENETE, felolvasható alakban;
+- **ASR-hibatűrés mérése** (`tests/golden/robusztus.yaml` 13. szakasz) —
+  a Whisper ismert magyar hibaosztályai szövegként előállítva.
+
+A sorrend nem véletlen: mindkettő megmondja, MIT várunk majd a
+komponensektől, mielőtt választanánk közülük.
+
 ---
 
 ## Amit szándékosan magunk írunk
@@ -140,6 +153,14 @@ viselkedés), mint amennyi munkát megspórol.
   többet ártana: a lényeg, hogy determinisztikus és átlátható legyen.
 - **A redaktáló réteg.** A magyar sajátosságok és a helyi azonosítóformátum
   miatt saját szabályok kellenek — HuSpaCy NER-rel kiegészítve.
+- **A számok, dátumok és órák KIMONDOTT alakja**
+  (`assistant/valasz/szamok.py`). Elvben ez a TTS dolga volna, és van rá
+  kész könyvtár is — csakhogy a magyar TTS-ek pontosan ezen a ponton
+  szoktak elesni („nulla nyolc kettőspont tizenöt"), és a hiba NÉMÁN
+  történik, mert a szöveg helyesnek látszik. Ha mi mondjuk ki a
+  számokat, a hiba szövegben látszik, tehát tesztelhető — hang nélkül,
+  ma (`tests/egyseg/test_beszelheto.py`). A tábla kicsi és zárt: a
+  0-3999 tartomány, 31 nap, 12 hónap, 26 betűnév.
 
 ---
 

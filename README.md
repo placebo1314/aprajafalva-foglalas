@@ -41,7 +41,14 @@ python feladat.py seed          # demóadat: 3 bolt, Törpilla 3 pultja
 python feladat.py teszt         # tesztkészlet
 python -m ui.vasarlo            # vásárlói felület (koppintós + szöveges út)
 python feladat.py vegigjatszas  # ugyanaz fej nélkül, végigjátszva
+python feladat.py vegigjatszas --mod beszelheto   # …felolvasásra szánt kimenettel
 ```
+
+A szöveges fülön **kimeneti mód-kapcsoló** van (M6, hang-előkészítés): a
+`szöveges` a képernyőé, a `beszélhető` az, amit egy felolvasó kapna —
+egész mondatok, kimondott számokkal („nyolc óra tizenöt"), fordulónként
+legfeljebb két mondattal és egy kérdéssel. Hang még nincs; a mód épp
+azért van, hogy hang nélkül is látni lehessen, mit HALLANA a vásárló.
 
 A szöveges úthoz nem kötelező nyelvi modell: ha nincs beállítva
 `APRAJAFALVA_LLM_MODELL`, vagy nem fut az Ollama, a felület csendben a

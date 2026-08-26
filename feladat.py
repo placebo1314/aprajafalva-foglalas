@@ -6,7 +6,7 @@ python feladat.py teszt-mindketto
 python feladat.py golden [--json UTVONAL]
 python feladat.py migracio "<leiras>"
 python feladat.py seed [--ujra]
-python feladat.py vegigjatszas [--db UTVONAL]
+python feladat.py vegigjatszas [--db UTVONAL] [--robusztus] [--mod szoveges|beszelheto|mindketto]
 python feladat.py naplo [--utolso N] [--golden SOR]
 python feladat.py lint
 
@@ -19,17 +19,22 @@ Két halmaz van (`--halmaz nyelvi|robusztus`):
 - `nyelvi` (alapértelmezett) — nyelvi megértés, EGY helyes válasz esetenként.
 - `robusztus` — mi történik, amikor NEM az történik, amire számítunk: üres
   bemenet, zaj, idegen nyelv, ellentmondás, hatókörön kívüli kérés,
-  prompt injection, érzelem, abszurd kérés, kéretlen személyes adat. Itt
-  nem pontosságot mérünk elsősorban, hanem NÉGY biztonsági számot
-  (kivétel / hatókörön kívüli válasz / kitalált tény / instabil ismétlés),
-  mindet 0-s kemény küszöbbel.
+  prompt injection, érzelem, abszurd kérés, kéretlen személyes adat, és
+  **ASR-hibák** (félrehallott szám és név, egybefolyt szavak, hiányzó
+  szóvég, ékezet nélküli alak, hallucinált zárómondat — külön mérési
+  bontásban). Itt nem pontosságot mérünk elsősorban, hanem NÉGY
+  biztonsági számot (kivétel / hatókörön kívüli válasz / kitalált tény /
+  instabil ismétlés), mindet 0-s kemény küszöbbel.
 
 A `vegigjatszas` a vásárlói felületet hajtja végig Tkinter-eseményhurok
 nélkül (`tools/vegigjatszas.py`) — önellenőrzés, mielőtt kézzel leülnél elé.
+A `--mod` a kimeneti módot választja: `szoveges` (mai viselkedés),
+`beszelheto` (felolvasásra) vagy `mindketto` (ugyanaz kétszer).
 
 A `naplo` a próba-naplót (`naplo/probak.jsonl`) összesíti
-(`tools/naplo_elemzo.py`): fordulószám, réteg-megoszlás, átlag és p95
-válaszidő, bizonyosság-eloszlás, leggyakoribb hibaminták. A
+(`tools/naplo_elemzo.py`): fordulószám, réteg-megoszlás, VÁLASZIDŐ-
+ELOSZLÁS (p50/p95/átlag/max) a kétpontos elváráshoz mérve PLUSZ a
+tendencia (ADR-022), bizonyosság-eloszlás, leggyakoribb hibaminták. A
 `--golden <sor>` egy naplósorból golden teszteset-vázat ír, a `varhato`
 mezőt ÜRESEN hagyva — a helyes választ embernek kell beírnia.
 """
