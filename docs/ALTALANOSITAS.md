@@ -19,7 +19,10 @@ FEJLESZTÉS akadályait gyűjti; ez a RENDSZER képességének határait.
 
 ## 1. Amit ez a kör strukturálisan javított
 
-Három javítás, mindhárom hibaosztályt szüntetett meg, nem esetet.
+Három javítás, mindhárom hibaosztályt szüntetett meg, nem esetet. **A
+2026-08-26-i kör kettővel bővítette a listát** (1.4 és 1.5) — mindkettő
+a MÉRÉST javította, nem a rendszert, és épp ezért tanulságos: egy vak
+mérőszám rosszabb, mint a hiányzó mérőszám, mert biztonságérzetet ad.
 
 ### 1.1 Múltbeli időkifejezésből nem lesz keresési ablak
 
@@ -66,26 +69,65 @@ zárt alakú személyes adatok (telefon, TAJ, adóazonosító, igazolvány,
 e-mail, bankkártya) osztályát ismeri fel, és minden lemezre írt mezőn
 lefut.
 
+### 1.4 A mérés fordulónkénti adatai nem veszhetnek el (2026-08-26)
+
+**A bukás:** a golden futtató modell-útjain (`kaszkad`, `forditott`) a
+hívó egy closure volt, ami a fordulónkénti kimeneteket nem emelte át
+magára. Az ismétlés-stabilitás vizsgálata ezért **némán kimaradt**: a
+jelentésben 0 állt, nem azért, mert stabil volt, hanem mert nem mértük.
+
+**Miért nem ráigazítás:** a hiányzó két sor pótlása ráigazítás lett
+volna — a következő burkoló ugyanígy felejtene. Helyette a closure-ből
+`BurkoltHivo` osztály lett, ami az átvezetést MAGA végzi, és amit
+egységteszt fog (`test_robusztus_halmaz.py`). A hibaosztály: „a mérés
+egy köztes rétegen csendben elveszíti az adatot".
+
+### 1.5 A stabilitás definíciója egy helyen él (2026-08-26)
+
+**A bukás:** a stabilitás-vizsgálat a TELJES kimenet-dictet
+hasonlította össze, a `bizonyossag` mezővel együtt — az pedig logprob,
+tehát a negyedik tizedesjegyen ingadozik. Öt AZONOS eszközhívás
+„négyféle kimenetnek" számított.
+
+**Miért nem ráigazítás:** nem a `bizonyossag` mezőt zártuk ki egy
+listával, hanem a futtató mostantól ugyanazt a KANONIKUS alakot
+használja, amin az önkonzisztencia szavaztat
+(`onkonzisztencia.eszkozhivas_kulcsa`, ADR-021: `{eszkoz,
+parameterek}`). A hibaosztály: „ugyanannak a fogalomnak két
+definíciója van a kódban".
+
 ---
 
 ## 2. Ismert korlátok
 
-### 2.1 Egy nagyon hosszú bemenet kilóg a 15 s keretből
+### 2.1 A hosszú bemenet farka — és amit a szórásról meg kellett tanulni
 
 **Mérve** (2026-08-23, `qwen3.5:9b`, `forditott`): a robusztussági
-halmaz fordulónkénti átlaga **3,62 s**, tehát a keret (blueprint 12.)
-bőven tartja magát. **Egyetlen eset kivétel**: a `hosszu-01-tobb-tema`
-(632 karakter, öt téma) **15,18 s** — épp a határ felett.
+halmaz fordulónkénti átlaga 3,62 s volt, EGYETLEN kilógó esettel — a
+`hosszu-01-tobb-tema` (632 karakter, öt téma) **15,18 s**, épp az akkori
+15 s-os keret felett.
 
-**Miért nem javítjuk most:** a bemenet rövidítése (csonkolás,
+**Újramérve** (2026-08-26, ugyanaz a modell, ugyanaz a mondat, közben
+az értelmezőhöz nem nyúltunk): a leglassabb egyfordulós eset **5,50 s**,
+a `hosszu-01` ennél is kevesebb. A p50 4,62 s, a p95 5,08 s.
+
+**A különbség nem a kód, hanem az Ollama futásonkénti szórása.** Ebből
+két dolog következik, és mindkettő fontosabb, mint maga az eset:
+
+1. **Egyetlen futás egyetlen száma nem állítás, csak adat.** A 15,18 s
+   nem volt hamis mérés — de nem is volt a rendszer tulajdonsága.
+2. **Ezért lett a válaszidő-elvárás ELOSZLÁS és TENDENCIA** (ADR-022):
+   p50 < 10 s, p95 < 25 s, és a két félidő mediánjának összevetése. Egy
+   szám (átlag) ezt a helyzetet nem tudta kezelni: hol „tartja", hol
+   „nem tartja", ugyanattól a kódtól.
+
+**A korlát ettől korlát marad:** a hosszú, többtémájú bemenet a
+leglassabb eset, és a hangcsatornán (ahol a türelem szűkebb) érezhető
+lesz. **Miért nem javítjuk most:** a bemenet rövidítése (csonkolás,
 összefoglalás) vagy egy kisebb modell külön architekturális döntés,
 ADR-rel. A csonkolás ráadásul KOCKÁZATOS: a `hosszu-02` eset épp azt
 mutatja, hogy a valódi kérés a mondat VÉGÉN is lehet, tehát a
 „vágjuk le a végét" megoldás pont a lényeget dobná el.
-
-**Amit tudni kell róla:** a keret ÁTLAGRA szól, és az átlag tartja
-magát. Ez az eset nem szabálysértés, hanem a farok — de valós, és a
-hangcsatornán (ahol az SLO szigorúbb lesz) érezhető lesz.
 
 ### 2.2 A kapuőr mintalistája új témára új mintát igényel
 
@@ -206,6 +248,52 @@ amit keresni lehetne.
 `nyelvi_alap.yaml::mintan_tul-08`. A „jövő hét eleje" a teljes jövő
 hétre old fel. Tudatos v1 döntés: a szűkebb ablak megépítése külön
 lépés, és amíg nincs meg, nem mérünk rá.
+
+### 2.11 A beszélhető mód VESZTESÉGES — és ez nem hiba
+
+A fordulónkénti két mondat és az egy kérdés (blueprint 7.,
+`assistant/valasz/beszelheto.py`) **korlát, nem cél**. Ami nem fér
+bele, az eldobódik:
+
+- a harmadik és további **időpont** (marad a legkorábbi + egy
+  alternatíva);
+- a szolgáltatás **leírása és időtartama** (marad a név);
+- minden **zárójeles megjegyzés**.
+
+Szöveges csatornán ez az információ ott marad a képernyőn — hangon
+elveszik, és a vásárlónak rá kell kérdeznie.
+
+**Miért nem javítjuk:** a „mondjunk el mindent, csak gyorsabban"
+megoldás pontosan az a hiba, amit a barge-in mér (a vásárló belevág,
+és onnantól az ASR a saját hangunkat is hallja). Amit a hang nem bír
+el, azt nem mondjuk ki — nem pedig sűrítve mondjuk el.
+
+### 2.12 A beszélhető mód FORMAI szabályt őriz, nem érthetőséget
+
+A teszt (`tests/egyseg/test_beszelheto.py`) azt méri, hogy nincs
+számjegy, kötőjel, zárójel és felsorolásjel, hogy legfeljebb két mondat
+és egy kérdés megy ki. Azt **nem** méri, hogy
+
+- a megmaradt kérdés a HELYES kérdés-e (a szabály az UTOLSÓ kérdést
+  tartja meg — ez heurisztika, nem tudás);
+- a mondat kimondva természetes-e;
+- a betűzött foglalási kód hallás után LEÍRHATÓ-e.
+
+Ez a három emberi próba (`docs/TESZTELES.md`, „Beszélhető mód: mit néz
+az ember"), és amíg nincs TTS, csak felolvasva ellenőrizhető.
+
+### 2.13 Az admin által szerkesztett tény nem lesz mondhatóbb
+
+A `bolt_info` értékei szerkesztett adatok (nyitvatartás, cím,
+megjelenés). Beszélhető módban ezek is átmennek a kimeneti kapun, tehát
+a számok kimondottá válnak — de a MONDATSZERKEZET marad, ami az
+adminban van. Egy „H-P 8:00-16:00" alakból „hétfő péntek nyolc órától
+tizenhat óráig" lesz: számokban helyes, magyarul csonka.
+
+**Miért nem javítjuk:** a rövidítés-feloldás (H → hétfő, P → péntek)
+egy újabb mintalista lenne, ami minden új rövidítéssel bővülne — és
+közben a helyes megoldás egyszerű: az adminban kimondható szöveget kell
+írni. Ez a szerkesztő felület dolga (M1), nem a válaszrétegé.
 
 ---
 
