@@ -150,6 +150,13 @@ tartós modul — a spike korábban ezt nem tudta futtatni, csak
 napszak-/boltváltás, elutasítás-után-alternatíva). Ez még messze a
 kilépési feltétel alatt van; a szituációs esetek egyáltalán nincsenek felvéve.
 
+**2026-08-26:** két halmaz van (`--halmaz nyelvi|robusztus`), együtt
+**108 eset**: nyelvi 45, robusztussági 63. A robusztussági halmaz
+19 esettel bővült — **ASR-hibaszimuláció** (13. szakasz), hat
+hibafajtában, külön mérési bontással. A szituációs esetek továbbra is
+hiányoznak, és a kilépési feltétel a NYELVI halmazra vonatkozik: az 45
+eset, nem 150-200.
+
 **Kilépési feltétel:** 150-200 eset, futtatható értékelő, két modell
 összehasonlítható.
 
@@ -208,6 +215,17 @@ ellenőrzés, bizalmi jelzés.
 
 ## M6 — Dev mód és finomhangolás
 
+**Állapot: a HANGCSATORNA ELŐKÉSZÍTÉSE elkezdődött (2026-08-26).** Maga
+az M6 nem indult el; ami elkészült, az a hang két SZÖVEGOLDALI fele —
+az, ami hang nélkül is megépíthető és mérhető.
+
+- ~~**beszélhető kimeneti mód**~~ — kész (`assistant/valasz/beszelheto.py`,
+  `szamok.py`): egész mondatok, kimondott számokkal, fordulónként
+  legfeljebb két mondattal és egy kérdéssel; a felületen kapcsolható
+  (`ui/vasarlo.py`), a végigjátszásban `--mod mindketto`
+- ~~**ASR-hibatűrés mérése**~~ — kész (`tests/golden/robusztus.yaml` 13.
+  szakasz, 19 eset hat hibafajtában): a Whisper magyar hibái szövegként
+  előállítva, külön bontásban mérve
 - trace-böngésző, „mi lett volna a helyes válasz"
 - rosszra értékelt beszélgetések előre sorolva
 - export, LoRA finomhangolás, mérés a golden seten
@@ -218,6 +236,24 @@ ellenőrzés, bizalmi jelzés.
   a VAD/turn-detection a hangkeretrendszer (LiveKit/Pipecat) dolga, nem
   saját fejlesztés; a háttércsatorna („ühüm") elkülönítve a valódi
   közbevágástól, félbeszakításkor a szándékindex adata nem veszhet el
+
+### Mi hiányzik még a hanghoz — és miért nem építjük
+
+Mind a négy **konfiguráció, nem építés** (`docs/PLATFORM_TANULSAGOK.md`,
+„configure, do not build"):
+
+| Hiányzik | Mi lesz a dolgunk | Miért nem most |
+|---|---|---|
+| **ASR** (beszéd → szöveg) | modellválasztás és magyar hangolás mérése, a normalizáló szótár bővítése a tényleges hibákkal | ma szimuláljuk a hibáit; a valódi hibaeloszlást csak éles hangból lehet megismerni |
+| **TTS** (szöveg → beszéd) | hangválasztás, sebesség, a kimondott számok ELLENŐRZÉSE (a beszélhető mód épp ezt készíti elő) | a szöveg oldala kész; hang nélkül a hangminőségről nincs mit mondani |
+| **Turn-detection** | `waitSeconds` idős beszédre hangolva, háttércsatorna elkülönítve | a keretrendszer (LiveKit/Pipecat) dolga, a paraméter mérés kérdése |
+| **Barge-in** | a félbeszakított forduló állapotának megőrzése | a szándékindex (`core/api/szandekindex.py`) már ma is elviseli — de bizonyítani csak hanggal lehet |
+
+Amit a szövegoldali előkészítés **nem old meg**: a válaszidő. A
+blueprint 12. szakaszának p95-e (25 s, ADR-022) SZÖVEGES csatornára
+szól; hangon 25 másodperc csönd nem türelmi határ, hanem a hívás vége.
+Ezt a hangcsatorna bekötésekor újra kell tárgyalni — ADR-022 kiváltó
+feltétele.
 
 ---
 

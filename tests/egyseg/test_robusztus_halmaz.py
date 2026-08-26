@@ -23,6 +23,7 @@ from tests.golden.futtato import (
     BIZTONSAGI_KATEGORIAK,
     KITALALT_TENY,
     ROBUSZTUS_UTVONAL,
+    BurkoltHivo,
     Eset,
     betolt,
     biztonsagi_ellenorzes,
@@ -128,6 +129,41 @@ def test_ora_nelkuli_kimenet_a_helyes_valasz_ezekre():
     """Az órát ELDOBNI (és a bolt/nap alapján keresni) hibátlan
     viselkedés — ez az az ág, amit a halmaz elvár."""
     assert biztonsagi_ellenorzes(_eset(tilos=["kitalalt_ora"]), _kimenet()) == []
+
+
+def test_a_fordulonkenti_adatok_eljutnak_a_futtatoig():
+    """A stabilitás-mérés csak akkor működik, ha MINDEN forduló kimenete
+    eljut a `fut()`-ig — üres listán a vizsgálat némán kimarad."""
+    _meta, _esetek, eredmenyek = _futtat()
+    tobbfordulos = [er for er in eredmenyek if er.eset.tobbfordulos]
+    assert tobbfordulos, "kell legyen többfordulós (ismétlés) eset"
+    for er in tobbfordulos:
+        assert len(er.fordulo_kimenetek) == len(er.eset.fordulok), er.eset.id
+        assert len(er.fordulo_idok) == len(er.eset.fordulok), er.eset.id
+
+
+def test_a_burkolt_hivo_atvezeti_a_fordulonkenti_adatokat():
+    """MÉRÉSI HIBA ellen, 2026-08-26. A modell-utakon (`kaszkad`,
+    `forditott`) a hívó egy BURKOLÓ, ami a réteg-számlálót vezeti — és a
+    fordulónkénti adatokat eddig nem emelte át magára. A `fut()` üres
+    listát látott, tehát az `instabil_ismetles` vizsgálat NÉMÁN
+    kimaradt: a jelentésben 0 állt, nem azért, mert stabil volt, hanem
+    mert nem mértük.
+
+    A javítás nem egy elfelejtett sor pótlása, hanem szerkezeti: a
+    closure-ből osztály lett, mert egy closure-t nem lehet tesztelni,
+    egy osztályt igen. Ez a teszt az."""
+    alap = ertelmezo_hivo(SzabalyAlapuErtelmezo())
+    konyvelesek = []
+    burkolt = BurkoltHivo(alap, lambda _eredmeny: konyvelesek.append(1) or 3)
+
+    burkolt(["mennék", "mennék"], "2026-08-17T09:00:00Z")
+
+    assert len(burkolt.fordulo_kimenetek) == 2
+    assert len(burkolt.fordulo_idok) == 2
+    # A könyvelés is lefut, és az egyetértést a burkoló megőrzi.
+    assert konyvelesek == [1]
+    assert burkolt.utolso_egyetertes == 3
 
 
 def test_letszam_kitalalt_mezo_a_ketten_esetben():

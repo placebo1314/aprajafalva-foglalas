@@ -646,6 +646,42 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
     return hivo
 
 
+class BurkoltHivo:
+    """Egy `HivoFuggveny` burkolója, ami a fordulónkénti adatokat
+    (kimenetek, idők, egyetértés) MAGÁTÓL átvezeti magára.
+
+    **Ez egy mérési hiba miatt lett osztály** (2026-08-26). Korábban a
+    modell-utak (`kaszkad`, `forditott`) hívója egy closure volt, ami a
+    réteg-számlálót vezette — és a `fordulo_kimenetek`-et nem emelte át.
+    A `fut()` ezért üres listát látott, és az ismétlés-STABILITÁS
+    vizsgálata (`instabil_ismetles`) némán kimaradt: a jelentésben 0
+    állt, nem azért, mert stabil volt, hanem mert **nem mértük**. A
+    `llm` felállás ép volt (ott nincs burkoló) — és épp ezért látszott
+    OTT 2 instabil eset, amit a kapuk érdemének tulajdonítottunk.
+
+    A tanulság nem az elfelejtett sor, hanem a szerkezet: egy
+    mellékhatásokkal dolgozó closure-t nem lehet tesztelni, egy
+    osztályt igen (`tests/egyseg/test_robusztus_halmaz.py`).
+
+    `konyveles`: opcionális visszahívás, ami minden eset után lefut, és
+    az önkonzisztencia-egyetértést adja vissza (vagy `None`)."""
+
+    def __init__(self, alap: HivoFuggveny, konyveles: Callable | None = None) -> None:
+        self._alap = alap
+        self._konyveles = konyveles
+        self.fordulo_kimenetek: list[dict | None] = []
+        self.fordulo_idok: list[float] = []
+        self.utolso_egyetertes: int | None = None
+
+    def __call__(self, bemenet: str | list[str], most: str):
+        eredmeny = self._alap(bemenet, most)
+        self.fordulo_kimenetek = list(getattr(self._alap, "fordulo_kimenetek", []) or [])
+        self.fordulo_idok = list(getattr(self._alap, "fordulo_idok", []) or [])
+        if self._konyveles is not None:
+            self.utolso_egyetertes = self._konyveles(eredmeny)
+        return eredmeny
+
+
 def fut(meta: dict, esetek: list[Eset], hivo: HivoFuggveny) -> list[EsetEredmeny]:
     most = meta["most_alapertelmezett"]
     robusztus = meta.get("fajta") == "robusztus"
@@ -986,21 +1022,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Értelmező: {args.ertelmezo} (modell={szolgaltato.modell})\n")
             alap_hivo = ertelmezo_hivo(futtatando)
 
-            def hivo(bemenet, most, _alap=alap_hivo, _kaszkad=kaszkad, _futt=futtatando):
-                eredmeny = _alap(bemenet, most)
+            def konyveles(_eredmeny, _kaszkad=kaszkad, _futt=futtatando):
+                """Fordulónkénti könyvelés a burkoló mellé: melyik réteg
+                oldotta meg, és mennyi volt az önkonzisztencia-egyetértés.
+                A fordulónkénti adatok átvezetése NEM itt van — azt a
+                `BurkoltHivo` maga intézi, hogy ne lehessen elfelejteni."""
                 reteg_szamlalo[_kaszkad.utolso_reteg] = (
                     reteg_szamlalo.get(_kaszkad.utolso_reteg, 0) + 1
                 )
                 egyetertes = getattr(_futt, "utolso_egyetertes", None)
-                # Esetenként is elérhetővé tesszük (`fut()` olvassa a
-                # hívó-objektumról), hogy a JSON-ban NÉV szerint
-                # látszódjon, melyik eseten ingadozott a modell — nem
-                # csak az, hogy hányon.
-                hivo.utolso_egyetertes = egyetertes
                 if egyetertes is not None:
                     kulcs = f"egyetertes={egyetertes}"
                     egyetertes_szamlalo[kulcs] = egyetertes_szamlalo.get(kulcs, 0) + 1
-                return eredmeny
+                return egyetertes
+
+            hivo = BurkoltHivo(alap_hivo, konyveles)
 
     eredmenyek = fut(meta, esetek, hivo)
 

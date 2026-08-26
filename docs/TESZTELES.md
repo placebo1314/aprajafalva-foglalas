@@ -266,6 +266,27 @@ nyomd meg.
 | 10 | Egy időpont-gomb → azonosítónak írj bármit → "Igen, foglalom" | "Foglalás létrejött! Foglalási kód: XXXXXXXX" | Hibaüzenet, vagy nincs kód. |
 | 11 | `Mikor tudok legkorábban menni a Törpillához?` | "A legkorábbi szabad időpont:" + **egyetlen** gomb. | Három jelölt (az a `szabad_idopontok` válasza — gyengébb, de nem hibás), vagy visszakérdezés. |
 | 12 | Írd be egymás után négyszer, hogy `nem értem, mit kell csinálni` | A rendszer **kiutat** ajánl (Másik bolt / Másik hét / Másik napszak), majd ha ez sem segít, **emberhez irányít** ("a boltban élőben is fel tudnak venni időpontot"). | Negyedszer is ugyanaz a visszakérdezés — a frusztráció-figyelő nem szólalt meg. |
+| 13 | Kapcsold a **Kimenet** választót `beszélhető`-re, és ismételd meg az 1., 2. és 10. próbát | Egész mondatok, **kimondott számokkal**: „A legkorábbi december huszonkettedikén nyolc órakor, de van kilenc harminckor is. Melyik jó?" — fordulónként legfeljebb két mondat és **egy** kérdés, a foglalási kód betűzve. | **Bármilyen számjegy, kötőjel, zárójel vagy felsorolásjel** a rendszer mondatában. Ezek a felolvasót viszik félre — a `tests/egyseg/test_beszelheto.py` ugyanezt méri gépileg. |
+
+#### Beszélhető mód: mit néz az ember, amit a teszt nem lát
+
+A formai szabályokat (számjegy, kötőjel, zárójel, két mondat, egy
+kérdés) a tesztek ellenőrzik. Ami **csak élőben derül ki**, és ezért
+kézzel próbálandó:
+
+- **Kimondható-e egy szuszra?** Olvasd fel hangosan. Ha levegőt kell
+  venni a közepén, a mondat hosszú — a szabály két mondat, de két
+  hosszú mondat is barge-int szül.
+- **Van-e értelme a kérdésnek a mondat után?** A gép azt méri, hogy
+  EGY kérdés van; azt nem, hogy a helyes kérdés maradt-e bent.
+- **Visszamondható-e a kód?** A `pé zé em ef dé nyolc té gé` alakot
+  próbáld meg leírni hallás után. Ha nem megy, a betűzés rossz.
+
+Ugyanez fej nélkül, mindkét módban egyszerre:
+
+```
+python feladat.py vegigjatszas --mod mindketto
+```
 
 #### Ha valami furcsa: nyisd meg a naplót
 
@@ -364,9 +385,17 @@ tekinteni.
 
 ## Mit NE várj még
 
-- **Önkonzisztencia-ellenőrzés nincs**, és a kötött dekódolás ma az
-  Ollama JSON-séma-kényszere (`format`), nem GBNF/XGrammar szintű
-  nyelvtan — a kettő nem ugyanaz (`docs/ALLAPOT.md`, M4 sor).
+- **Az önkonzisztencia-ellenőrzés megvan, de KI van kapcsolva**
+  (ADR-021: megmérve nem javít, 63-71%-kal lassít) —
+  `APRAJAFALVA_ONKONZISZTENCIA=1` bekapcsolja. A kötött dekódolás
+  továbbra is az Ollama JSON-séma-kényszere (`format`), nem
+  GBNF/XGrammar szintű nyelvtan — a kettő nem ugyanaz
+  (`docs/ALLAPOT.md`, M4 sor).
+- **HANG nincs.** A beszélhető kimeneti mód (13. próba) szövegben
+  mutatja meg, mit HALLANA a vásárló — de sem ASR, sem TTS, sem
+  fordulóhatár-felismerés, sem barge-in nincs bekötve
+  (`docs/roadmap.md`, M6). Az ASR-hibákat ma szimuláljuk
+  (`tests/golden/robusztus.yaml` 13. szakasz), nem mérjük.
 - **A magyar nyelvi értelmezés korlátozott.** A modell egy 9B-s, nem
   magyarra hangolt háló; a golden set `valtozatossag` és `mintan_tul`
   rétegein mindkét felállás a küszöb alatt van (`docs/ALLAPOT.md`,
