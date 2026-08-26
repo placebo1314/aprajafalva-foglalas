@@ -188,6 +188,45 @@ def test_ajanlat_kulonbozo_napon_kimondja_a_masodik_datumot_is() -> None:
     assert "december huszonharmadikán" in szoveg
 
 
+def test_ajanlat_nem_mondja_ketszer_ugyanazt_az_orat() -> None:
+    """A FEJ NÉLKÜLI VÉGIGJÁTSZÁS találta: a pontozó egy időpontra több
+    jelöltet is adhat (különböző hosszúságú szolgáltatásokra), és a
+    mondat ettől „a legkorábbi hét órakor, de van hét órakor is" lett.
+    Írásban ez a gombokon nem tűnt fel, mert ott a hossz
+    megkülönbözteti őket — kimondva viszont értelmetlen."""
+    azonos_ora = [
+        {"kezdet": "2026-12-21T07:00:00Z", "veg": "2026-12-21T07:10:00Z"},
+        {"kezdet": "2026-12-21T07:00:00Z", "veg": "2026-12-21T07:20:00Z"},
+    ]
+    szoveg = valasz.ajanlat_mondat(azonos_ora, mod=BESZELHETO)
+    assert szoveg.count("hét órakor") == 1
+    assert "de van" not in szoveg
+
+    # …de ha VAN eltérő időpont, az megy ki másodikként, akkor is, ha
+    # nem közvetlenül a második helyen áll.
+    vegyes = [*azonos_ora, {"kezdet": "2026-12-21T09:30:00Z", "veg": "2026-12-21T10:00:00Z"}]
+    assert "kilenc harminckor" in valasz.ajanlat_mondat(vegyes, mod=BESZELHETO)
+
+
+def test_a_nyugtazo_sor_is_beszelheto() -> None:
+    """Szintén a végigjátszás találata: a nyugtázó sor KÜLÖN
+    megszólalás (a kétlépcsős válasz első lépcsője), de attól még
+    beszélhetőnek kell lennie. A szöveges alakban egyszerre volt
+    zárójel, két ISO-dátum és rossz névelő."""
+    ablak = {
+        "bolt_id": "ugyifogyi",
+        "datum_tol": "2026-12-21T00:00:00Z",
+        "datum_ig": "2026-12-28T23:59:59Z",
+        "napszak": "barmikor",
+    }
+    szoveg = valasz.nyugtazo_szoveg(ablak, mod=BESZELHETO)
+    assert beszelheto.tiltott_jelek(szoveg) == [], szoveg
+    # „a(z) Ügyifogyi" helyett „az Ügyifogyi" — az „a(z)" kimondva nem
+    # létezik.
+    assert "az Ügyifogyi" in szoveg
+    assert "a Törpilla" in valasz.nyugtazo_szoveg({"bolt_id": "torpilla"}, mod=BESZELHETO)
+
+
 def test_ajanlat_szoveges_modban_valtozatlan() -> None:
     """A szöveges út viselkedése NEM változhat: ott a jelöltek
     koppintható gombok, a mondat csak bevezeti őket."""

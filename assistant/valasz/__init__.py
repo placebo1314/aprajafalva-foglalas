@@ -212,7 +212,14 @@ def ajanlat_mondat(
         return kimenet(ajanlat_bevezetes_szoveg(nyelv=nyelv), mod)
 
     elso = szamok.ido_iso_szoval(kezdetek[0], kor=True)
-    if legkozelebbi or len(kezdetek) == 1:
+    # A MÁSODIK időpont az első ELTÉRŐ kezdetű jelölt, nem egyszerűen a
+    # következő. A fej nélküli végigjátszás fogta meg, miért: a
+    # pontozó egy időpontra több jelöltet is adhat (más hosszúságú
+    # szolgáltatásokra), és így a mondat „a legkorábbi hét órakor, de
+    # van hét órakor is" lett — kimondva értelmetlen. Írásban ez a
+    # gombokon nem tűnt fel, mert ott a hossz megkülönbözteti őket.
+    elterok = [k for k in kezdetek[1:] if k[11:16] != kezdetek[0][11:16]]
+    if legkozelebbi or not elterok:
         kulcs = "ajanlat_legkozelebbi" if legkozelebbi else "ajanlat_egy"
         sablon = _beszelheto_sablon(nyelv, "visszaigazolas", kulcs)
         return kimenet(sablon.format(elso=elso), mod)
@@ -222,10 +229,11 @@ def ajanlat_mondat(
     # kilenc harminckor is" — ez írásban is rossz, hangon pedig azt a
     # látszatot kelti, hogy a két időpont két KÜLÖNBÖZŐ napra szól, és
     # a vásárló a dátumot kezdi hallgatni a lényeg helyett.
-    if kezdetek[1][:10] == kezdetek[0][:10]:
-        masodik = szamok.idopont_kor(int(kezdetek[1][11:13]), int(kezdetek[1][14:16]))
+    kovetkezo = elterok[0]
+    if kovetkezo[:10] == kezdetek[0][:10]:
+        masodik = szamok.idopont_kor(int(kovetkezo[11:13]), int(kovetkezo[14:16]))
     else:
-        masodik = szamok.ido_iso_szoval(kezdetek[1], kor=True)
+        masodik = szamok.ido_iso_szoval(kovetkezo, kor=True)
     sablon = _beszelheto_sablon(nyelv, "visszaigazolas", "ajanlat_ketto")
     return kimenet(sablon.format(elso=elso, masodik=masodik), mod)
 
@@ -456,6 +464,7 @@ def nyugtazo_szoveg(
     *,
     nyelv: str = _NYELV_ALAPERTELMEZETT,
     veletlen: random.Random | None = None,
+    mod: str = MOD_SZOVEGES,
 ) -> str:
     """A keresés elindítása UTÁN, az eredmény megérkezése ELŐTT
     felolvasható sor — a hangcsatorna töltelékmondatának próbája (docs/
@@ -469,17 +478,30 @@ def nyugtazo_szoveg(
 
     `veletlen`: opcionális `random.Random` — a tesztek ezzel tudják
     determinisztikussá tenni a változat-választást; alapból a modul
-    szintű `random` sorsol."""
+    szintű `random` sorsol.
+
+    **Beszélhető módban ez a sor is átalakul** — a fej nélküli
+    végigjátszás fogta meg, hogy elmarad: „Nézem, mi van a(z) Ügyifogyi
+    boltban, 2026-12-21 és 2026-12-28 között…" felolvasva három hibát
+    tartalmaz egyszerre (zárójel, két ISO-dátum, rossz névelő). Az, hogy
+    ez KÜLÖN megszólalás (a kétlépcsős válasz első lépcsője), nem
+    jelenti azt, hogy nem kell beszélhetőnek lennie."""
+    beszelt = _beszelheto_e(mod)
     valaszto = veletlen.choice if veletlen is not None else random.choice
     sablonok = SABLONOK[nyelv]["nyugtazo"]
 
     if not felismert_ablak:
-        return valaszto(sablonok["altalanos"])
+        return kimenet(valaszto(sablonok["altalanos"]), mod)
 
     reszek = []
     bolt_slug = felismert_ablak.get("bolt_id")
     if bolt_slug:
-        reszek.append(f"a(z) {katalogus.BOLT_NEVEK.get(bolt_slug, bolt_slug)} boltban")
+        bolt_nev = katalogus.BOLT_NEVEK.get(bolt_slug, bolt_slug)
+        # Az „a(z)" írásban elfogadott rövidítés, kimondva viszont
+        # nem létezik: vagy „a", vagy „az". Beszélhető módban ezért a
+        # névelőt a bolt nevének első hangja dönti el.
+        nevelo = _hatarozott_nevelo(bolt_nev) if beszelt else "a(z)"
+        reszek.append(f"{nevelo} {bolt_nev} boltban")
     datum_tol = felismert_ablak.get("datum_tol")
     datum_ig = felismert_ablak.get("datum_ig")
     if datum_tol and datum_ig:
@@ -488,6 +510,15 @@ def nyugtazo_szoveg(
         )
 
     if not reszek:
-        return valaszto(sablonok["altalanos"])
+        return kimenet(valaszto(sablonok["altalanos"]), mod)
     sablon = valaszto(sablonok["ablakkal"])
-    return sablon.format(resz=", ".join(reszek))
+    return kimenet(sablon.format(resz=", ".join(reszek)), mod)
+
+
+# Magánhangzóval kezdődő szó előtt „az". Ékezetes magánhangzókkal
+# együtt — a bolt nevek magyarok (Ügyifogyi).
+_MAGANHANGZOK = "aáeéiíoóöőuúüű"
+
+
+def _hatarozott_nevelo(szo: str) -> str:
+    return "az" if szo[:1].lower() in _MAGANHANGZOK else "a"

@@ -13,6 +13,15 @@ leül a felület elé**.
     python feladat.py vegigjatszas --db proba.db
     python feladat.py vegigjatszas --robusztus     # + a teljes robusztussági halmaz
     python feladat.py vegigjatszas --csak-robusztus
+    python feladat.py vegigjatszas --mod beszelheto
+    python feladat.py vegigjatszas --mod mindketto  # ugyanaz KÉTSZER, két módban
+
+**A `--mod` a kimeneti módot választja** (M6, hang-előkészítés): a
+`szoveges` a mai viselkedés, a `beszelheto` az, amit egy felolvasó
+kapna. A `mindketto` mindkettőt végigfuttatja, egymás után — ez az,
+amiből látszik, hogy a KÉT MÓD UGYANAZT A DÖNTÉST hozza, csak másképp
+mondja: a réteg, az eszköz és a paraméterek soronként azonosak, a
+megjelenített mondat nem.
 
 **A `--robusztus` a robusztussági halmaz (`tests/golden/robusztus.yaml`,
 44 eset) MINDEN esetét végigjátssza a VALÓDI felületen.** Ez másra jó,
@@ -130,8 +139,21 @@ def _widgetek(keret, osztaly: str) -> list:
     return talalatok
 
 
-def vegigjatszas(db_path: str, robusztus: bool = False, csak_robusztus: bool = False) -> int:
+def vegigjatszas(
+    db_path: str,
+    robusztus: bool = False,
+    csak_robusztus: bool = False,
+    mod: str = "szoveges",
+) -> int:
+    from assistant import valasz as valasz_szoveg
     from ui.vasarlo import VasarloApp
+
+    if mod == "mindketto":
+        kodok = [
+            vegigjatszas(db_path, robusztus, csak_robusztus, egy_mod)
+            for egy_mod in (valasz_szoveg.MOD_SZOVEGES, valasz_szoveg.MOD_BESZELHETO)
+        ]
+        return max(kodok)
 
     app = VasarloApp(db_path)
     # Nincs `mainloop()` — az ablakot el is rejtjük, hogy a végigjátszás
@@ -153,9 +175,15 @@ def vegigjatszas(db_path: str, robusztus: bool = False, csak_robusztus: bool = F
         app._close()
         return 1
 
+    # A kimeneti mód a felület KAPCSOLÓJÁN át áll be, nem egy külön
+    # ágon: így a végigjátszás pontosan azt méri, amit egy próbálgató
+    # kapna, aki átkattint a beszélhető módra.
+    app.kimeneti_mod.set(mod)
+
     print(f"Beosztás:  {app.idoszak}")
     print(f"Indító sor: {app.idoszak_cimke.cget('text')}")
     print(f"Értelmező: {type(app.orchestrator.ertelmezo).__name__}")
+    print(f"KIMENETI MÓD: {mod}")
     print(f'"most" a szöveges úton: {app._most_iso()}\n')
 
     kilepokod = 0
@@ -308,7 +336,12 @@ def _foglalasi_menet(app) -> None:
     if not mezok:
         print("    NINCS azonosító-mező a megerősítés után — a menet megáll.")
         return
-    print("    megerősítés: bekérte az azonosítót")
+    # A megerősítés MONDATA is látszódjon: beszélhető módban ez a
+    # visszaolvasás (blueprint 7.), és épp az a kérdés, hogy kimondja-e
+    # a választott időpontot.
+    for cimke in _widgetek(keret, "TLabel"):
+        if cimke.cget("text"):
+            print(f"    megerősítés: {cimke.cget('text')}")
 
     mezok[0].delete(0, "end")
     mezok[0].insert(0, "proba-azonosito-123")
@@ -337,8 +370,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="CSAK a robusztussági halmaz — a saját próbák és a foglalási menet kihagyva",
     )
+    parser.add_argument(
+        "--mod",
+        choices=["szoveges", "beszelheto", "mindketto"],
+        default="szoveges",
+        help=(
+            "kimeneti mód: szoveges (mai viselkedés), beszelheto (felolvasásra), "
+            "mindketto (ugyanaz kétszer, összevethetően)"
+        ),
+    )
     args = parser.parse_args(argv)
-    return vegigjatszas(args.db, robusztus=args.robusztus, csak_robusztus=args.csak_robusztus)
+    return vegigjatszas(
+        args.db,
+        robusztus=args.robusztus,
+        csak_robusztus=args.csak_robusztus,
+        mod=args.mod,
+    )
 
 
 if __name__ == "__main__":

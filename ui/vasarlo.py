@@ -18,6 +18,23 @@ az `assistant/valasz/` modulon át jön (M5: sablonok fájlban, nyelvkulcs
 alatt). A felület csak megjeleníti, amit kap; a jövőbeli hangréteg
 ugyanígy, ugyanezt a modult hívva, csak felolvasva.
 
+**KIMENETI MÓD-kapcsoló a szöveges fülön** (M6, hang-előkészítés): a
+`szoveges` a mai viselkedés, a `beszelheto` az, amit egy felolvasó
+kapna — egész mondatok, kimondott számokkal, fordulónként legfeljebb két
+mondattal és egy kérdéssel (`assistant/valasz/beszelheto.py`). A
+kapcsoló azért van itt, mert **hang nélkül is meg kell tudni nézni, mit
+fog hallani a vásárló**: a beszélhető mód szövegben kipróbálható, és
+ettől tesztelhető is. Két következménye van a felületre:
+
+- a rendszer mondatai fordulónként ÖSSZEGYŰJTVE mennek ki (egy
+  megszólalás, nem három sor) — `_rendszer_mondat` / `_rendszer_flush`;
+- a nyugtázó sor KIMARAD az összegyűjtésből, mert az a kétlépcsős
+  válasz ELSŐ lépcsője (blueprint 7.), külön megszólalás — nem foghatja
+  el a tartalmi válasz kétmondatos keretét.
+
+A koppintós út mód-kapcsoló nélkül marad: ott a képernyő maga a válasz
+(gombok, listák), hangon pedig nincs koppintás.
+
 **A vásárlóazonosító hash-elése is ideiglenes**: a végleges HMAC+pepper
 megoldás (CLAUDE.md 2. invariáns) még nincs megírva — amíg nincs, a
 `privacy/hash_ideiglenes.py` (sima SHA-256) helyettesíti. A nyers
@@ -301,6 +318,9 @@ class VasarloApp(tk.Tk):
         # értelmező (ADR-019). A felület vezeti, mert csak ő ismeri a
         # ténylegesen kimondott magyar mondatokat.
         self.szo_elozmenyek: list[tuple[str, str]] = []
+        # A forduló alatt gyűlő rendszer-mondatok (csak beszélhető
+        # módban telik meg) — l. modul docstring, "KIMENETI MÓD".
+        self._rendszer_puffer: list[str] = []
         self.orchestrator = Orchestrator(self.conn, alapertelmezett_ertelmezo(), org_id=self.org_id)
 
         # A beosztás időszaka — ehhez igazodik a nap-választó és a
@@ -462,34 +482,45 @@ class VasarloApp(tk.Tk):
                 ttk.Button(
                     keret,
                     text=_idopont_cimke(jelolt["kezdet"], jelolt["veg"]),
-                    command=lambda s=jelolt["slot_id"]: self._jelolt_valaszt(
-                        keret, s, uzenet_label
-                    ),
+                    # A TELJES jelölt megy tovább, nem csak az azonosító:
+                    # a megerősítés visszaolvasásához (blueprint 7.)
+                    # kell a kezdés időpontja is — hangon a „biztosan
+                    # lefoglaljam EZT?" mutató névmásának nincs mire
+                    # mutatnia.
+                    command=lambda j=jelolt: self._jelolt_valaszt(keret, j, uzenet_label),
                 ).pack(anchor="w", pady=2)
             return
 
         if not valasz.get("sikeres", True):
             kulcs = valasz.get("uzenet_kulcs", "")
-            uzenet_label.config(text=valasz_szoveg.hiba_szoveg(kulcs))
+            uzenet_label.config(text=valasz_szoveg.hiba_szoveg(kulcs, mod=self._mod()))
             return
 
         # Egyéb sikeres eszközválasz (bolt_info, foglalas_lemondas, ...)
-        ttk.Label(keret, text=valasz_szoveg.tenyvalasz_szoveg(valasz), wraplength=680).pack(
-            anchor="w"
-        )
+        ttk.Label(
+            keret,
+            text=valasz_szoveg.tenyvalasz_szoveg(valasz, mod=self._mod()),
+            wraplength=680,
+        ).pack(anchor="w")
 
-    def _jelolt_valaszt(self, keret: ttk.Frame, slot_id: str, uzenet_label: ttk.Label) -> None:
-        valasz = self.orchestrator.valaszt(self.session_id, slot_id)
+    def _jelolt_valaszt(self, keret: ttk.Frame, jelolt: dict, uzenet_label: ttk.Label) -> None:
+        valasz = self.orchestrator.valaszt(self.session_id, jelolt["slot_id"])
         if valasz.get("tipus") != "megerositest_ker":
             uzenet_label.config(
-                text=valasz_szoveg.hiba_szoveg(valasz.get("uzenet_kulcs", "ismeretlen_valasz"))
+                text=valasz_szoveg.hiba_szoveg(
+                    valasz.get("uzenet_kulcs", "ismeretlen_valasz"), mod=self._mod()
+                )
             )
             return
 
         for widget in keret.winfo_children():
             widget.destroy()
 
-        ttk.Label(keret, text=valasz_szoveg.megerosites_ker_szoveg()).pack(anchor="w")
+        ttk.Label(
+            keret,
+            text=valasz_szoveg.megerosites_ker_szoveg(jelolt.get("kezdet"), mod=self._mod()),
+            wraplength=680,
+        ).pack(anchor="w")
         ttk.Label(keret, text="Azonosító (számsor):").pack(anchor="w", pady=(6, 0))
         azonosito_valto = tk.StringVar()
         ttk.Entry(keret, textvariable=azonosito_valto, width=24).pack(anchor="w")
@@ -506,8 +537,11 @@ class VasarloApp(tk.Tk):
         )
 
     def _megerosit(self, keret: ttk.Frame, uzenet_label: ttk.Label, azonosito_bevitel: str) -> None:
+        mod = self._mod()
         if not azonosito_bevitel.strip():
-            uzenet_label.config(text=valasz_szoveg.hiba_szoveg("hianyzo_azonosito_bevitel"))
+            uzenet_label.config(
+                text=valasz_szoveg.hiba_szoveg("hianyzo_azonosito_bevitel", mod=mod)
+            )
             return
         kulcs_hash = ideiglenes_hash(azonosito_bevitel)
         valasz = self.orchestrator.megerosit(self.session_id, kulcs_hash)
@@ -516,18 +550,19 @@ class VasarloApp(tk.Tk):
         if valasz.get("tipus") == "visszaigazolas":
             ttk.Label(
                 keret,
-                text=valasz_szoveg.sikeres_foglalas_szoveg(valasz["foglalasi_kod"]),
+                text=valasz_szoveg.sikeres_foglalas_szoveg(valasz["foglalasi_kod"], mod=mod),
                 font=("TkDefaultFont", 11, "bold"),
+                wraplength=680,
             ).pack(anchor="w")
         else:
             kulcs = valasz.get("uzenet_kulcs", "")
-            uzenet_label.config(text=valasz_szoveg.hiba_szoveg(kulcs))
+            uzenet_label.config(text=valasz_szoveg.hiba_szoveg(kulcs, mod=mod))
 
     def _elvet(self, keret: ttk.Frame, uzenet_label: ttk.Label) -> None:
         self.orchestrator.elvet(self.session_id)
         for widget in keret.winfo_children():
             widget.destroy()
-        uzenet_label.config(text=valasz_szoveg.elvetve_szoveg())
+        uzenet_label.config(text=valasz_szoveg.elvetve_szoveg(mod=self._mod()))
 
     # ------------------------------------------------------------------
     # Szöveges út
@@ -535,6 +570,22 @@ class VasarloApp(tk.Tk):
 
     def _szoveges_build(self) -> None:
         tab = self.szoveges_tab
+
+        # KIMENETI MÓD-kapcsoló (M6). A címke és a két felirat itt
+        # KIVÉTELESEN a felületen van: ez nem a vásárlónak szóló mondat,
+        # hanem a próbálgató kapcsolója — ugyanabból a megfontolásból,
+        # amiért a "Napló megnyitása" gomb felirata sem sablonból jön.
+        mod_sor = ttk.Frame(tab, padding=(0, 0, 0, 6))
+        mod_sor.pack(fill="x")
+        ttk.Label(mod_sor, text="Kimenet:").pack(side="left", padx=(0, 6))
+        self.kimeneti_mod = tk.StringVar(value=valasz_szoveg.MOD_SZOVEGES)
+        for ertek, felirat in (
+            (valasz_szoveg.MOD_SZOVEGES, "szöveges"),
+            (valasz_szoveg.MOD_BESZELHETO, "beszélhető (felolvasásra)"),
+        ):
+            ttk.Radiobutton(mod_sor, text=felirat, variable=self.kimeneti_mod, value=ertek).pack(
+                side="left"
+            )
 
         self.szo_naplo = tk.Text(tab, height=18, wrap="word", state="disabled")
         self.szo_naplo.pack(fill="both", expand=True)
@@ -585,6 +636,9 @@ class VasarloApp(tk.Tk):
         próba."""
         self.session_id = new_uuid()
         self.szo_elozmenyek.clear()
+        # A félbemaradt beszélhető puffer sem csordulhat át az új
+        # beszélgetésbe.
+        self._rendszer_puffer.clear()
         for keret in (self.szo_gombsor, self.szo_jelolt_keret):
             for widget in keret.winfo_children():
                 widget.destroy()
@@ -625,11 +679,11 @@ class VasarloApp(tk.Tk):
         megfogalmaznia a kérést (blueprint 1. szakasz, 5. igény: "ha
         nincs hely, alternatíva jöjjön"). A mondatot és a gombfeliratot
         az `assistant/valasz/` adja, ez a modul nem fogalmaz."""
-        szovegek = valasz_szoveg.alternativa_szoveg(dimenzio)
+        szovegek = valasz_szoveg.alternativa_szoveg(dimenzio, mod=self._mod())
         if szovegek is None:
             return
         bevezetes, gomb_felirat = szovegek
-        self._naplo_ir("Rendszer", bevezetes)
+        self._rendszer_mondat(bevezetes)
         ttk.Button(
             self.szo_gombsor,
             text=gomb_felirat,
@@ -641,6 +695,39 @@ class VasarloApp(tk.Tk):
             widget.destroy()
         valasz = self.orchestrator.alternativa_kereses(self.session_id, dimenzio)
         self._szoveges_valasz_kezel(valasz)
+
+    def _mod(self) -> str:
+        """Az aktuális kimeneti mód. Külön metódus, mert a felület
+        felépítése előtt (üres adatbázis) a kapcsoló még nem létezik, és
+        a végigjátszás is állíthatja kívülről."""
+        valto = getattr(self, "kimeneti_mod", None)
+        return valto.get() if valto is not None else valasz_szoveg.MOD_SZOVEGES
+
+    def _rendszer_mondat(self, szoveg: str, *, kulon_megszolalas: bool = False) -> None:
+        """A rendszer egy mondata a szöveges úton.
+
+        Szöveges módban azonnal kiíródik (mai viselkedés). Beszélhető
+        módban PUFFERBE kerül, és a forduló végén megy ki egyben — így
+        érvényesíthető a fordulónkénti két mondat és egy kérdés
+        (`assistant/valasz/beszelheto.py`).
+
+        `kulon_megszolalas=True` a nyugtázó soré: az a kétlépcsős válasz
+        első lépcsője (blueprint 7.), tehát önálló megszólalás — nem
+        foghatja el a tartalmi válasz kétmondatos keretét."""
+        if self._mod() == valasz_szoveg.MOD_SZOVEGES or kulon_megszolalas:
+            self._naplo_ir("Rendszer", szoveg)
+            return
+        self._rendszer_puffer.append(szoveg)
+
+    def _rendszer_flush(self) -> None:
+        """A forduló összegyűjtött rendszer-mondatai egy megszólalásként.
+        Szöveges módban nincs mit tenni (a puffer üres marad)."""
+        if not self._rendszer_puffer:
+            return
+        reszek, self._rendszer_puffer = self._rendszer_puffer, []
+        szoveg = valasz_szoveg.fordulo_szoveg(reszek, self._mod())
+        if szoveg:
+            self._naplo_ir("Rendszer", szoveg)
 
     def _naplo_ir(self, ki_be: str, szoveg: str) -> None:
         self.szo_naplo.config(state="normal")
@@ -682,7 +769,7 @@ class VasarloApp(tk.Tk):
                 widget.destroy()
         self.szo_uzenet.config(text="")
 
-        self.szo_allapot.config(text=valasz_szoveg.nyugtazo_szoveg({}))
+        self.szo_allapot.config(text=valasz_szoveg.nyugtazo_szoveg({}, mod=self._mod()))
         self.update_idletasks()
 
         # A válaszidő a TELJES fordulót méri (értelmezés + eszközhívás),
@@ -707,10 +794,23 @@ class VasarloApp(tk.Tk):
         self._szoveges_valasz_kezel(valasz)
 
     def _szoveges_valasz_kezel(self, valasz: dict) -> None:
+        """A forduló válaszát mondatokká alakítja és kiírja.
+
+        **A metódus MINDIG flush-sal zárul** (`try/finally`): a
+        beszélhető mód pufferében maradt mondat különben a következő
+        forduló elejére csúszna át, és a vásárló egy már megválaszolt
+        kérdésre kapna feleletet."""
+        try:
+            self._szoveges_valasz_mondatok(valasz)
+        finally:
+            self._rendszer_flush()
+
+    def _szoveges_valasz_mondatok(self, valasz: dict) -> None:
         tipus = valasz.get("tipus")
+        mod = self._mod()
 
         if tipus == "elutasitas":
-            self._naplo_ir("Rendszer", valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"]))
+            self._rendszer_mondat(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
             return
 
         if tipus == "kiut":
@@ -719,10 +819,12 @@ class VasarloApp(tk.Tk):
             # A frusztráció-figyelő MÁSODIK kiútja embert ajánl, nem
             # újabb szűkítést — ott nincs gomb, csak a mondat.
             if valasz.get("emberhez"):
-                self._naplo_ir("Rendszer", valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"]))
+                self._rendszer_mondat(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
                 return
-            bevezetes, gombok = valasz_szoveg.kiut_szoveg(valasz.get("valaszthato_dimenziok", []))
-            self._naplo_ir("Rendszer", bevezetes)
+            bevezetes, gombok = valasz_szoveg.kiut_szoveg(
+                valasz.get("valaszthato_dimenziok", []), mod=mod
+            )
+            self._rendszer_mondat(bevezetes)
             for dimenzio, felirat in gombok:
                 ttk.Button(
                     self.szo_gombsor,
@@ -733,7 +835,7 @@ class VasarloApp(tk.Tk):
 
         if tipus == "visszakerdezes":
             hianyzo = valasz.get("hianyzo_mezo")
-            self._naplo_ir("Rendszer", valasz_szoveg.visszakerdezes_szoveg(hianyzo))
+            self._rendszer_mondat(valasz_szoveg.visszakerdezes_szoveg(hianyzo, mod=mod))
             valasztek = valasz.get("valaszthato_ertekek") or []
             if valasz.get("kerdes_tipusa") == "zart" and valasztek:
                 for ertek in valasztek:
@@ -749,31 +851,39 @@ class VasarloApp(tk.Tk):
             # A nyugtázó sor — a hangcsatorna töltelékmondatának szöveges
             # próbája (docs/blueprint.md 7. szakasz) — külön naplósorban,
             # MIELŐTT a tényleges (tartalmi) eredmény megjelenik.
-            self._naplo_ir(
-                "Rendszer", valasz_szoveg.nyugtazo_szoveg(valasz.get("felismert_ablak", {}))
+            self._rendszer_mondat(
+                valasz_szoveg.nyugtazo_szoveg(valasz.get("felismert_ablak", {}), mod=mod),
+                kulon_megszolalas=True,
             )
-            self._naplo_ir(
-                "Rendszer",
-                valasz_szoveg.ajanlat_bevezetes_legkozelebbi_szoveg()
-                if valasz.get("legkozelebbi")
-                else valasz_szoveg.ajanlat_bevezetes_szoveg(),
+            # Beszélhető módban a jelölteket maga a MONDAT hordozza (a
+            # legkorábbi + egy alternatíva), mert hangon nincs gomb;
+            # szöveges módban a mondat csak bevezeti a gombokat.
+            self._rendszer_mondat(
+                valasz_szoveg.ajanlat_mondat(
+                    valasz.get("jeloltek") or [],
+                    legkozelebbi=bool(valasz.get("legkozelebbi")),
+                    mod=mod,
+                )
             )
             self._eredmeny_render(self.szo_jelolt_keret, valasz, self.szo_uzenet)
             return
 
         if tipus == "eszkoz_hiba" or not valasz.get("sikeres", True):
             if valasz.get("felismert_ablak"):
-                self._naplo_ir("Rendszer", valasz_szoveg.nyugtazo_szoveg(valasz["felismert_ablak"]))
+                self._rendszer_mondat(
+                    valasz_szoveg.nyugtazo_szoveg(valasz["felismert_ablak"], mod=mod),
+                    kulon_megszolalas=True,
+                )
             kulcs = valasz.get("uzenet_kulcs", "")
-            self._naplo_ir("Rendszer", valasz_szoveg.hiba_szoveg(kulcs))
+            self._rendszer_mondat(valasz_szoveg.hiba_szoveg(kulcs, mod=mod))
             self._alternativa_felajanl(valasz.get("alternativ_dimenzio"))
             return
 
         if valasz.get("sikeres"):
-            self._naplo_ir("Rendszer", valasz_szoveg.tenyvalasz_szoveg(valasz))
+            self._rendszer_mondat(valasz_szoveg.tenyvalasz_szoveg(valasz, mod=mod))
             return
 
-        self._naplo_ir("Rendszer", valasz_szoveg.hiba_szoveg("ismeretlen_valasz"))
+        self._rendszer_mondat(valasz_szoveg.hiba_szoveg("ismeretlen_valasz", mod=mod))
 
     # ------------------------------------------------------------------
 

@@ -234,3 +234,68 @@ def test_elozmeny_a_legutobbi_sorokra_vagodik():
 
     assert len(gazda.szo_elozmenyek) == vasarlo_modul._ELOZMENY_SOROK
     assert gazda.szo_elozmenyek[-1] == ("vasarlo", "29")
+
+
+# --- kimeneti mód: a rendszer-mondatok pufferelése (M6) --------------
+
+
+class _ModGazda:
+    """A `VasarloApp` mód-kezelő metódusai Tkinter nélkül — ugyanaz a
+    minta, mint az `_ElozmenyGazda`-nál: a metódusokat az osztályról
+    kölcsönözzük, a widgeteket nem építjük fel."""
+
+    _mod = vasarlo_modul.VasarloApp._mod
+    _rendszer_mondat = vasarlo_modul.VasarloApp._rendszer_mondat
+    _rendszer_flush = vasarlo_modul.VasarloApp._rendszer_flush
+
+    def __init__(self, mod: str):
+        self._beallitott_mod = mod
+        self._rendszer_puffer: list[str] = []
+        self.kiirt: list[str] = []
+        # A `_mod()` a `kimeneti_mod` Tkinter-változót olvassa — itt egy
+        # ugyanolyan `get()`-tel rendelkező kis objektum áll a helyén.
+        self.kimeneti_mod = type("Valto", (), {"get": lambda _s: mod})()
+
+    def _naplo_ir(self, _ki_be: str, szoveg: str) -> None:
+        self.kiirt.append(szoveg)
+
+
+def test_szoveges_modban_minden_mondat_azonnal_kimegy():
+    """Regressziós védőháló: a szöveges út viselkedése nem változott —
+    három rendszer-mondat három sor."""
+    gazda = _ModGazda(vasarlo_modul.valasz_szoveg.MOD_SZOVEGES)
+    gazda._rendszer_mondat("Egy pillanat.", kulon_megszolalas=True)
+    gazda._rendszer_mondat("Találtam időpontot.")
+    gazda._rendszer_mondat("Melyik jó?")
+    gazda._rendszer_flush()
+
+    assert gazda.kiirt == ["Egy pillanat.", "Találtam időpontot.", "Melyik jó?"]
+
+
+def test_beszelheto_modban_egy_fordulo_egy_megszolalas():
+    """A tartalmi mondatok EGY megszólalássá állnak össze, a nyugtázó
+    viszont külön marad — az a kétlépcsős válasz első lépcsője
+    (blueprint 7.)."""
+    gazda = _ModGazda(vasarlo_modul.valasz_szoveg.MOD_BESZELHETO)
+    gazda._rendszer_mondat("Egy pillanat, nézem.", kulon_megszolalas=True)
+    gazda._rendszer_mondat("Nincs szabad időpont.")
+    gazda._rendszer_mondat("A héten másik napon van. Megnézzem?")
+    gazda._rendszer_flush()
+
+    assert gazda.kiirt == [
+        "Egy pillanat, nézem.",
+        "A héten másik napon van. Megnézzem?",
+    ]
+
+
+def test_beszelheto_puffer_nem_csordul_at_a_kovetkezo_fordulora():
+    """Flush nélkül a bennmaradt mondat a KÖVETKEZŐ forduló elejére
+    csúszna, és a vásárló egy már megválaszolt kérdésre kapna feleletet
+    — ezért zárul a válaszkezelés `finally`-vel."""
+    gazda = _ModGazda(vasarlo_modul.valasz_szoveg.MOD_BESZELHETO)
+    gazda._rendszer_mondat("Melyik boltba szeretnél menni?")
+    gazda._rendszer_flush()
+    gazda._rendszer_flush()
+
+    assert gazda.kiirt == ["Melyik boltba szeretnél menni?"]
+    assert gazda._rendszer_puffer == []
