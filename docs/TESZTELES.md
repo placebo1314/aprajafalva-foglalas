@@ -8,15 +8,15 @@ a projekt egészéhez `docs/ALLAPOT.md`.
 
 | Parancs | Mit futtat | Kb. mennyi ideig tart | Ha elbukik |
 |---|---|---|---|
-| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `640 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
+| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `758 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
 | `python feladat.py teszt-mindketto` | Ugyanaz a tesztkészlet, előbb `sqlite`, utána `postgres` "motorral". | ~26 másodperc | **Figyelem:** a `postgres` ág ma ténylegesen ugyanazt a SQLite-ot futtatja újra (nincs Postgres-adapter, ADR-004) — ez a parancs ma nem bizonyít semmit Postgresen, csak kétszer futtatja le ugyanazt. |
 | `python feladat.py lint` | `ruff format --check .`, utána `ruff check .`. | néhány másodperc | Kiírja a formázási/lint hibás fájlokat és sorokat. `ruff format .` (a `--check` nélküli) automatikusan javítja a formázást; a `ruff check .` hibáit kézzel kell megnézni. |
-| `python feladat.py golden` | A NYELVI golden set (`tests/golden/nyelvi_alap.yaml`, 45 eset) kiértékelése a **determinisztikus** értelmezővel — nem indít Ollamát. Rétegenkénti bontást ír. | néhány másodperc | Kilépőkód 1, ha egy réteg a küszöbe alatt van; a kimenet megnevezi, melyik. Ma három réteg van küszöb alatt (`elengedes`, `valtozatossag`, `mintan_tul`) — ezek `igenyel_llm` esetek, a determinisztikus úton szándékosan buknak, nem hiba. |
+| `python feladat.py golden` | A NYELVI golden set (`tests/golden/nyelvi_alap.yaml`, 45 eset) kiértékelése a **determinisztikus** értelmezővel — nem indít Ollamát. Rétegenkénti bontást ír. | néhány másodperc | Kilépőkód 1, ha egy réteg a küszöbe alatt van; a kimenet megnevezi, melyik. Ma három réteg van küszöb alatt (`elengedes`, `valtozatossag`, `mintan_tul`) — ezek `igenyel_llm` esetek, a determinisztikus úton szándékosan buknak, nem hiba. A `--halmaz robusztus` ágon ehhez jön még egy determinisztikus őrszem a tesztkészletben is (`tests/egyseg/test_robusztus_halmaz.py`): a négy biztonsági szám minden `python feladat.py teszt` futásnál ellenőrződik. |
 | `python feladat.py golden --ertelmezo forditott --modell qwen3.5:9b` | Ugyanaz az **éles** értelmezővel (ADR-018: fordított kaszkád). Ollamát hív. `llm` és `kaszkad` értékkel a másik két felállás mérhető. | ~7-10 perc | Ha az Ollama nem fut, a mérés végigmegy, de minden fordulót a szabály-alapú tartalék old meg — a "Réteg-megoszlás" sorban `szabaly=45` látszik. Ez a jele. |
-| `python feladat.py golden --halmaz robusztus` | A **robusztussági halmaz** (`tests/golden/robusztus.yaml`, 44 eset): mi történik, amikor NEM az történik, amire számítunk — üres bemenet, zaj, idegen nyelv, ellentmondás, hatókörön kívüli kérés, prompt injection, érzelem, abszurd kérés, kéretlen személyes adat. | néhány másodperc (determinisztikus) / ~4 perc (`--ertelmezo forditott`) | **A pontosság itt másodlagos.** A kilépőkód a NÉGY biztonsági számtól függ (kivétel / hatókörön kívüli válasz / kitalált tény / instabil ismétlés), mind 0-s kemény küszöbbel — a jelentés kiírja, melyik eset sértett és miért. |
-| `python feladat.py vegigjatszas` | A vásárlói felület szöveges útját játssza végig Tkinter-eseményhurok nélkül, 13 beszélgetéssel + a teljes foglalási menettel (`tools/vegigjatszas.py`). | ~1-3 perc | Traceback, vagy egy olyan forduló, ahol az `eszköz` sor `None`. A `naplo/probak.jsonl` közben ugyanúgy telik, mint kézi próbánál. |
-| `python feladat.py vegigjatszas --robusztus` | Ugyanaz, **plusz a teljes robusztussági halmaz (44 eset) a VALÓDI felületen**. Ez mást mér, mint a `golden --halmaz robusztus`: az az értelmezőt (mondat → eszközhívás), ez a teljes utat — orchestrator, ismétlésfigyelés, frusztráció-kiút, magyar mondatgenerálás, próba-napló. | ~5-8 perc | **Kilépőkód 1, ha bármelyik eset KIVÉTELT okozott** — ez a robusztussági elfogadási elv legkeményebb fele. Az összegzés kiírja, melyik eset és milyen kivétel. |
-| `python feladat.py naplo` | A próba-napló (`naplo/probak.jsonl`) összesítése (`tools/naplo_elemzo.py`): fordulószám, réteg-megoszlás, átlag és p95 válaszidő, bizonyosság-eloszlás, leggyakoribb hibaminták. | azonnal | Nem "bukik" — ez egy jelentés, nem teszt. Ha üres a napló, ezt kiírja, és javasolja a végigjátszást. A `--golden <sor>` egy naplósorból golden teszteset-vázat ír, a `varhato` mezőt ÜRESEN. |
+| `python feladat.py golden --halmaz robusztus` | A **robusztussági halmaz** (`tests/golden/robusztus.yaml`, 63 eset): mi történik, amikor NEM az történik, amire számítunk — üres bemenet, zaj, idegen nyelv, ellentmondás, hatókörön kívüli kérés, prompt injection, érzelem, abszurd kérés, kéretlen személyes adat, és **ASR-hibák** (félrehallott szám és név, egybefolyt szavak, csonka szóvég, ékezet nélküli alak, hallucinált zárómondat) — ez utóbbi külön bontásban is megjelenik a jelentésben. | néhány másodperc (determinisztikus) / ~4 perc (`--ertelmezo forditott`) | **A pontosság itt másodlagos.** A kilépőkód a NÉGY biztonsági számtól függ (kivétel / hatókörön kívüli válasz / kitalált tény / instabil ismétlés), mind 0-s kemény küszöbbel — a jelentés kiírja, melyik eset sértett és miért. |
+| `python feladat.py vegigjatszas` | A vásárlói felület szöveges útját játssza végig Tkinter-eseményhurok nélkül, 14 beszélgetéssel + a teljes foglalási menettel (`tools/vegigjatszas.py`), a `--mod` kapcsolóval mindkét kimeneti módban. | ~1-3 perc | Traceback, vagy egy olyan forduló, ahol az `eszköz` sor `None`. A `naplo/probak.jsonl` közben ugyanúgy telik, mint kézi próbánál. |
+| `python feladat.py vegigjatszas --robusztus` | Ugyanaz, **plusz a teljes robusztussági halmaz (63 eset) a VALÓDI felületen**. Ez mást mér, mint a `golden --halmaz robusztus`: az az értelmezőt (mondat → eszközhívás), ez a teljes utat — orchestrator, ismétlésfigyelés, frusztráció-kiút, magyar mondatgenerálás, próba-napló. | ~5-8 perc | **Kilépőkód 1, ha bármelyik eset KIVÉTELT okozott** — ez a robusztussági elfogadási elv legkeményebb fele. Az összegzés kiírja, melyik eset és milyen kivétel. |
+| `python feladat.py naplo` | A próba-napló (`naplo/probak.jsonl`) összesítése (`tools/naplo_elemzo.py`): fordulószám, réteg-megoszlás, **válaszidő-eloszlás** (p50/p95/átlag/max) a kétpontos elváráshoz mérve (ADR-022: p50 < 10 s, p95 < 25 s) plusz a **tendencia**, bizonyosság-eloszlás, leggyakoribb hibaminták. | azonnal | Nem "bukik" — ez egy jelentés, nem teszt. Ha üres a napló, ezt kiírja, és javasolja a végigjátszást. A `--golden <sor>` egy naplósorból golden teszteset-vázat ír, a `varhato` mezőt ÜRESEN. |
 
 ## Kézi próbák sorban
 
@@ -243,7 +243,7 @@ felület ezeket a demóhéthez képest oldja fel. Amit tudni érdemes:
 műszakot. Szundi/Ügyifogyi keresésre a "Sajnos nincs szabad időpont"
 válasz helyes, nem hiba.
 
-#### A tíz próba
+#### A tizenhárom próba
 
 **Mindegyik próba előtt nyomj "Új beszélgetés"-t** (a szöveges fül
 alján). A rendszer a **beszélgetés utolsó fordulóit** adja át az
@@ -256,7 +256,7 @@ nyomd meg.
 |---|---|---|---|
 | 1 | `Törpillához mennék holnap` | Nyugtázó sor a felismert ablakkal, majd időpontok gombként. | Visszakérdezés a boltra (a mondat kimondta), vagy üres találat. |
 | 2 | `szeretnék menni valamikor` | Zárt kérdés + **három bolt-gomb**. Kattints a Törpillára → nyugtázó sor, majd időpontok. | Kitalált bolt vagy kitalált dátum: a helyes válasz itt a kérdés, nem a találgatás. |
-| 3 | `Mennyibe kerül a nagy petárda?` | "Ez a kérdés nem foglalással kapcsolatos…" — **de modellel ma gyakran visszakérdez a boltra helyette** (ismert gyengeség, ADR-018, kapuőr 50%). | **Bármilyen ár** a válaszban. Az fordulna elő valódi hibaként; a felesleges visszakérdezés ma dokumentált korlát. |
+| 3 | `Mennyibe kerül a nagy petárda?` | Az ár-elhárítás, **modellhívás nélkül** (a kapuőr determinisztikus, ADR-020): „Az árakról itt nem tudok tájékoztatást adni…". A válasz tizedmásodpercen belül jön. | **Bármilyen ár** a válaszban. A korábbi „feleslegesen visszakérdez" viselkedés az ADR-020 óta nem fordul elő a mérésen. |
 | 4 | `Hogy néz ki a Törpilla bolt?` | A szerkesztett megjelenés-szöveg (`seed/betolt.py`, vagy amit adminban átírtál). | Kitalált leírás — ezt a mezőt a modell sosem generálja. |
 | 5 | `Meddig van nyitva a Szundi szombaton?` | Nyitvatartás-mondat. | Foglalási ág, vagy találgatott nyitvatartás. |
 | 6 | Előbb `Törpillához mennék`, aztán **külön fordulóban** `inkább délután` | A második fordulóban a boltot **nem** kérdezi újra — délutáni időpontok jönnek. | Újra rákérdez a boltra: a szándék kemény része elveszett. |
@@ -265,7 +265,7 @@ nyomd meg.
 | 9 | Írd be háromszor egymás után ugyanazt a semmitmondó mondatot (`mennék`) | A harmadikra **más mondat**, és koppintható kiút-gombok (Másik bolt / Másik hét / Másik napszak). | Harmadszor is ugyanaz a válasz. |
 | 10 | Egy időpont-gomb → azonosítónak írj bármit → "Igen, foglalom" | "Foglalás létrejött! Foglalási kód: XXXXXXXX" | Hibaüzenet, vagy nincs kód. |
 | 11 | `Mikor tudok legkorábban menni a Törpillához?` | "A legkorábbi szabad időpont:" + **egyetlen** gomb. | Három jelölt (az a `szabad_idopontok` válasza — gyengébb, de nem hibás), vagy visszakérdezés. |
-| 12 | Írd be egymás után négyszer, hogy `nem értem, mit kell csinálni` | A rendszer **kiutat** ajánl (Másik bolt / Másik hét / Másik napszak), majd ha ez sem segít, **emberhez irányít** ("a boltban élőben is fel tudnak venni időpontot"). | Negyedszer is ugyanaz a visszakérdezés — a frusztráció-figyelő nem szólalt meg. |
+| 12 | Írd be egymás után négyszer, hogy `nem értem, mit kell csinálni` | A **második** fordulóra kiút (Másik bolt / Másik hét / Másik napszak), a **harmadikra emberhez irányítás** ("a boltban élőben is fel tudnak venni időpontot"). | Harmadszor is ugyanaz a kiút-mondat. **Ez 2026-08-26-ig így is volt** — a fej nélküli végigjátszás találta meg, hogy az ismétlésfigyelő kiútja elnyelte a frusztráció-jelet (`docs/ALLAPOT.md`, D szakasz). A próba azóta a végigjátszásban is benne van. |
 | 13 | Kapcsold a **Kimenet** választót `beszélhető`-re, és ismételd meg az 1., 2. és 10. próbát | Egész mondatok, **kimondott számokkal**: „A legkorábbi december huszonkettedikén nyolc órakor, de van kilenc harminckor is. Melyik jó?" — fordulónként legfeljebb két mondat és **egy** kérdés, a foglalási kód betűzve. | **Bármilyen számjegy, kötőjel, zárójel vagy felsorolásjel** a rendszer mondatában. Ezek a felolvasót viszik félre — a `tests/egyseg/test_beszelheto.py` ugyanezt méri gépileg. |
 
 #### Beszélhető mód: mit néz az ember, amit a teszt nem lát
@@ -337,13 +337,18 @@ lényege — épp azt ellenőrzi, hogy a felület elvezet-e a kódig).
 fájlt: `python feladat.py vegigjatszas --db proba.db` (előtte
 `python -m core.api.cli seed proba.db`).
 
-Ez a parancs eddig **hat hibát** talált, amit sem az egységtesztek, sem
-a golden set nem fogott meg — mind felületi vagy réteghatár-hiba volt
-(elavult időpont-gombok a képernyőn, a „ma" horgonya a bolt zárása
-utánra esett, a bolt-gomb megnyomása végtelen visszakérdezésbe futott, a
-modell árat olvastatott fel egy megjelenés-kérdésre, majd a címet, és
-nem volt mód friss beszélgetést kezdeni). Érdemes minden felületi
-változtatás után lefuttatni.
+Ez a parancs eddig **kilenc hibát** talált, amit sem az egységtesztek,
+sem a golden set nem fogott meg — az első hat felületi vagy
+réteghatár-hiba volt (elavult időpont-gombok a képernyőn, a „ma"
+horgonya a bolt zárása utánra esett, a bolt-gomb megnyomása végtelen
+visszakérdezésbe futott, a modell árat olvastatott fel egy
+megjelenés-kérdésre, majd a címet, és nem volt mód friss beszélgetést
+kezdeni). A 2026-08-26-i kör hármat tett hozzá: két beszélhető-módú
+megfogalmazási hibát, és **egy valódi, vásárlót érintő hibát** — az
+emberhez irányítás a leggyakoribb elakadásban (ugyanaz a panasz
+négyszer) sosem szólalt meg, mert az ismétlésfigyelő kiútja elnyelte a
+frusztráció-jelet (`docs/ALLAPOT.md`, D szakasz). Érdemes minden
+felületi változtatás után lefuttatni.
 
 ### Mentés és helyreállítás
 
