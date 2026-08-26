@@ -48,7 +48,7 @@ költöztek.
 
 - **Tesztek:** 755 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`). A kör 115 új tesztet hozott, két új fájlban: **`test_beszelheto.py`** (a beszélhető mód — benne a TELJES sablonkészletre futó formai vizsgálat: számjegy, kötőjel, zárójel, felsorolásjel, két mondat, egy kérdés) és **`test_robusztus_halmaz.py`** (a robusztussági halmaz determinisztikus védőhálója — a négy biztonsági szám mostantól TESZT, nem csak kézi mérés; plusz a két javított mérési hiba rögzítése).
 - **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent).
-- **ADR-ek:** 21 dokumentum (001–014, 016–022) + 1 sablon. Ebből **20
+- **ADR-ek:** 22 dokumentum (001–014, 016–023) + 1 sablon. Ebből **21
   elfogadott**, **1 felülírva**: az ADR-016 (kaszkád sorrendje) —
   felülírta az **ADR-018**, amelynek első, elvető változata 2026-08-22-én
   született, és 2026-08-23-án ÁTFORDULT. Az **ADR-019** az ADR-018-at
@@ -61,7 +61,10 @@ költöztek.
   mérés szerint nem javít. Az **ADR-022** a válaszidő-elvárást teszi
   ELOSZLÁSSÁ (p50 < 10 s, p95 < 25 s, tendencia figyelve) — az átlag
   ugyanis két különböző hibát mos össze: az egyenletesen lassú
-  rendszert és a néha patológiásan kilógót.
+  rendszert és a néha patológiásan kilógót. Az **ADR-023** a
+  beszélhető kimenetet rögzíti — és azt, hogy VESZTESÉGES: ami a két
+  mondatba nem fér bele, az eldobódik, mert amit a hang nem bír el, azt
+  nem mondjuk ki, nem pedig gyorsabban mondjuk el.
   **A 015 szándékosan kimaradt**: ellenőrizve, git-történetben és a
   repóban sosem létezett, a szám emiatt véglegesen kimarad, l. ADR-016
   fejléce és az `adr` skill.
@@ -245,11 +248,13 @@ mondatgenerálás, próba-napló.
 | eset | 63 (+14 beszélgetés + foglalási menet) | ugyanaz |
 | **kivétel** | **0** | **0** |
 | néma forduló | 2 (`ures-01`, `ures-02`: a felület üres bemenetet el sem küld) | 2 |
-| leglassabb forduló | 5,72 s (`tobbszandek-03-ket-bolt`) | 5,44 s (ugyanaz) |
+| leglassabb forduló | 5,55 s (`tobbszandek-03-ket-bolt`) | 5,26 s (ugyanaz) |
 | a foglalási menet | végigment a kódig | végigment a kódig |
 
-**A KÉT MÓD UGYANAZT A DÖNTÉST HOZZA.** A 92-92 fordulót eszközhívásra
-és paraméterekre összevetve **egyetlen** eltérés volt — az
+**A KÉT MÓD UGYANAZT A DÖNTÉST HOZZA.** A válasz-típusok eloszlása a
+két módban **karakterre azonos** (ajánlat 25, elutasítás 15,
+visszakérdezés 11, eszközhiba 11, kiút 1), és a 96-96 fordulót
+eszközhívásra és paraméterekre összevetve **egyetlen** eltérés volt — az
 `ellentmondas-01-nap` eseten („Mindenképp holnap kell a Törpillához, de
 inkább jövő héten"), ahol a modell a két dátum között ingadozik. Ez
 dokumentált korlát (`docs/ALTALANOSITAS.md` 2.3), nem a mód
@@ -257,7 +262,7 @@ következménye: a kimeneti mód a VÁLASZ oldalán van, az értelmezéshez
 nem nyúl.
 
 **A beszélhető kimenet formai ellenőrzése a TELJES végigjátszáson** — a
-141 rendszer-mondatból:
+145 rendszer-mondatból:
 
 | Vizsgálat | Sértés |
 |---|---|
@@ -269,24 +274,26 @@ Néhány valódi sor, ahogy a képernyőn megjelent:
 
 > *„A legkorábbi december huszonegyedikén hét húszkor, de van nyolc
 > órakor is. Melyik jó?"*
-> *„December huszonkettedikén nyolc órakor foglalnám le. Rendben?"*
-> *„Megvan a foglalás. A kódod jé el vé el á em ká négy."*
+> *„December huszonkettedikén hét órakor foglalnám le. Rendben?"*
+> *„Megvan a foglalás. A kódod kettő bé ká es négy három öt pé."*
 > *„Egy pillanat, körülnézek az Ügyifogyi boltban, december
 > huszonegyedikén és december huszonnyolcadikán között…"*
+> *„Úgy látom, ez így nem vezet sehova. A boltban élőben is fel tudnak
+> venni időpontot."*
 
-**A teljes napló számai** (`python feladat.py naplo`, 184 forduló, a
+**A teljes napló számai** (`python feladat.py naplo`, 192 forduló, a
 két mód együtt):
 
 | | |
 |---|---|
-| réteg-megoszlás | `llm` 82,6%, **`kapuor` 15,2%**, `szabaly:*` 2,2% |
-| válaszidő | **p50 4,57 s, p95 5,03 s, átlag 3,81 s, max 5,67 s** |
+| réteg-megoszlás | `llm` 83,3%, **`kapuor` 14,6%**, `szabaly:*` 2,0% |
+| válaszidő | **p50 4,54 s, p95 5,01 s, átlag 3,82 s, max 5,52 s** |
 | a p95-elvárás (25 s) felett | **0 forduló** |
-| tendencia | **stabil** (első fél p50 4,67 s → második fél 4,47 s, −4%) |
-| `csendes_tartalek` riasztás | **0** (a múltkori 37 egy Ollama nélküli futásból jött) |
+| tendencia | **stabil** (első fél p50 4,63 s → második fél 4,48 s, −3%) |
+| `csendes_tartalek` riasztás | **0** (a múltkori 37 egy Ollama NÉLKÜLI futásból jött — a detektor tehát jól jelzett) |
 
 **A válaszidőről őszintén:** a 2026-08-23-i mérés ugyanezekre a
-mondatokra 15,18 s-os csúcsot mutatott, ez a futás 5,67 s-ot. A
+mondatokra 15,18 s-os csúcsot mutatott, ez a futás 5,52 s-ot. A
 különbség nem a kód — az Ollama futásonkénti szórása. **Ezért lett az
 elvárás eloszlás + tendencia** (ADR-022): egyetlen futás egyetlen
 száma nem állítás, csak adat.
@@ -301,7 +308,7 @@ száma nem állítás, csak adat.
   gombokkal, beszélhető módban egyetlen mondatba építve (*„Úgy látom,
   itt körben járunk. Próbáljunk másik boltot, másik hetet vagy másik
   napszakot?"*);
-- **a redaktálás élesben is működik**: a 184 fordulós naplóban nulla
+- **a redaktálás élesben is működik**: a 192 fordulós naplóban nulla
   nyers telefonszám, TAJ és e-mail — csak a `<TELEFON>` (4),
   `<AZONOSITO>` (8), `<EMAIL>` (4) és `<NEV>` (4) címkék.
 
@@ -339,6 +346,11 @@ valódi, vásárlót érintő:
    tudjuk meg, hogy baj van); a másodikhoz az, hogy a felajánlott kiút
    UTÁN a vásárló még mindig kimondja, hogy elakadt.
 
+   **A javítás után** ugyanaz a négy panaszos forduló így fut: második
+   fordulóra kiút, **harmadikra ember** (*„Úgy látom, ez így nem vezet
+   sehova. A boltban élőben is fel tudnak venni időpontot."*). A fenti
+   táblázat számai már a javítás UTÁNI futásból valók.
+
 ## Mi hiányzik az M1 lezárásához (konkrétan)
 
 Az M1 kilépési feltétele: egy hónapnyi beosztás felvitele **percekben**
@@ -373,7 +385,7 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
    **RÉSZBEN MEGVÁLASZOLVA** (2026-08-23): a blueprint 12. szakasza egy
    15 másodperces ÁTLAGOS keretet kapott; 2026-08-26-tól ez KÉTPONTOS
    ELOSZLÁS (ADR-022: p50 < 10 s, p95 < 25 s), ami ma tartja magát
-   (4,57 s / 5,03 s a valódi felületen, 184 fordulón). A többi
+   (4,54 s / 5,01 s a valódi felületen, 192 fordulón). A többi
    p95-sor (mag, keresés, első reakció) továbbra is felfüggesztve —
    véglegesítésük ADR-t igényel (blueprint 12., „a véglegesítéshez
    ADR kell").
@@ -402,8 +414,8 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   fordulónkénti több modellhívást — **feltéve, hogy mérhető pontosságot
   hoz**. Az önkonzisztencia (ADR-021) épp ezen a feltételen bukott el.
   **Ma mindkét pont tartja magát** (robusztussági halmaz: p50 4,62 s /
-  p95 5,08 s; nyelvi: 4,72 s / 5,22 s; a 184 fordulós próba-napló:
-  4,57 s / 5,03 s, tendencia stabil). **A p95 = 25 s SZÖVEGES
+  p95 5,08 s; nyelvi: 4,72 s / 5,22 s; a 192 fordulós próba-napló:
+  4,54 s / 5,01 s, tendencia stabil). **A p95 = 25 s SZÖVEGES
   csatornára szól** — hangon 25 másodperc csönd nem türelmi határ,
   hanem a hívás vége; ezt a hangcsatorna bekötésekor újra kell
   tárgyalni. Az M-1 mérés szerinti eredeti helyzet változatlan: minden

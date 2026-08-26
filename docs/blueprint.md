@@ -359,6 +359,27 @@ hogy igaz.
 Szöveges csatornán **nincs** töltelékmondat — ott a natív gépelés-jelzés
 ("...ír") tölti be ugyanezt a szerepet, plusz üzenet nélkül.
 
+### Beszélhető kimenet (2026-08-26, ADR-023)
+
+A fenti szabályok kimondott alakra is érvényesek — de a hang ennél
+többet követel, és ezt a `valasz` modul **második kimeneti módja**
+(`beszelheto`) érvényesíti, hang nélkül is mérhetően:
+
+| Szabály | Mert |
+|---|---|
+| Nincs felsorolás, markdown, zárójel — egész mondatok | a felsorolásjelet a TTS vagy felolvassa, vagy elnyeli, és a szerkezet vész el |
+| A számok **kimondva** („nyolc óra tizenöt", „december huszonkettedikén") | a magyar TTS-ek pont ezen a ponton esnek el, és a hiba NÉMÁN történik |
+| **Egy kérdés** fordulónként | a fenti „Négy technika" 4. pontja — hangon nem lehet visszalapozni |
+| Legfeljebb **két mondat** válaszonként | a hosszú válasz barge-int szül: a vásárló belevág, és az ASR a saját hangunkat is hallja |
+| Időpont-felsorolás helyett **a legkorábbi + egy alternatíva** | három felolvasott időpont megjegyezhetetlen |
+| A foglalási kód **betűzve** („kettő nyolc es ef el…") | a kód azért van, hogy le lehessen írni |
+
+**A mód veszteséges, és annak is kell lennie**: amit a hang nem bír el,
+azt nem mondjuk ki — nem pedig gyorsabban mondjuk el. Amit elveszítünk,
+azt a következő forduló visszakérdezheti; egy hatmondatos monológgal
+magát a beszélgetést veszítenénk el. Részletesen: ADR-023 és
+`docs/ALTALANOSITAS.md` 2.11–2.13.
+
 ---
 
 ## 8. Adatvédelem
