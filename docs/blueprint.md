@@ -626,18 +626,41 @@ foglalás) — azok soha nem függnek fel, teszttel bizonyítottak maradnak.
 | Foglalás megerősítése (mag) | p95 < 100 ms | felfüggesztve |
 | Szabad időpont keresés | p95 < 200 ms | felfüggesztve |
 | Első reakció (sablon, hang) | p95 < 500 ms | felfüggesztve |
-| **Tartalmi válasz (modell)** | **átlag < 15 s** (a korábbi p95 < 8 s helyett) | **aktív keretként, l. lent** |
+| **Tartalmi válasz (modell)** | **p50 < 10 s ÉS p95 < 25 s**, a tendencia figyelve (a korábbi „átlag < 15 s" helyett) | **aktív keretként, l. lent** |
 | Szolgáltatás-azonosítás | > 98% **a leggyengébb nyelvi rétegen is > 90%** | aktív |
 | Dátumértelmezés | > 99% | aktív |
 
-### A 15 másodperces keret (2026-08-23)
+### A válaszidő-keret: ELOSZLÁS, nem egy szám (2026-08-26, ADR-022)
 
-A tartalmi válasz korábbi célja (p95 < 8 s) **átlag 15 másodpercre
-tágul**. Ez nem az SLO-k feloldása és nem is a felfüggesztés
-visszavonása — a p95-sorok továbbra is felfüggesztve maradnak M4
-lezárásáig. Ez egy **fejlesztési keret**: az a felső határ, amin belül
-egy fordulónak maradnia kell, hogy a válaszidő ne váljon önmagában
-kizáró tényezővé, amíg a pontosságon dolgozunk.
+A tartalmi válasz korábbi célja (p95 < 8 s) először **átlag 15
+másodpercre** tágult (2026-08-23), majd **kétpontos eloszlás-elvárássá**
+alakult (2026-08-26, ADR-022):
+
+| Pont | Elvárás | Mit véd |
+|---|---|---|
+| **p50** | **< 10 s** | a TIPIKUS forduló — a beszélgetés ritmusa |
+| **p95** | **< 25 s** | a FAROK — a türelem felső határa |
+| **tendencia** | figyelve, nem küszöb | a lassú elsodródás |
+
+Miért nem az átlag: **az átlag pont azt a két hibát mossa össze, amit
+külön kell látni.** Egy 15 s-os átlag állhat abból, hogy minden forduló
+15 s (a rendszer egyenletesen lassú — modellt vagy promptot kell
+cserélni), és abból is, hogy 40 forduló 3 s és kettő 250 s (a rendszer
+gyors, de van egy patológiás ága — azt az EGY ágat kell megkeresni). A
+két eset ugyanazt az átlagot adja, és teljesen más javítást kíván.
+
+A **tendencia** azért van a képen, mert a két küszöb pillanatfelvétel: a
+p50 hónapokon át maradhat 9,8 s-on úgy, hogy közben minden hétben
+romlik. A napló-elemző (`python feladat.py naplo`) ezért a napló első és
+második felének p50-jét külön is kiírja, és megmondja az irányt. **Ez
+nem küszöb** — ha romlik, az nem bukás, hanem kérdés, amit fel kell
+tenni.
+
+Ez nem az SLO-k feloldása és nem is a felfüggesztés visszavonása — a
+felfüggesztett p95-sorok (mag, keresés, első reakció) továbbra is
+felfüggesztve maradnak M4 lezárásáig. Ez egy **fejlesztési keret**: az a
+tartomány, amin belül egy fordulónak maradnia kell, hogy a válaszidő ne
+váljon önmagában kizáró tényezővé, amíg a pontosságon dolgozunk.
 
 **Amit a keret megenged:** egy fordulóban **több modellhívás is**, ha
 mérhető pontosságjavulást hoz. Ilyen a 10. szakasz önkonzisztencia-
@@ -648,10 +671,17 @@ növelése csak MÉRÉSSEL indokolható — mennyit javít, és mennyivel lassí
 példákon. Ha egy plusz hívás nem javít mérhetően, kikapcsolva marad,
 akkor is, ha elméletileg indokolt.
 
-**Amit a keret NEM enged:** a 15 s **átlag**, nem p95 és nem "általában".
-Egy determinisztikusan eldönthető kérdésre (kapuőr, gombnyomás, zárt
+**Amit a keret NEM enged:** a **két elvárás EGYÜTT** áll — egy 4 s-os
+p50 nem vásárolja meg a 40 s-os p95-öt, és fordítva. Egy
+determinisztikusan eldönthető kérdésre (kapuőr, gombnyomás, zárt
 halmazbeli válasz) továbbra sem szabad modellt hívni — ott a helyes
 válaszidő nulla nagyságrendű, és a keret tágulása ezen nem változtat.
+
+**Hangcsatornán a p95 szigorúbb lesz.** A 25 s szöveges csatornára szól,
+ahol a várakozást a gépelés-jelző kitölti. Hangon a kétlépcsős válasz (7.
+szakasz) első lépcsője (< 500 ms sablon) a türelem valódi mérőszáma, és
+a tartalmi válaszra a mai 25 s nem tartható — ezt a hangcsatorna
+bekötésekor újra kell tárgyalni, l. ADR-022 „Kiváltó feltétel".
 
 A fenti "Első reakció" / "Tartalmi válasz" sor a korábbi "Asszisztens
 válasz (szöveg)" / "Asszisztens válasz (hang)" bontást váltja fel — ez az

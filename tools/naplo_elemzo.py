@@ -8,7 +8,10 @@ Mit ad:
 
 - **fordulószám** és időszak,
 - **réteg-megoszlás** (kapuőr / szabály / llm — ki oldotta meg),
-- **átlag és p95 válaszidő**, a blueprint 12. szakasz 15 s keretéhez mérve,
+- **válaszidő-ELOSZLÁS** — p50, p95, átlag, max, a blueprint 12. szakasz
+  kétpontos elvárásához mérve (p50 < 10 s, p95 < 25 s), **plusz a
+  tendencia**: a napló első és második felének p50-e egymáshoz mérve
+  (ADR-022),
 - **bizonyosság-eloszlás** mezőnként, sávokra bontva,
 - **leggyakoribb hibaminták** — zárt detektor-készlet, l. lent.
 
@@ -37,7 +40,7 @@ egyetlen, ellenőrizhető feltétel:
 | `csendes_tartalek` | `szabaly:tartalek`, de volt modell | az Ollama elhalt, észrevétlenül |
 | `alacsony_bizonyossag` | kritikus mező a küszöb alatt | a modell tippelt |
 | `ismetelt_bemenet` | ugyanaz a mondat közvetlenül újra | a vásárló nem kapott választ |
-| `lassu_fordulo` | a válaszidő a 15 s keret felett | a keretet sérti |
+| `lassu_fordulo` | a válaszidő a **p95-elvárás** felett | ennyire egy forduló sem lóghat ki |
 
 ## Golden-eset konverter
 
@@ -64,8 +67,23 @@ GYOKER = Path(__file__).resolve().parents[1]
 if str(GYOKER) not in sys.path:
     sys.path.insert(0, str(GYOKER))
 
-# A blueprint 12. szakasz kerete — fordulónkénti válaszidő felső határa.
-KERET_MASODPERC = 15.0
+# A blueprint 12. szakasz ELOSZLÁS-elvárása (ADR-022), fordulónként. Két
+# pont, mert egy szám nem tudja megkülönböztetni a „mindenre lassú" és a
+# „többnyire gyors, néha kilóg" rendszert — pedig a kettő más hibát jelez
+# és más javítást kíván.
+P50_KERET_MASODPERC = 10.0
+P95_KERET_MASODPERC = 25.0
+
+# Ennyi fordulónál kevesebből NEM mondunk tendenciát. Egy 6 fordulós
+# naplóban a „romlik" ítélet két lassabb utolsó fordulóból származna —
+# az zaj, nem tendencia.
+TENDENCIA_MIN_FORDULO = 10
+
+# Ekkora RELATÍV eltérés alatt a két félidő p50-je „stabil". A küszöb
+# szándékosan nagy: az Ollama futásonkénti szórása önmagában bőven
+# 10-20% (l. `docs/ALLAPOT.md`, „A válaszidőről őszintén"), tehát egy
+# ennél kisebb elmozdulásból tendenciát olvasni önámítás lenne.
+TENDENCIA_SAVSZELESSEG = 0.20
 
 # A bizonyosság-eloszlás sávjai. A két belső határ NEM önkényes: pontosan
 # az orchestrator küszöbei (`BizonyossagKuszobok`: kritikus mező 0,6,
@@ -78,11 +96,57 @@ SAVOK = (
 )
 
 
-def _p95(ertekek: list[float]) -> float | None:
+def percentilis(ertekek: list[float], arany: float) -> float | None:
+    """A `arany` kvantilis, a legközelebbi-rang módszerrel (nincs
+    interpoláció). Ugyanaz a képlet, mint a golden futtatóban
+    (`tests/golden/futtato.py`) — egy mérőszámnak egy definíciója van,
+    különben a két jelentés összehasonlíthatatlan."""
     if not ertekek:
         return None
     rendezett = sorted(ertekek)
-    return rendezett[min(len(rendezett) - 1, int(len(rendezett) * 0.95))]
+    return rendezett[min(len(rendezett) - 1, int(len(rendezett) * arany))]
+
+
+def _p50(ertekek: list[float]) -> float | None:
+    return percentilis(ertekek, 0.50)
+
+
+def _p95(ertekek: list[float]) -> float | None:
+    return percentilis(ertekek, 0.95)
+
+
+def tendencia(idok: list[float]) -> dict:
+    """A napló ELSŐ és MÁSODIK felének p50-je, és a kettő viszonya.
+
+    Miért p50 és nem átlag: egyetlen kilógó forduló (egy modellhívás,
+    ami éppen egy hideg cache-be futott) az átlagot egy 20 elemű
+    félidőben látványosan mozgatja, a mediánt nem. A tendencia
+    kérdése épp az, hogy a TIPIKUS forduló lett-e lassabb.
+
+    Az `irany` zárt halmaz: `javul` | `romlik` | `stabil` |
+    `keves_adat`. A `keves_adat` nem hibaág — azt jelenti, hogy a
+    kérdésre ebből a naplóból nem lehet felelni
+    (`TENDENCIA_MIN_FORDULO`)."""
+    if len(idok) < TENDENCIA_MIN_FORDULO:
+        return {"irany": "keves_adat", "elso_fele": None, "masodik_fele": None, "valtozas": None}
+    felezo = len(idok) // 2
+    elso = _p50(idok[:felezo])
+    masodik = _p50(idok[felezo:])
+    if not elso:
+        return {"irany": "keves_adat", "elso_fele": elso, "masodik_fele": masodik, "valtozas": None}
+    valtozas = (masodik - elso) / elso
+    if valtozas > TENDENCIA_SAVSZELESSEG:
+        irany = "romlik"
+    elif valtozas < -TENDENCIA_SAVSZELESSEG:
+        irany = "javul"
+    else:
+        irany = "stabil"
+    return {
+        "irany": irany,
+        "elso_fele": elso,
+        "masodik_fele": masodik,
+        "valtozas": valtozas,
+    }
 
 
 def hibamintak(sorok: list[dict]) -> dict[str, list[int]]:
@@ -140,7 +204,7 @@ def hibamintak(sorok: list[dict]) -> dict[str, list[int]]:
             talalatok["ismetelt_bemenet"].append(i)
 
         ido = sor.get("valaszido_masodperc")
-        if isinstance(ido, int | float) and ido > KERET_MASODPERC:
+        if isinstance(ido, int | float) and ido > P95_KERET_MASODPERC:
             talalatok["lassu_fordulo"].append(i)
 
         elozo_mezo = mezo
@@ -185,9 +249,11 @@ def elemez(sorok: list[dict]) -> dict:
         "valaszido": {
             "n": len(idok),
             "atlag": sum(idok) / len(idok) if idok else None,
+            "p50": _p50(idok),
             "p95": _p95(idok),
             "max": max(idok) if idok else None,
-            "keret_felett": sum(1 for i in idok if i > KERET_MASODPERC),
+            "p95_keret_felett": sum(1 for i in idok if i > P95_KERET_MASODPERC),
+            "tendencia": tendencia(idok),
         },
         "bizonyossag": {k: dict(v) for k, v in bizonyossag_savok.items()},
         "onkonzisztencia": dict(egyetertesek),
@@ -214,13 +280,22 @@ def jelentes(osszesites: dict) -> str:
         ki(f"  {tipus:22s} {darab:4d}  {_arany(darab, osszesites['fordulok'])}")
 
     ido = osszesites["valaszido"]
-    ki(f"\n-- Válaszidő (n={ido['n']}, keret: {KERET_MASODPERC:.0f} s/forduló) --")
+    ki(
+        f"\n-- Válaszidő-eloszlás (n={ido['n']}, elvárás: "
+        f"p50 < {P50_KERET_MASODPERC:.0f} s, p95 < {P95_KERET_MASODPERC:.0f} s) --"
+    )
     if ido["n"]:
-        allapot = "TARTJA" if ido["atlag"] <= KERET_MASODPERC else "NEM TARTJA"
-        ki(f"  átlag        {ido['atlag']:6.2f} s   [{allapot}]")
-        ki(f"  p95          {ido['p95']:6.2f} s")
+        # A két elvárás KÜLÖN áll vagy bukik — az összevont "tartja"
+        # elrejtené, hogy a rendszer a mediánon rendben van, csak a
+        # farka hosszú (vagy fordítva). L. ADR-022.
+        p50_allapot = "TARTJA" if ido["p50"] <= P50_KERET_MASODPERC else "NEM TARTJA"
+        p95_allapot = "TARTJA" if ido["p95"] <= P95_KERET_MASODPERC else "NEM TARTJA"
+        ki(f"  p50          {ido['p50']:6.2f} s   [{p50_allapot}]")
+        ki(f"  p95          {ido['p95']:6.2f} s   [{p95_allapot}]")
+        ki(f"  átlag        {ido['atlag']:6.2f} s")
         ki(f"  max          {ido['max']:6.2f} s")
-        ki(f"  keret felett {ido['keret_felett']:4d} forduló")
+        ki(f"  p95 felett   {ido['p95_keret_felett']:4d} forduló")
+        ki("  " + tendencia_szoveg(ido["tendencia"]))
     else:
         ki("  nincs válaszidő-adat (régi naplósorok — a mező azóta került be)")
 
@@ -249,6 +324,26 @@ def jelentes(osszesites: dict) -> str:
     if mintak:
         ki("\n  (A sorszám a `--golden <sor>` konverternek adható át.)")
     return "\n".join(sorok)
+
+
+_TENDENCIA_SZOVEG = {
+    "javul": "JAVUL",
+    "romlik": "ROMLIK",
+    "stabil": "stabil",
+}
+
+
+def tendencia_szoveg(adat: dict) -> str:
+    """A tendencia egy sora. Külön függvény, mert a jelentés HÁROM
+    helyről is idézhető (napló, golden futtató, dokumentum), és a
+    megfogalmazásnak egy helyen kell lennie."""
+    if adat["irany"] == "keves_adat":
+        return f"tendencia: kevés adat (a méréshez legalább {TENDENCIA_MIN_FORDULO} forduló kell)"
+    return (
+        f"tendencia: első fél p50 {adat['elso_fele']:.2f} s → "
+        f"második fél p50 {adat['masodik_fele']:.2f} s   "
+        f"[{_TENDENCIA_SZOVEG[adat['irany']]}, {adat['valtozas']:+.0%}]"
+    )
 
 
 def _arany(darab: int, osszes: int) -> str:

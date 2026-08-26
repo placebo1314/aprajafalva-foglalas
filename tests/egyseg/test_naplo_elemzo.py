@@ -8,7 +8,16 @@ modul felosztásánál.
 
 from __future__ import annotations
 
-from tools.naplo_elemzo import KERET_MASODPERC, elemez, golden_vaz, hibamintak, jelentes
+from tools.naplo_elemzo import (
+    P50_KERET_MASODPERC,
+    P95_KERET_MASODPERC,
+    TENDENCIA_MIN_FORDULO,
+    elemez,
+    golden_vaz,
+    hibamintak,
+    jelentes,
+    tendencia,
+)
 
 
 def _sor(**mezok):
@@ -47,14 +56,70 @@ def test_reteg_megoszlas() -> None:
     assert osszesites["retegek"] == {"llm": 2, "kapuor": 1}
 
 
-def test_valaszido_atlag_p95_es_keret() -> None:
+def test_valaszido_eloszlas_p50_p95_es_max() -> None:
+    """ADR-022: a válaszidő ELOSZLÁS, nem egy szám. Ez a példa épp azt a
+    felállást méri, amiért a döntés megszületett: négy gyors forduló és
+    egy nagyon lassú. Az átlag (8,0 s) a régi 15 s-os keret ALATT volt —
+    holott egy forduló fél percig tartott."""
     idok = [1.0, 2.0, 3.0, 4.0, 30.0]
     osszesites = elemez([_sor(valaszido_masodperc=i) for i in idok])
     ido = osszesites["valaszido"]
     assert ido["n"] == 5
     assert ido["atlag"] == 8.0
+    assert ido["p50"] == 3.0
+    assert ido["p95"] == 30.0
     assert ido["max"] == 30.0
-    assert ido["keret_felett"] == 1
+    # A p50 tartja az elvárást, a p95 NEM — pontosan ezt a
+    # megkülönböztetést nem tudta megtenni a korábbi egyetlen szám.
+    assert ido["p50"] < P50_KERET_MASODPERC
+    assert ido["p95"] > P95_KERET_MASODPERC
+    assert ido["p95_keret_felett"] == 1
+
+
+def test_a_jelentes_a_ket_pontot_kulon_iteli_meg() -> None:
+    """Az összevont „tartja" elrejtené, hogy a medián rendben van, csak
+    a farok hosszú — a jelentésben ezért két külön ítélet áll."""
+    szoveg = jelentes(elemez([_sor(valaszido_masodperc=i) for i in [1.0, 2.0, 3.0, 4.0, 30.0]]))
+    assert "p50" in szoveg and "p95" in szoveg
+    p50_sor = next(s for s in szoveg.splitlines() if s.strip().startswith("p50"))
+    p95_sor = next(s for s in szoveg.splitlines() if s.strip().startswith("p95   "))
+    assert "[TARTJA]" in p50_sor
+    assert "[NEM TARTJA]" in p95_sor
+
+
+# --- tendencia (ADR-022) ---------------------------------------------
+
+
+def test_tendencia_keves_adatbol_nem_mond_iranyt() -> None:
+    """Két lassabb utolsó forduló egy hat fordulós naplóban zaj, nem
+    tendencia. A `keves_adat` nem hibaág — azt jelenti, hogy a kérdésre
+    ebből a naplóból nem lehet felelni."""
+    assert tendencia([1.0] * (TENDENCIA_MIN_FORDULO - 1))["irany"] == "keves_adat"
+
+
+def test_tendencia_romlik_es_javul() -> None:
+    romlo = tendencia([1.0] * 10 + [5.0] * 10)
+    assert romlo["irany"] == "romlik"
+    assert romlo["elso_fele"] == 1.0
+    assert romlo["masodik_fele"] == 5.0
+
+    javulo = tendencia([5.0] * 10 + [1.0] * 10)
+    assert javulo["irany"] == "javul"
+
+
+def test_tendencia_savszelessegen_belul_stabil() -> None:
+    """Az Ollama futásonkénti szórása önmagában 10-20% — ezen belül
+    tendenciát olvasni önámítás lenne (ADR-022)."""
+    assert tendencia([10.0] * 10 + [11.0] * 10)["irany"] == "stabil"
+
+
+def test_tendencia_a_medianra_tamaszkodik_nem_az_atlagra() -> None:
+    """Egyetlen kilógó forduló az átlagot mozgatja, a mediánt nem — a
+    tendencia kérdése pedig az, hogy a TIPIKUS forduló lett-e lassabb."""
+    # A második félidő átlaga a 100 s-os kilógó miatt tízszeres, a
+    # mediánja viszont változatlan.
+    adat = tendencia([2.0] * 10 + [2.0] * 9 + [100.0])
+    assert adat["irany"] == "stabil"
 
 
 def test_regi_naplosorok_valaszido_nelkul_olvashatok() -> None:
@@ -198,11 +263,15 @@ def test_ismetelt_bemenet() -> None:
     assert mintak["ismetelt_bemenet"] == [2]
 
 
-def test_lassu_fordulo_a_keret_felett() -> None:
+def test_lassu_fordulo_a_p95_elvaras_felett() -> None:
+    """A detektor a p95-elváráshoz mér (ADR-022): egy forduló akkor
+    „lassú", ha a farok felső határát is átlépi. A p50-höz mérni
+    félrevezető lenne — a fordulók FELE definíció szerint a medián
+    fölött van."""
     mintak = hibamintak(
         [
-            _sor(valaszido_masodperc=KERET_MASODPERC - 0.1),
-            _sor(valaszido_masodperc=KERET_MASODPERC + 0.1),
+            _sor(valaszido_masodperc=P95_KERET_MASODPERC - 0.1),
+            _sor(valaszido_masodperc=P95_KERET_MASODPERC + 0.1),
         ]
     )
     assert mintak["lassu_fordulo"] == [2]

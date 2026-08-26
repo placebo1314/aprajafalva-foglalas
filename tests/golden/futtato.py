@@ -66,6 +66,22 @@ from pathlib import Path
 import yaml
 
 GYOKER = Path(__file__).resolve().parents[2]
+if str(GYOKER) not in sys.path:
+    sys.path.insert(0, str(GYOKER))
+
+# A válaszidő-elvárás EGY helyen van definiálva (ADR-022), és mindkét
+# jelentés — a napló-elemző és ez — onnan olvassa. Két másolat esetén a
+# két szám előbb-utóbb szétcsúszna, és a jelentések összehasonlíthatatlanná
+# válnának. A `tools/naplo_elemzo.py` importja itt olcsó: a modul a
+# felületet (`ui.vasarlo`) csak a `main()`-jében, futásidőben tölti be.
+from tools.naplo_elemzo import (  # noqa: E402
+    P50_KERET_MASODPERC,
+    P95_KERET_MASODPERC,
+    percentilis,
+    tendencia,
+    tendencia_szoveg,
+)
+
 GOLDEN_UTVONAL = GYOKER / "tests" / "golden" / "nyelvi_alap.yaml"
 ROBUSZTUS_UTVONAL = GYOKER / "tests" / "golden" / "robusztus.yaml"
 
@@ -534,6 +550,9 @@ class EsetEredmeny:
     # MINDEN forduló kimenete (egyfordulós esetnél egyelemű lista) — az
     # ismétlés-stabilitás vizsgálatához.
     fordulo_kimenetek: list[dict | None] = field(default_factory=list)
+    # MINDEN forduló ideje másodpercben — a válaszidő-eloszlás
+    # alapegysége a forduló (ADR-022), nem az eset.
+    fordulo_idok: list[float] = field(default_factory=list)
 
 
 def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
@@ -572,12 +591,19 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
         # NEM változik (a `spike/golden_futtato.py` és a determinisztikus
         # védőháló is ezt hívja); a lista a függvény-objektumon utazik.
         hivo.fordulo_kimenetek = []
+        # Fordulónkénti IDŐK — a válaszidő-elvárás fordulónkénti eloszlás
+        # (ADR-022), tehát a p50/p95 alapegysége a forduló, nem az eset.
+        # Egy háromfordulós eset összideje egyetlen mintaként háromszoros
+        # fordulónak látszana, és a farkat hamisan nyújtaná meg.
+        hivo.fordulo_idok = []
         try:
             for mondat in fordulok:
+                fordulo_kezdet = time.monotonic()
                 kontextus = ErtelmezesKontextus(
                     megorzott_parameterek=dict(megorzott), elozmenyek=list(elozmenyek)
                 )
                 kimenet = ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
+                hivo.fordulo_idok.append(time.monotonic() - fordulo_kezdet)
                 hivo.fordulo_kimenetek.append(kimenet)
                 megorzott = kovetkezo_kontextus(megorzott, kimenet)
                 elozmenyek.append((KI_VASARLO, mondat))
@@ -586,6 +612,7 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
         return kimenet, time.monotonic() - kezdet, 0, None
 
     hivo.fordulo_kimenetek = []
+    hivo.fordulo_idok = []
     return hivo
 
 
@@ -613,6 +640,7 @@ def fut(meta: dict, esetek: list[Eset], hivo: HivoFuggveny) -> list[EsetEredmeny
                 kimenet,
                 biztonsagi_sertesek=sertesek,
                 fordulo_kimenetek=fordulo_kimenetek,
+                fordulo_idok=list(getattr(hivo, "fordulo_idok", []) or []),
                 egyetertes=getattr(hivo, "utolso_egyetertes", None),
             )
         )
@@ -673,6 +701,23 @@ def biztonsagi_jelentes(
     return szamok, sertesek
 
 
+def valaszido_jelentes(eredmenyek: list[EsetEredmeny]) -> dict:
+    """A FORDULÓNKÉNTI válaszidő-eloszlás (ADR-022): p50, p95, átlag,
+    max és a tendencia. A kivétellel elszállt esetek kimaradnak — ott
+    nem válaszidőt mértünk, hanem összeomlást."""
+    idok = [ido for er in eredmenyek if er.hiba is None for ido in er.fordulo_idok]
+    if not idok:
+        return {"n": 0, "p50": None, "p95": None, "atlag": None, "max": None}
+    return {
+        "n": len(idok),
+        "p50": percentilis(idok, 0.50),
+        "p95": percentilis(idok, 0.95),
+        "atlag": sum(idok) / len(idok),
+        "max": max(idok),
+        "tendencia": tendencia(idok),
+    }
+
+
 def jelent(cimke: str, meta: dict, eredmenyek: list[EsetEredmeny]) -> dict:
     print(f"\n=== {cimke} — összesítés ===\n")
 
@@ -727,26 +772,24 @@ def jelent(cimke: str, meta: dict, eredmenyek: list[EsetEredmeny]) -> dict:
             f"{legrosszabb_reteg} = {legrosszabb_ertek:.1%}"
         )
 
-    # VÁLASZIDŐ — a blueprint 12. szakasz kerete ÁTLAGRA szól (15 s), a
-    # p95 azért megy ki mellé, mert az mutatja meg, van-e hosszú farok
-    # (egy 40 s-os kilógó eset egy 45 eses halmazon alig mozdítja az
-    # átlagot, a felhasználónak viszont az a rossz élmény). Egy
-    # TÖBBFORDULÓS eset ideje az összes fordulójáé együtt — a keret
-    # fordulónkénti, ezért a fordulónkénti átlag is kimegy.
-    idok = [er.telt_masodperc for er in eredmenyek if er.hiba is None]
-    fordulok_osszesen = sum(len(er.eset.fordulok) for er in eredmenyek if er.hiba is None)
-    ido_jelentes: dict[str, float | None] = {"atlag": None, "p95": None, "fordulonkent": None}
-    if idok:
-        rendezett = sorted(idok)
-        p95 = rendezett[min(len(rendezett) - 1, int(len(rendezett) * 0.95))]
-        atlag = sum(idok) / len(idok)
-        fordulonkent = sum(idok) / fordulok_osszesen if fordulok_osszesen else atlag
-        ido_jelentes = {"atlag": atlag, "p95": p95, "fordulonkent": fordulonkent}
+    # VÁLASZIDŐ — a blueprint 12. szakasz elvárása ELOSZLÁS, fordulónként
+    # (ADR-022): p50 < 10 s, p95 < 25 s, a tendencia figyelve. Az
+    # alapegység a FORDULÓ, nem az eset: egy háromfordulós eset összideje
+    # egyetlen mintaként hamisan nyújtaná meg a farkat.
+    ido_jelentes = valaszido_jelentes(eredmenyek)
+    if ido_jelentes["n"]:
         print(
-            f"\nVálaszidő (ezen a futáson, szekvenciálisan): esetenként átlag "
-            f"{atlag:.2f}s, p95 {p95:.2f}s — FORDULÓNKÉNT átlag {fordulonkent:.2f}s "
-            f"(a blueprint 12. kerete: < 15 s)"
+            f"\nVálaszidő-eloszlás fordulónként (ezen a futáson, szekvenciálisan, "
+            f"n={ido_jelentes['n']}):"
         )
+        for kulcs, elvaras in (("p50", P50_KERET_MASODPERC), ("p95", P95_KERET_MASODPERC)):
+            allapot = "TARTJA" if ido_jelentes[kulcs] <= elvaras else "NEM TARTJA"
+            print(
+                f"  {kulcs}   {ido_jelentes[kulcs]:6.2f} s   (elvárás < {elvaras:.0f} s)  "
+                f"[{allapot}]"
+            )
+        print(f"  átlag {ido_jelentes['atlag']:6.2f} s   max {ido_jelentes['max']:6.2f} s")
+        print(f"  {tendencia_szoveg(ido_jelentes['tendencia'])}")
     hibaszam = sum(1 for er in eredmenyek if er.hiba)
     if hibaszam:
         print(f"Hívási hibák: {hibaszam}/{len(eredmenyek)}")
