@@ -21,20 +21,51 @@ def test_three_shop_hoz_create(db_path):
 
 def test_torpillanal_three_counter_has(db_path):
     data = betolt(db_path)
-    assert len(data["torpilla_pultok"]) == 3
-    names = {p["konfig"]["alkalmazott_nev"] for p in data["torpilla_pultok"]}
+    assert len(data["pultok"]["torpilla"]) == 3
+    names = {p["konfig"]["alkalmazott_nev"] for p in data["pultok"]["torpilla"]}
     assert names == {"GipszJakab", "Törpilla", "Hulk Hugan"}
 
 
-def test_one_week_shift_three_to_counter(db_path):
+def test_mindharom_bolt_kap_beosztast(db_path):
+    """Korábban csak a Törpillában volt műszak, tehát a másik két boltra
+    irányuló minden kérés üres eredményre futott — a próbákban ez
+    megkülönböztethetetlen volt egy párbeszédhibától."""
     data = betolt(db_path)
-    assert len(data["muszakok"]) == 3 * 7
+
+    assert set(data["pultok"]) == {"szundi", "ugyifogyi", "torpilla"}
+    boltok_muszakkal = {m["bolt"] for m in data["muszakok"] if not m["kihagyva"]}
+    assert boltok_muszakkal == {"szundi", "ugyifogyi", "torpilla"}
+    for bolt in ("szundi", "ugyifogyi", "torpilla"):
+        slotok = sum(
+            m["slot_szam"] for m in data["muszakok"] if m["bolt"] == bolt and not m["kihagyva"]
+        )
+        assert slotok > 0, f"{bolt}: nulla slot"
+
+
+def test_a_harom_bolt_ritmusa_kulonbozik(db_path):
+    """A demóadat nem csak „van beosztás mindenhol" — a három ritmus
+    szándékosan más, hogy a próbán az is látszódjon, ugyanaz a kérés
+    hogyan néz ki egy hosszú-ritka és egy rövid-sűrű beosztáson."""
+    data = betolt(db_path)
+    naponta = {}
+    for bolt in ("szundi", "ugyifogyi"):
+        muszakok = [m for m in data["muszakok"] if m["bolt"] == bolt and not m["kihagyva"]]
+        naponta[bolt] = muszakok[0]["slot_szam"]
+
+    # Az Ügyifogyi legalább ötször sűrűbb, mint a Szundi.
+    assert naponta["ugyifogyi"] > 5 * naponta["szundi"], naponta
+
+
+def test_one_week_shift_minden_pultra(db_path):
+    """Öt pult (Szundi 1, Ügyifogyi 1, Törpilla 3) × hét nap."""
+    data = betolt(db_path)
+    assert len(data["muszakok"]) == 5 * 7
 
 
 def test_exception_on_day_all_to_counter_skipped(db_path):
     data = betolt(db_path)
     skipped = [m for m in data["muszakok"] if m["kihagyva"]]
-    assert len(skipped) == 3
+    assert len(skipped) == 5, "a karácsony MINDEN pultot érint, mindhárom boltban"
     assert all(m["datum"] == data["kivetel_datum"] for m in skipped)
 
 

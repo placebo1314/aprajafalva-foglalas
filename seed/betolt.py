@@ -1,20 +1,28 @@
 """Demóadat betöltése.
 
-Aprajafalva három boltja:
+Aprajafalva három boltja, **mindhárom egy hét beosztással**
+(2026-12-21–27) — de három KÜLÖNBÖZŐ ritmusban:
 
-- **Szundi** — altató
-- **Ügyifogyi** — petárda
-- **Törpilla** — boldogság, három pulttal, a roadmap „Az első tíz lépés"
-  6. pontja szerinti ritmussal:
+- **Szundi** — altató. Hosszú, ritka időpontok: 30 perc, óránként egy,
+  a fele szabad sáv; esti bolt (14-20 óra). Napi ~6 időpont.
+- **Ügyifogyi** — petárda. Rövid, sűrű időpontok: 5 perc, 10 perces
+  rácson, óránként 10 perc szünettel (9-17 óra). Napi ~64 időpont.
+- **Törpilla** — boldogság, három pulttal, a roadmap „Az első tíz
+  lépés" 6. pontja szerinti ritmussal (8-16 óra):
 
     GipszJakab:  10 perc vásárlás, minden vásárlás után 10 perc szünet
     Törpilla:    legfeljebb 2 vásárló óránként, óránként 15 perc szünet
     Hulk Hugan:  4 órás műszak, 15 percenként foglalható, szünet nélkül
 
-Egy hét beosztás a Törpilla bolt három pultjára (2026-12-21–27), és egy
-kivételnap (2026-12-25, karácsony — a bolt zárva, a slotgenerátor ezért
-nem generál rá slotot/blokkot, de a műszaksor létezik, hogy a kihagyás
-ténylegesen látszódjon, ne csak hiányozzon).
+**Miért kap mindhárom bolt beosztást** (2026-08-30): korábban csak a
+Törpillában volt műszak, tehát a másik két boltra irányuló minden kérés
+`nincs_meghirdetett_idopont`-ra futott. Ez a DEMÓADAT tulajdonsága
+volt, nem a rendszeré — de a próbákban megkülönböztethetetlen volt egy
+párbeszédhibától, és a mért kiutak nagy része innen jött.
+
+Plusz egy kivételnap (2026-12-25, karácsony — minden bolt zárva, a
+slotgenerátor ezért nem generál rá slotot/blokkot, de a műszaksor
+létezik, hogy a kihagyás ténylegesen látszódjon, ne csak hiányozzon).
 
 Minden azonosító **determinisztikus**: `uuid5`-tel, egy fix névtérből, egy
 olvasható névből származik — nem `uj_uuid()` (az `uuid4`, véletlen), hogy
@@ -58,9 +66,64 @@ def _id(name: str) -> str:
     return uuid.uuid5(_NEVTER, name).hex
 
 
-# Törpilla bolt három pultja — a rajtuk dolgozó alkalmazott ritmusa
-# határozza meg a snapshot-mezőket (docs/domain.md, "Snapshot").
-_TORPILLA_COUNTERS = [
+# MINDHÁROM BOLT pultjai, boltonként — a rajtuk dolgozó alkalmazott
+# ritmusa határozza meg a snapshot-mezőket (docs/domain.md, "Snapshot").
+#
+# **Miért kap mindhárom bolt beosztást** (2026-08-30). Korábban csak a
+# Törpillában volt műszak, tehát a másik két boltra irányuló MINDEN
+# kérés `nincs_meghirdetett_idopont`-ra futott. Ez a demóadat
+# tulajdonsága volt, nem a rendszeré — de a kézi és a fej nélküli
+# próbákban megkülönböztethetetlen volt egy párbeszédhibától: a
+# kiutak nagy része innen jött, és minden mérés, ami a beszélgetés
+# minőségét nézte, ezen a zajon át nézte.
+#
+# A három ritmus SZÁNDÉKOSAN különbözik — így a demóadaton az is
+# látszik, hogy ugyanaz a kérés máshogy néz ki egy hosszú, ritka és
+# egy rövid, sűrű beosztáson:
+#
+#   Szundi     — hosszú, RITKA: 30 perces időpont óránként, fél nap
+#                szabad sáv (esti bolt, 14-20 óra)
+#   Ügyifogyi  — rövid, SŰRŰ: 5 perces időpont 10 percenként, óránként
+#                10 perc szünettel (9-17 óra)
+#   Törpilla   — a roadmap három ritmusa, három pulton (8-16 óra)
+_PULTOK: dict[str, list[dict]] = {}
+
+_PULTOK["szundi"] = [
+    {
+        "nev": "Szundi pult 1",
+        "alkalmazott_nev": "Csendes",
+        # HOSSZÚ időpont, RITKÁN: 30 perc, de csak óránként indul egy
+        # (a rács 60 perc), és a fele szabad sáv marad — egy altató
+        # kiválasztása nem sietős munka.
+        "idotartam_perc": 30,
+        "puffer_utana_perc": 0,
+        "min_racs_perc": 60,
+        "foglalhato_arany": 0.5,
+        "blokk_szabaly": {"szunetek": []},
+        "kezdet_ora": 14,
+        "veg_ora": 20,
+    },
+]
+
+_PULTOK["ugyifogyi"] = [
+    {
+        "nev": "Ügyifogyi pult 1",
+        "alkalmazott_nev": "Durranó",
+        # RÖVID időpont, SŰRŰN: 5 perc, 10 perces rácson, óránként 10
+        # perc szünettel. Egy petárda kiválasztása pár perc.
+        "idotartam_perc": 5,
+        "puffer_utana_perc": 0,
+        "min_racs_perc": 10,
+        "foglalhato_arany": 0.9,
+        "blokk_szabaly": {
+            "szunetek": [{"tipus": "szunet", "hossz_perc": 10, "mintazat": "oranta"}]
+        },
+        "kezdet_ora": 9,
+        "veg_ora": 17,
+    },
+]
+
+_PULTOK["torpilla"] = [
     {
         "nev": "Törpilla pult 1",
         "alkalmazott_nev": "GipszJakab",
@@ -158,20 +221,6 @@ def _master_data_load(conn) -> dict:
             "Esténként halk zene szűrődik ki az ablakokon."
         ),
     )
-    torzsadat_repo.counter_create(
-        conn,
-        org_id=org_id,
-        shop_id=szundi_id,
-        name="Szundi pult 1",
-        id_=_id("pult:szundi:1"),
-    )
-    torzsadat_repo.employee_create(
-        conn,
-        org_id=org_id,
-        shop_id=szundi_id,
-        name="Csendes",
-        id_=_id("alkalmazott:csendes"),
-    )
     szundi_service_id = torzsadat_repo.service_create(
         conn,
         org_id=org_id,
@@ -200,20 +249,6 @@ def _master_data_load(conn) -> dict:
             "Élénkpiros-sárga cégér, az ablakok mögül időnként pattogó hangok "
             "hallatszanak — ne ijedj meg, ez itt megszokott."
         ),
-    )
-    torzsadat_repo.counter_create(
-        conn,
-        org_id=org_id,
-        shop_id=ugyifogyi_id,
-        name="Ügyifogyi pult 1",
-        id_=_id("pult:ugyifogyi:1"),
-    )
-    torzsadat_repo.employee_create(
-        conn,
-        org_id=org_id,
-        shop_id=ugyifogyi_id,
-        name="Durranó",
-        id_=_id("alkalmazott:durrano"),
     )
     ugyifogyi_service_id = torzsadat_repo.service_create(
         conn,
@@ -261,25 +296,37 @@ def _master_data_load(conn) -> dict:
         ar="adomány alapú",
     )
 
-    torpilla_counters = []
-    for i, config in enumerate(_TORPILLA_COUNTERS, start=1):
-        counter_id = torzsadat_repo.counter_create(
-            conn,
-            org_id=org_id,
-            shop_id=torpilla_id,
-            name=config["nev"],
-            id_=_id(f"pult:torpilla:{i}"),
-        )
-        employee_id = torzsadat_repo.employee_create(
-            conn,
-            org_id=org_id,
-            shop_id=torpilla_id,
-            name=config["alkalmazott_nev"],
-            id_=_id(f"alkalmazott:{config['alkalmazott_nev']}"),
-        )
-        torpilla_counters.append(
-            {"pult_id": counter_id, "alkalmazott_id": employee_id, "konfig": config}
-        )
+    boltok = {"szundi": szundi_id, "ugyifogyi": ugyifogyi_id, "torpilla": torpilla_id}
+    szolgaltatasok = {
+        "szundi": szundi_service_id,
+        "ugyifogyi": ugyifogyi_service_id,
+        "torpilla": torpilla_service_id,
+    }
+
+    # PULTOK ÉS ALKALMAZOTTAK — mindhárom boltra ugyanaz a ciklus. Az
+    # azonosítók továbbra is determinisztikusak (`_id`), tehát a
+    # meglévő seed-adatra épülő tesztek azonosítói nem mozdulnak el.
+    pultok: dict[str, list[dict]] = {}
+    for bolt_slug, konfigok in _PULTOK.items():
+        pultok[bolt_slug] = []
+        for i, config in enumerate(konfigok, start=1):
+            counter_id = torzsadat_repo.counter_create(
+                conn,
+                org_id=org_id,
+                shop_id=boltok[bolt_slug],
+                name=config["nev"],
+                id_=_id(f"pult:{bolt_slug}:{i}"),
+            )
+            employee_id = torzsadat_repo.employee_create(
+                conn,
+                org_id=org_id,
+                shop_id=boltok[bolt_slug],
+                name=config["alkalmazott_nev"],
+                id_=_id(f"alkalmazott:{config['alkalmazott_nev']}"),
+            )
+            pultok[bolt_slug].append(
+                {"pult_id": counter_id, "alkalmazott_id": employee_id, "konfig": config}
+            )
 
     torzsadat_repo.exception_day_create(
         conn,
@@ -292,24 +339,34 @@ def _master_data_load(conn) -> dict:
 
     return {
         "szervezet_id": org_id,
-        "boltok": {"szundi": szundi_id, "ugyifogyi": ugyifogyi_id, "torpilla": torpilla_id},
-        "torpilla_szolgaltatas_id": torpilla_service_id,
-        "torpilla_pultok": torpilla_counters,
+        "boltok": boltok,
+        "szolgaltatasok": szolgaltatasok,
+        "pultok": pultok,
         "kivetel_datum": _EXCEPTION_DATE,
     }
 
 
 def _week_schedule_load(conn, data: dict) -> list[dict]:
-    """A Törpilla bolt három pultjára egy hét műszakot hoz létre, és
+    """MINDHÁROM bolt minden pultjára egy hét műszakot hoz létre, és
     minden műszakra lefuttatja a slotgenerátort. A kivetel_nap napon
     (karácsony) a műszak sor LÉTREJÖN, de a generátor nem tesz bele
     slotot/blokkot — ez mutatja meg ténylegesen a kihagyást, nem csak
-    egy hiányzó sor a beosztásban."""
+    egy hiányzó sor a beosztásban.
+
+    **Korábban csak a Törpilla kapott beosztást**, és emiatt a másik két
+    boltra irányuló minden kérés üres eredményre futott — a próbákban
+    ez megkülönböztethetetlen volt egy párbeszédhibától (l. `_PULTOK`
+    fejlécének magyarázata)."""
     exception_days = frozenset({data["kivetel_datum"]})
     strategia = FixedBlock()
     created_shifts = []
 
-    for counter in data["torpilla_pultok"]:
+    pultok = [
+        (bolt_slug, counter)
+        for bolt_slug, counters in data["pultok"].items()
+        for counter in counters
+    ]
+    for bolt_slug, counter in pultok:
         config = counter["konfig"]
         for day_index in range(7):
             day = _WEEK_START + timedelta(days=day_index)
@@ -325,10 +382,10 @@ def _week_schedule_load(conn, data: dict) -> list[dict]:
             shift_id = muszak_repo.shift_create(
                 conn,
                 org_id=data["szervezet_id"],
-                shop_id=data["boltok"]["torpilla"],
+                shop_id=data["boltok"][bolt_slug],
                 counter_id=counter["pult_id"],
                 employee_id=counter["alkalmazott_id"],
-                service_id=data["torpilla_szolgaltatas_id"],
+                service_id=data["szolgaltatasok"][bolt_slug],
                 start=start_utc,
                 end=end_utc,
                 duration_minute=config["idotartam_perc"],
@@ -353,6 +410,7 @@ def _week_schedule_load(conn, data: dict) -> list[dict]:
             created_shifts.append(
                 {
                     "muszak_id": shift_id,
+                    "bolt": bolt_slug,
                     "alkalmazott": config["alkalmazott_nev"],
                     "datum": date_str,
                     "kihagyva": result.skipped,
