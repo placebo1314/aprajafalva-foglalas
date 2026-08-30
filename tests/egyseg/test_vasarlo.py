@@ -379,3 +379,29 @@ def test_nyomkovetes_modellhivassal_atveszi_a_promptot():
     assert nyom["modellhivas_db"] == 1
     assert nyom["prompt"]["vasarlo"] == "Törpillához mennék holnap"
     assert nyom["sema_ok"] is True
+
+
+def test_a_megerositest_ker_valasztipust_a_szoveges_ag_is_ismeri():
+    """A FEJ NÉLKÜLI VÉGIGJÁTSZÁS találata: a sorszámos hivatkozás („a
+    másodikat") megerősítés-kérést ad vissza a `fordulo()`-ból — a
+    szöveges ág viszont csak gombnyomásból ismerte ezt a típust, és a
+    képernyőn a „Nem értettem" mondat jelent meg, miközben a naplóban
+    minden helyes volt.
+
+    A teszt a VÁLASZTÍPUS-elágazást méri, widgetek nélkül: a mondatot
+    ugyanaz a függvény állítja elő, amit a jelentés is hív."""
+    gazda = _ModGazda(vasarlo_modul.valasz_szoveg.MOD_BESZELHETO)
+    valasz = {
+        "tipus": "megerositest_ker",
+        "slot_id": "x",
+        "reteg": "orchestrator:sorszam",
+        "valasztott_jelolt": {"slot_id": "x", "kezdet": "2026-12-22T09:00:00Z"},
+    }
+
+    mondat = vasarlo_modul.VasarloApp._valasz_mondatok(
+        gazda, valasz, vasarlo_modul.valasz_szoveg.MOD_BESZELHETO
+    )
+
+    assert "December huszonkettedikén kilenc órakor" in mondat
+    assert mondat.endswith("?")
+    assert "Nem értettem" not in mondat

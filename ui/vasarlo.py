@@ -552,6 +552,19 @@ class VasarloApp(tk.Tk):
             )
             return
 
+        self._megerosites_urlap(keret, jelolt, uzenet_label)
+
+    def _megerosites_urlap(self, keret: ttk.Frame, jelolt: dict, uzenet_label: ttk.Label) -> None:
+        """A megerősítő űrlap: visszaolvasás, azonosító-mező, két gomb.
+
+        **Két úton érkezhetünk ide**, és sokáig csak az egyik volt
+        bekötve: koppintással egy időpont-gombra, VAGY szövegesen, egy
+        sorszámos hivatkozással („a másodikat"). A fej nélküli
+        végigjátszás fogta meg, hogy a második úton a képernyőn a
+        „Nem értettem" mondat jelent meg — miközben a naplóban minden
+        helyes volt (`megerositest_ker`, `orchestrator:sorszam`). A
+        `megerositest_ker` választípust a szöveges ág egyszerűen nem
+        ismerte, mert addig csak gombnyomásból keletkezhetett."""
         for widget in keret.winfo_children():
             widget.destroy()
 
@@ -1064,6 +1077,17 @@ class VasarloApp(tk.Tk):
                         text=cimke,
                         command=lambda e=ertek: self._szo_kuldes(e),
                     ).pack(side="left", padx=(0, 6))
+            return
+
+        if tipus == "megerositest_ker":
+            # SORSZÁMOS HIVATKOZÁS („a másodikat") — az orchestrator
+            # rövidzárja (`assistant/sorszam.py`) ugyanoda vezet, mint a
+            # koppintás: visszaolvasás, azonosító, megerősítés.
+            jelolt = valasz.get("valasztott_jelolt") or {}
+            self._rendszer_mondat(
+                valasz_szoveg.megerosites_ker_szoveg(jelolt.get("kezdet"), mod=mod)
+            )
+            self._megerosites_urlap(self.szo_jelolt_keret, jelolt, self.szo_uzenet)
             return
 
         if tipus == "ajanlat":

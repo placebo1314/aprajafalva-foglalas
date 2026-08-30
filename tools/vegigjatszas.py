@@ -95,7 +95,14 @@ BESZELGETESEK: list[tuple[str, list[str]]] = [
     # műszakot, tehát csak itt fut végig a tényleges keresés → ajánlat →
     # foglalás út. A fenti nyolc a nyelvi értelmezést méri, ez az ötös
     # azt, hogy a felület ténylegesen elvezet-e a foglalási kódig.
-    ("zárt kérdés + gombnyomás", ["szeretnék időpontot holnapra", "torpilla"]),
+    # A gombnyomás UTÁN egy sorszámos hivatkozás: a felajánlott
+    # jelöltek közül a másodikat kéri. Ez a leggyakoribb természetes
+    # válasz egy listára (`assistant/sorszam.py`), és a végigjátszásban
+    # eddig egyetlen forduló sem hajtotta meg.
+    (
+        "zárt kérdés + gombnyomás + sorszámos választás",
+        ["szeretnék időpontot holnapra", "torpilla", "a másodikat kérem"],
+    ),
     ("kapuőr", ["Mennyibe kerül a nagy petárda?"]),
     ("tényválasz", ["Hogy néz ki a Törpilla bolt?"]),
     ("lemondás kód nélkül", ["Le szeretném mondani a foglalásomat."]),
@@ -238,7 +245,12 @@ def _sajat_probak(app) -> None:
             app._szo_kuldes(mondat)
             uj_sorok, naplo_hossz = _naplo_ujdonsag(app, naplo_hossz)
             ertelmezes = app.orchestrator.utolso_ertelmezes or {}
-            reteg = getattr(app.orchestrator.ertelmezo, "utolso_reteg", None)
+            # A réteget elsősorban az ÉRTELMEZÉS mondja meg: a
+            # sorszámos rövidzárnál az orchestrator dönt, és az
+            # értelmező `utolso_reteg`-je az ELŐZŐ fordulóé lenne.
+            reteg = ertelmezes.get("reteg") or getattr(
+                app.orchestrator.ertelmezo, "utolso_reteg", None
+            )
             print(f"\n  > {mondat}")
             print(f"    réteg:       {reteg}")
             print(f"    eszköz:      {ertelmezes.get('eszkoz')}")
@@ -297,7 +309,12 @@ def _robusztus_halmaz(app) -> int:
 
             uj_sorok, naplo_hossz = _naplo_ujdonsag(app, naplo_hossz)
             ertelmezes = app.orchestrator.utolso_ertelmezes or {}
-            reteg = getattr(app.orchestrator.ertelmezo, "utolso_reteg", None)
+            # A réteget elsősorban az ÉRTELMEZÉS mondja meg: a
+            # sorszámos rövidzárnál az orchestrator dönt, és az
+            # értelmező `utolso_reteg`-je az ELŐZŐ fordulóé lenne.
+            reteg = ertelmezes.get("reteg") or getattr(
+                app.orchestrator.ertelmezo, "utolso_reteg", None
+            )
             print(f"\n  > {mondat!r}")
             if not uj_sorok:
                 # A felület el sem küldte a fordulót (üres/whitespace
