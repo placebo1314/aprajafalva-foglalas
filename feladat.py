@@ -8,6 +8,7 @@ python feladat.py migracio "<leiras>"
 python feladat.py seed [--ujra]
 python feladat.py vegigjatszas [--db UTVONAL] [--robusztus] [--mod szoveges|beszelheto|mindketto]
 python feladat.py naplo [--utolso N] [--golden SOR]
+python feladat.py riport [--utolso N] [--ki UTVONAL] [--megnyit]
 python feladat.py lint
 
 A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
@@ -37,6 +38,15 @@ ELOSZLÁS (p50/p95/átlag/max) a kétpontos elváráshoz mérve PLUSZ a
 tendencia (ADR-022), bizonyosság-eloszlás, leggyakoribb hibaminták. A
 `--golden <sor>` egy naplósorból golden teszteset-vázat ír, a `varhato`
 mezőt ÜRESEN hagyva — a helyes választ embernek kell beírnia.
+
+A `riport` ugyanebből a naplóból EGY FORDULÓT mutat meg teljes
+mélységben (`tools/beszelgetes_riport.py`): egyetlen, offline
+megnyitható HTML fájl, fordulónként összecsukható blokkal — bemenet és
+normalizált alak egymás mellett, a döntő réteg színkóddal, a teljes
+prompt, a nyers modellválasz, a dátumfeloldás (modell vs. parser), a
+lépésenkénti idő, és a kimenő válasz MINDKÉT módban. A `naplo`
+összesít, ez elmélyed: az egyik megmondja, hogy baj van, a másik azt,
+hogy mi.
 """
 
 from __future__ import annotations
@@ -99,6 +109,10 @@ def naplo(argv: list[str]) -> int:
     return fut([sys.executable, "-m", "tools.naplo_elemzo", *argv])
 
 
+def riport(argv: list[str]) -> int:
+    return fut([sys.executable, "-m", "tools.beszelgetes_riport", *argv])
+
+
 def lint(_: list[str]) -> int:
     for parancs in (
         [sys.executable, "-m", "ruff", "format", "--check", "."],
@@ -117,6 +131,7 @@ FELADATOK = {
     "seed": seed,
     "vegigjatszas": vegigjatszas,
     "naplo": naplo,
+    "riport": riport,
     "lint": lint,
 }
 

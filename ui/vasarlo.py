@@ -107,6 +107,7 @@ import json
 import sys
 import time
 import tkinter as tk
+import webbrowser
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from tkinter import ttk
@@ -656,9 +657,9 @@ class VasarloApp(tk.Tk):
         also_gombsor.pack(anchor="w")
         # Tesztelés közben ez mutatja meg, MI történt: melyik réteg
         # oldotta meg, minek értette, mennyire volt biztos benne.
-        ttk.Button(also_gombsor, text="Napló megnyitása", command=self._naplo_ablak).pack(
-            side="left", padx=(0, 6)
-        )
+        ttk.Button(
+            also_gombsor, text="Napló megnyitása (böngészőben)", command=self._naplo_ablak
+        ).pack(side="left", padx=(0, 6))
         # A szándék kemény része (bolt, szolgáltatás) fordulók között
         # ÉLETBEN MARAD (`orchestrator.kovetkezo_kontextus`) — ez a
         # helyes viselkedés alkudozásnál, de próbálgatás közben azt
@@ -686,15 +687,45 @@ class VasarloApp(tk.Tk):
         self.szo_naplo.config(state="disabled")
 
     def _naplo_ablak(self) -> None:
-        """A `naplo/probak.jsonl` eddigi próbái egy külön ablakban. A
-        tartalmat a `proba_naplo_szoveg()` állítja elő — ez a metódus
-        csak megjeleníti (a formázás Tkinter nélkül is tesztelhető)."""
+        """A próba-napló BÖNGÉSZŐBEN, a beszélgetés-elemzővel
+        (`tools/beszelgetes_riport.py`).
+
+        Korábban ez a gomb a nyers naplót írta ki egy Tkinter-ablakba.
+        Az olvasható volt, de csak addig, amíg egy forduló elfért nyolc
+        sorban — a prompt, a nyers modellválasz és a dátumfeloldás már
+        nem fér el, márpedig a „miért ezt csinálta" kérdésre pont azok
+        felelnek. A böngésző ezt ingyen megoldja (összecsukható blokkok,
+        kereshetőség, elküldhető fájl), és nem kell hozzá semmit
+        megépíteni.
+
+        **Ha a jelentés bármi okból nem áll elő, a régi szöveges ablak
+        nyílik meg** — a napló megnézhetősége fontosabb, mint a formája,
+        és egy hibakereső eszköz nem dőlhet el hibakeresés közben."""
+        try:
+            utvonal = self._riport_ir()
+        except OSError as exc:
+            self._naplo_ablak_szovegesen(f"A HTML-jelentés nem állt elő: {exc}\n\n")
+            return
+        webbrowser.open(utvonal.resolve().as_uri())
+
+    def _riport_ir(self) -> Path:
+        """A HTML-jelentés kiírása. Külön metódus, hogy a hibaág
+        (`_naplo_ablak`) tesztelhető legyen."""
+        from tools.beszelgetes_riport import ALAP_KIMENET, riport
+
+        ALAP_KIMENET.parent.mkdir(parents=True, exist_ok=True)
+        ALAP_KIMENET.write_text(riport(proba_naplo_olvas()), encoding="utf-8")
+        return ALAP_KIMENET
+
+    def _naplo_ablak_szovegesen(self, elotag: str = "") -> None:
+        """A RÉGI, Tkinter-ablakos nézet — tartalék, ha a jelentés nem
+        áll elő."""
         ablak = tk.Toplevel(self)
         ablak.title("Próba-napló — naplo/probak.jsonl")
         ablak.geometry("760x520")
         szoveg = tk.Text(ablak, wrap="word")
         szoveg.pack(fill="both", expand=True)
-        szoveg.insert("end", proba_naplo_szoveg(proba_naplo_olvas()))
+        szoveg.insert("end", elotag + proba_naplo_szoveg(proba_naplo_olvas()))
         szoveg.config(state="disabled")
 
     # A kiút-gombok mögötti, előre megírt mondatok: a választás egy új
