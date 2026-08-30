@@ -309,40 +309,6 @@ def alternativa_szoveg(
     )
 
 
-def masik_bolt_szoveg(
-    masik_bolt: dict | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
-) -> tuple[str, str] | None:
-    """`(mondat, gombfelirat)` — „itt nincs, de a szomszédban van" —,
-    vagy `None`, ha nincs mit ajánlani.
-
-    A `masik_bolt` az eszköz kimenete
-    (`assistant/tools/szabad_idopontok.py::masik_bolt_ahol_van`): egy
-    bolt-slug és a legkorábbi ottani időpont. **A mondat az időpontot
-    NEM mondja ki** — csak azt, hogy ott van szabad időpont. Konkrét
-    időpontot kizárólag holddal szabad mutatni (CLAUDE.md 6.
-    invariáns); a hold akkor keletkezik, amikor a vásárló ténylegesen
-    odalép (a gomb új keresést indít). Az időpont-adat a naplóé és a
-    jelentésé: abból látszik, MIÉRT épp azt a boltot ajánlottuk."""
-    if not masik_bolt or not masik_bolt.get("bolt_id"):
-        return None
-    slug = masik_bolt["bolt_id"]
-    bolt_nev = katalogus.BOLT_NEVEK.get(slug, slug)
-    # A NÉVELŐ a bolt nevétől függ („az Ügyifogyi", „a Törpilla") — a
-    # sablonba írt fix „a" mindkét módban hibás mondatot adna. Ugyanaz a
-    # szabály, mint a nyugtázó soré.
-    nevelovel = f"{_hatarozott_nevelo(bolt_nev)} {bolt_nev}"
-    if _beszelheto_e(mod):
-        beszelt = SABLONOK[nyelv]["beszelheto"]["masik_bolt"]
-        mondat = f"{beszelt['bevezetes'].format(bolt=nevelovel)} {beszelt['kerdes']}"
-    else:
-        mondat = SABLONOK[nyelv]["masik_bolt"]["bevezetes"].format(bolt=nevelovel)
-    # A mondat NÉVELŐVEL kezdődik, ami kisbetűs — a beszélhető kapu
-    # nagybetűsít, a szöveges ágon itt kell megtenni.
-    mondat = mondat[:1].upper() + mondat[1:]
-    gomb = SABLONOK[nyelv]["masik_bolt"]["gomb"].format(bolt=bolt_nev)
-    return kimenet(mondat, mod), gomb
-
-
 def visszakerdezes_szoveg(
     hianyzo_mezo: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
 ) -> str:

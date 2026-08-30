@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from assistant.tools import hiba, katalogus, semaellenorzo, semak, szabad_idopontok
+from assistant.tools import hiba, katalogus, semaellenorzo, semak
 from core.api import ajanlatpontozo
 from core.repo import foglalas_repo
 
@@ -88,28 +88,13 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
         # ŐSZINTESÉG-ÁG, ugyanaz a megkülönböztetés, mint a
         # `szabad_idopontok`-nál: az üres naptár NEM szűkösség
         # (blueprint 7. szakasz, "Szűkösség jelzése").
-        # MÁSIK BOLT: ugyanaz a kérdés, mint a `szabad_idopontok`-nál —
-        # a „nincs" válasz igaz, de haszontalan, ha nem mondja meg, hol
-        # VAN (`szabad_idopontok._masik_bolt_ahol_van`).
-        masik = szabad_idopontok.masik_bolt_ahol_van(
-            conn,
-            org_id=org_id,
-            kiveve_bolt_id=bolt_id,
-            datum_tol=most_iso,
-            datum_ig=horizont_iso,
-            napszak=parameterek.get("napszak", "barmikor"),
-        )
         if not foglalas_repo.published_slots_exist(
             conn, org_id=org_id, shop_id=bolt_id, service_id=szolgaltatas_id, tol_iso=most_iso
         ):
             return hiba.hiba_eredmeny(
-                hiba.Ok.NINCS_MEGHIRDETETT_IDOPONT,
-                "nincs_meghirdetett_idopont",
-                masik_bolt=masik,
+                hiba.Ok.NINCS_MEGHIRDETETT_IDOPONT, "nincs_meghirdetett_idopont"
             )
-        return hiba.hiba_eredmeny(
-            hiba.Ok.NINCS_SZABAD_HELY, "nincs_szabad_hely_az_ablakban", masik_bolt=masik
-        )
+        return hiba.hiba_eredmeny(hiba.Ok.NINCS_SZABAD_HELY, "nincs_szabad_hely_az_ablakban")
 
     lejar = (datetime.now(UTC) + timedelta(seconds=_HOLD_TTL_MASODPERC)).strftime(
         "%Y-%m-%dT%H:%M:%SZ"

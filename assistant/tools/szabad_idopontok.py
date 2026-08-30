@@ -80,59 +80,6 @@ def tagitott_ablak(
     return None
 
 
-def masik_bolt_ahol_van(
-    conn,
-    *,
-    org_id: str,
-    kiveve_bolt_id: str,
-    datum_tol: str,
-    datum_ig: str,
-    napszak: str,
-) -> dict | None:
-    """Melyik MÁSIK boltban van szabad időpont ugyanebben az ablakban —
-    `{"bolt_id": slug, "legkorabbi": iso}` vagy `None`.
-
-    **Miért kell.** A „nincs meghirdetett időpont" válasz igaz, de
-    haszontalan: nem mondja meg, hol VAN. A vásárló 5. igénye (blueprint
-    1.) épp ez: *„ha nincs hely, alternatíva jöjjön"* — és az
-    `_alternativ_dimenzio` ezt eddig csak a NAPTÁRON belül nézte (másik
-    napszak, nap, hét), a boltok között nem.
-
-    **A szolgáltatás-szűrő szándékosan kimarad** a másik boltnál: a
-    szolgáltatás bolt-specifikus (az „altató" csak a Szundié), tehát a
-    kért szolgáltatással szűrve sosem találnánk semmit. Az ajánlat a
-    BOLTRÓL szól, nem a szolgáltatásról.
-
-    **Nem foglal holdot, és a `legkorabbi` időpontot NEM mondjuk ki.**
-    A CLAIM ennyi: „ott van szabad időpont" — ugyanaz a fajta állítás,
-    mint az `_alternativ_dimenzio`-é, és ugyanúgy egy tényleges
-    kereséssel igazolt. Konkrét időpontot csak holddal szabad mutatni
-    (CLAUDE.md 6. invariáns), az pedig akkor keletkezik, amikor a
-    vásárló ténylegesen odalép. A `legkorabbi` mező a naplóé és a
-    jelentésé — abból látszik, MIÉRT ajánlottuk épp azt a boltot."""
-    talalatok = []
-    for slug in sorted(katalogus.BOLT_SLUGOK):
-        masik_id = katalogus.bolt_id_felold(conn, org_id, slug)
-        if masik_id is None or masik_id == kiveve_bolt_id:
-            continue
-        jelolt = ajanlatpontozo.earliest_free(
-            conn,
-            org_id=org_id,
-            shop_id=masik_id,
-            service_id=None,
-            tol_iso=datum_tol,
-            ig_iso=datum_ig,
-            napszak=napszak,
-        )
-        if jelolt is not None:
-            talalatok.append({"bolt_id": slug, "legkorabbi": jelolt["kezdet"]})
-    if not talalatok:
-        return None
-    # A LEGKORÁBBI nyer: ha két boltban is van, az az érdekes, ahol
-    # hamarabb sorra kerül.
-    return min(talalatok, key=lambda t: t["legkorabbi"])
-
-
 def _alternativ_dimenzio(
     conn,
     *,
@@ -240,14 +187,6 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
                 hiba.Ok.NINCS_MEGHIRDETETT_IDOPONT,
                 "nincs_meghirdetett_idopont",
                 alternativ_dimenzio=None,
-                masik_bolt=masik_bolt_ahol_van(
-                    conn,
-                    org_id=org_id,
-                    kiveve_bolt_id=bolt_id,
-                    datum_tol=datum_tol,
-                    datum_ig=datum_ig,
-                    napszak=napszak,
-                ),
             )
 
         dimenzio = _alternativ_dimenzio(
@@ -264,22 +203,6 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
             hiba.Ok.NINCS_SZABAD_HELY,
             "nincs_szabad_hely_az_ablakban",
             alternativ_dimenzio=dimenzio,
-            # MÁSIK BOLT csak akkor, ha a boltON BELÜL nincs mit
-            # ajánlani. A sorrend nem esztétika: a vásárló ezt a boltot
-            # kérte, tehát előbb a napszakot/napot/hetet tágítjuk, és
-            # csak azután javasoljuk, hogy menjen máshova.
-            masik_bolt=(
-                None
-                if dimenzio
-                else masik_bolt_ahol_van(
-                    conn,
-                    org_id=org_id,
-                    kiveve_bolt_id=bolt_id,
-                    datum_tol=datum_tol,
-                    datum_ig=datum_ig,
-                    napszak=napszak,
-                )
-            ),
         )
 
     lejar = _hold_lejar(datetime.now(UTC))

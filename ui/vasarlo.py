@@ -775,49 +775,6 @@ class VasarloApp(tk.Tk):
             command=lambda d=dimenzio: self._alternativa_kereses(d),
         ).pack(side="left", padx=(0, 6))
 
-    def _masik_bolt_felajanl(self, masik_bolt: dict | None, ablak: dict) -> None:
-        """„Itt nincs, de a szomszédban van" — koppintható felajánlással.
-
-        Az `_alternativa_felajanl` a boltON BELÜL tágít (napszak, nap,
-        hét); ez a következő lépcső, amikor a bolton belül nincs mit
-        ajánlani. A gomb egy ELŐRE MEGÍRT mondatot küld vissza új
-        fordulóként — onnantól a szokásos út fut (értelmező →
-        állapotgép), és a jelöltekre ott keletkezik hold. Ezért nem
-        mondunk konkrét időpontot: azt csak holddal szabad mutatni
-        (CLAUDE.md 6. invariáns)."""
-        szovegek = valasz_szoveg.masik_bolt_szoveg(masik_bolt, mod=self._mod())
-        if szovegek is None:
-            return
-        mondat, gomb_felirat = szovegek
-        self._rendszer_mondat(mondat)
-        bolt_slug = masik_bolt["bolt_id"]
-        ttk.Button(
-            self.szo_gombsor,
-            text=gomb_felirat,
-            command=lambda b=bolt_slug, a=dict(ablak): self._masik_bolt_kereses(b, a),
-        ).pack(side="left", padx=(0, 6))
-
-    def _masik_bolt_kereses(self, bolt_slug: str, ablak: dict) -> None:
-        """A másik boltra UGYANAZZAL az időablakkal keresünk.
-
-        Nem egy előre megírt mondatot küldünk vissza (mint a
-        kiút-gomboknál), mert a bolt NEVE önmagában elveszítené a napot
-        és a napszakot — a vásárlónak újra el kellene mondania, amit
-        egyszer már megmondott (a vásárló 6. igénye: javítás, ne
-        újrakezdés). A strukturált keresés ugyanazokat az eszközöket
-        hívja, mint a szöveges út."""
-        for widget in self.szo_gombsor.winfo_children():
-            widget.destroy()
-        parameterek = {
-            "bolt_id": bolt_slug,
-            "datum_tol": ablak.get("datum_tol") or f"{self._most_iso()[:10]}T00:00:00Z",
-            "datum_ig": ablak.get("datum_ig") or f"{self._most_iso()[:10]}T23:59:59Z",
-            "napszak": ablak.get("napszak", "barmikor"),
-        }
-        self._naplo_ir(_TE_CIMKE, katalogus.BOLT_NEVEK.get(bolt_slug, bolt_slug))
-        valasz = self.orchestrator.kereses_strukturaltan(self.session_id, parameterek)
-        self._szoveges_valasz_kezel(valasz)
-
     def _alternativa_kereses(self, dimenzio: str) -> None:
         for widget in self.szo_gombsor.winfo_children():
             widget.destroy()
@@ -1051,9 +1008,6 @@ class VasarloApp(tk.Tk):
             reszek.append(valasz_szoveg.megerosites_ker_szoveg(jelolt.get("kezdet"), mod=mod))
         elif valasz.get("uzenet_kulcs"):
             reszek.append(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
-            masik = valasz_szoveg.masik_bolt_szoveg(valasz.get("masik_bolt"), mod=mod)
-            if masik:
-                reszek.append(masik[0])
         elif valasz.get("sikeres"):
             reszek.append(valasz_szoveg.tenyvalasz_szoveg(valasz, mod=mod))
         return valasz_szoveg.fordulo_szoveg(reszek, mod)
@@ -1167,7 +1121,6 @@ class VasarloApp(tk.Tk):
             kulcs = valasz.get("uzenet_kulcs", "")
             self._rendszer_mondat(valasz_szoveg.hiba_szoveg(kulcs, mod=mod))
             self._alternativa_felajanl(valasz.get("alternativ_dimenzio"))
-            self._masik_bolt_felajanl(valasz.get("masik_bolt"), valasz.get("felismert_ablak") or {})
             return
 
         if valasz.get("sikeres"):
