@@ -347,7 +347,7 @@ következménye: a kimeneti mód a VÁLASZ oldalán van, az értelmezéshez
 nem nyúl.
 
 **A beszélhető kimenet formai ellenőrzése a TELJES végigjátszáson** — a
-149 rendszer-mondatból:
+154 rendszer-mondatból:
 
 | Vizsgálat | Sértés |
 |---|---|
@@ -371,10 +371,10 @@ két mód együtt):
 
 | | |
 |---|---|
-| réteg-megoszlás | `llm` 83,3%, **`kapuor` 14,6%**, `szabaly:*` 2,0% |
-| válaszidő | **p50 3,81 s, p95 4,13 s, átlag 3,17 s, max 4,40 s** |
+| réteg-megoszlás | `llm` 83,3%, **`kapuor` 13,7%**, `szabaly:*` 2,0%, `orchestrator:sorszam` 1,0% |
+| válaszidő | **p50 3,87 s, p95 4,83 s, átlag 3,38 s, max 15,62 s** |
 | a p95-elvárás (25 s) felett | **0 forduló** |
-| tendencia | **stabil** (első fél p50 3,81 s → második fél 3,79 s, −1%) |
+| tendencia | **stabil** (első fél p50 3,95 s → második fél 3,80 s, −4%) |
 | `csendes_tartalek` riasztás | **0** (a múltkori 37 egy Ollama NÉLKÜLI futásból jött — a detektor tehát jól jelzett) |
 
 **A válaszidőről őszintén:** a 2026-08-23-i mérés ugyanezekre a
@@ -470,7 +470,7 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
    **RÉSZBEN MEGVÁLASZOLVA** (2026-08-23): a blueprint 12. szakasza egy
    15 másodperces ÁTLAGOS keretet kapott; 2026-08-26-tól ez KÉTPONTOS
    ELOSZLÁS (ADR-022: p50 < 10 s, p95 < 25 s), ami ma tartja magát
-   (3,81 s / 4,13 s a valódi felületen, 204 fordulón). A többi
+   (3,87 s / 4,83 s a valódi felületen, 204 fordulón). A többi
    p95-sor (mag, keresés, első reakció) továbbra is felfüggesztve —
    véglegesítésük ADR-t igényel (blueprint 12., „a véglegesítéshez
    ADR kell").
@@ -500,7 +500,7 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
   hoz**. Az önkonzisztencia (ADR-021) épp ezen a feltételen bukott el.
   **Ma mindkét pont tartja magát** (robusztussági halmaz: p50 4,62 s /
   p95 5,08 s; nyelvi: 4,72 s / 5,22 s; a 204 fordulós próba-napló:
-  3,81 s / 4,13 s, tendencia stabil). **A p95 = 25 s SZÖVEGES
+  3,87 s / 4,83 s, tendencia stabil). **A p95 = 25 s SZÖVEGES
   csatornára szól** — hangon 25 másodperc csönd nem türelmi határ,
   hanem a hívás vége; ezt a hangcsatorna bekötésekor újra kell
   tárgyalni. Az M-1 mérés szerinti eredeti helyzet változatlan: minden
