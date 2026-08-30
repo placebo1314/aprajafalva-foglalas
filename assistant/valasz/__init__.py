@@ -239,7 +239,11 @@ def ajanlat_mondat(
 
 
 def kiut_szoveg(
-    dimenziok: list[str], *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
+    dimenziok: list[str],
+    *,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+    mod: str = MOD_SZOVEGES,
+    bevezetessel: bool = True,
 ) -> tuple[str, list[tuple[str, str]]]:
     """`(bevezető mondat, [(dimenzió, gombfelirat), ...])` az
     ismétlés-kiúthoz. A `dimenziok` az orchestrator zárt kimenete
@@ -260,12 +264,14 @@ def kiut_szoveg(
     nevek = [beszelt["dimenzio"][d] for d, _ in gombok if d in beszelt["dimenzio"]]
     if not nevek:
         return kimenet(beszelt["bevezetes"], mod), gombok
-    return (
-        kimenet(
-            f"{beszelt['bevezetes']} {beszelt['kerdes'].format(dimenziok=_felsorolas(nevek))}", mod
-        ),
-        gombok,
-    )
+    kerdes = beszelt["kerdes"].format(dimenziok=_felsorolas(nevek))
+    # `bevezetessel=False`: a hívó MÁR kimondott egy tényt ebben a
+    # fordulóban (pl. „ezen a héten nincs időpont"), és hangon két
+    # mondat fér bele. Ilyenkor a tény fontosabb, mint a saját
+    # bevezetőnk — az csak azt ismételné meg, amit a helyzet úgyis
+    # elárul.
+    mondat = f"{beszelt['bevezetes']} {kerdes}" if bevezetessel else kerdes
+    return kimenet(mondat, mod), gombok
 
 
 def _felsorolas(elemek: list[str]) -> str:

@@ -366,3 +366,35 @@ def test_a_szabalyossag_a_mondatszamot_es_a_kerdest_is_meri() -> None:
     assert not beszelheto.szabalyos("Egy. Kettő. Három.")
     assert not beszelheto.szabalyos("Melyik bolt? Melyik nap?")
     assert beszelheto.szabalyos("Találtam időpontot. Melyik jó?")
+
+
+# =====================================================================
+# 7. A KIÚT nem nyelheti el a tényt
+# =====================================================================
+
+
+def test_kiut_bevezeto_nelkul_ha_mar_elhangzott_a_teny() -> None:
+    """A VÉGIGJÁTSZÁS találata: a vásárló megadott egy új napot, a
+    keresés megint üres lett, és a rendszer egyből azt mondta, hogy „így
+    nem jutunk előre" — a vásárló meg sem tudta, hogy a jövő héten sincs
+    időpont.
+
+    A tény a kiút ELÉ kerül; hangon viszont két mondat fér bele, tehát
+    ilyenkor a kiút SAJÁT bevezetője marad ki. Az csak azt ismételné
+    meg, amit a helyzet úgyis elárul."""
+    teljes, _ = valasz.kiut_szoveg(["bolt", "nap", "napszak"], mod=BESZELHETO)
+    csak_kerdes, _ = valasz.kiut_szoveg(
+        ["bolt", "nap", "napszak"], mod=BESZELHETO, bevezetessel=False
+    )
+
+    assert teljes.startswith("Úgy látom")
+    assert not csak_kerdes.startswith("Úgy látom")
+    assert csak_kerdes.endswith("?")
+
+    # A kettő EGYÜTT a tény mondatával: pontosan két mondat, egy kérdés.
+    fordulo = beszelheto.fordulo_szoveg(
+        [valasz.hiba_szoveg("nincs_meghirdetett_idopont", mod=BESZELHETO), csak_kerdes]
+    )
+    assert "nem hirdetett meg időpontokat" in fordulo
+    assert fordulo.endswith("?")
+    assert beszelheto.szabalyos(fordulo)

@@ -967,8 +967,15 @@ class VasarloApp(tk.Tk):
         reszek: list[str] = []
         if tipus in ("elutasitas", "kiut") and valasz.get("uzenet_kulcs"):
             if tipus == "kiut" and not valasz.get("emberhez"):
+                eredeti_kulcs = valasz.get("eredeti_uzenet_kulcs")
+                if eredeti_kulcs:
+                    reszek.append(valasz_szoveg.hiba_szoveg(eredeti_kulcs, mod=mod))
                 reszek.append(
-                    valasz_szoveg.kiut_szoveg(valasz.get("valaszthato_dimenziok", []), mod=mod)[0]
+                    valasz_szoveg.kiut_szoveg(
+                        valasz.get("valaszthato_dimenziok", []),
+                        mod=mod,
+                        bevezetessel=not eredeti_kulcs,
+                    )[0]
                 )
             else:
                 reszek.append(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
@@ -1020,8 +1027,21 @@ class VasarloApp(tk.Tk):
             if valasz.get("emberhez"):
                 self._rendszer_mondat(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
                 return
+            # A kiút NEM nyelheti el a TÉNYT. A végigjátszás fogta meg:
+            # a vásárló megadott egy új napot („jövő héten, vagy
+            # 28-án"), a keresés megint üres lett, és a rendszer
+            # egyből azt mondta, hogy „így nem jutunk előre" — a
+            # vásárló meg sem tudta, hogy a jövő héten sincs időpont.
+            # Az eredeti üzenet ezért a kiút ELÉ kerül; beszélhető
+            # módban a fordulónkénti két mondat pont ezt a párost
+            # engedi át (a tény + a zárt kérdés).
+            eredeti_kulcs = valasz.get("eredeti_uzenet_kulcs")
+            if eredeti_kulcs:
+                self._rendszer_mondat(valasz_szoveg.hiba_szoveg(eredeti_kulcs, mod=mod))
             bevezetes, gombok = valasz_szoveg.kiut_szoveg(
-                valasz.get("valaszthato_dimenziok", []), mod=mod
+                valasz.get("valaszthato_dimenziok", []),
+                mod=mod,
+                bevezetessel=not eredeti_kulcs,
             )
             self._rendszer_mondat(bevezetes)
             for dimenzio, felirat in gombok:
