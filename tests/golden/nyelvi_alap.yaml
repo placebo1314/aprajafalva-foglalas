@@ -946,14 +946,19 @@ esetek:
         szolgaltatas_id: nagy_orom
         datum_tol: "2026-08-21T00:00:00Z"
         datum_ig: "2026-08-21T23:59:59Z"
-        napszak: MINDEGY
+        napszak: barmikor
     megjegyzes: >
-      A „nem számít, hány órára" a napszak elengedése. A KERESÉS
-      szempontjából ez ugyanaz, mint a „barmikor" alapértelmezés
-      (`szabad_idopontok.napszak_ertek`), a SZÁNDÉK szempontjából nem:
-      a „barmikor" a mi feltevésünk, a MINDEGY a vásárló kimondott
-      döntése. Ezért kerül át a kontextusba is — hogy egy későbbi
-      szűkítő javaslat ne kerüljön szembe azzal, amit kimondott.
+      A „nem számít, hány órára" a napszak elengedése — a séma engedi
+      is a MINDEGY-et ezen a mezőn. A VÁRT érték mégis `barmikor`,
+      mert a napszakon a három állapot kettőre esik össze: a napszakra
+      SOHA nem kérdezünk vissza, tehát nincs olyan kérdés, amit az
+      elengedés elnémítana, és a keresés szempontjából a kettő azonos.
+      A kapu ezért normalizál (`forditott_kaszkad::_mondatbeli_napszak`).
+
+      Amit az eset ténylegesen mér: a „nem számít, hány órára"
+      mondatból NEM lesz konkrét napszak. A hibás válasz itt a
+      `delelott` vagy a `delutan` lenne — egy kitalált szűkítés arra,
+      amit a vásárló épp elengedett.
     cimkek: [mindegy, elengedett_mezo]
 
   - id: mindegy-03-pult
@@ -984,6 +989,7 @@ esetek:
       engedte el. Ez az eset ezért NEM „majdnem jó" — a
       MINDEGY túláltalánosítása pont az a hiba, amit a szentinel
       bevezetése olcsóvá tett, és amit mérni akarunk.
+    cimkek: [mindegy, nem_letezo_mezo]
 
   - id: mindegy-04-legkorabbi-elengedessel
     bemenet: "Nekem tényleg mindegy mikor, csak a legkorábbi legyen az altatóshoz."

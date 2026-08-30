@@ -483,14 +483,25 @@ class ForditottKaszkadErtelmezo:
         if not napszak:
             return None
         if napszak == MINDEGY:
-            # A MINDEGY átjön a kapun. A kapu az ELSZIVÁRGÓ SZŰKÍTÉS
-            # ellen véd (egy korábbi forduló „délelőtt"-je némán
-            # levágná a kitágított ablakot); a MINDEGY az ellenkező
-            # irányba mutat — tágít, nem szűkít —, tehát ugyanaz a
-            # veszély nem áll fenn. Ellenőrizni pedig nem tudnánk
-            # kulcsszólista nélkül, az pedig épp az, amit nem akarunk:
-            # a „mindegy" felismerése nyelvi feladat, a modellé.
-            return napszak
+            # A NAPSZAKON A HÁROM ÁLLAPOT KETTŐRE ESIK ÖSSZE, ezért itt
+            # a MINDEGY „barmikor"-rá normalizálódik.
+            #
+            # A szentinel akkor ér valamit, ha egy KÉRDÉST némít el: a
+            # boltra és a szolgáltatásra rákérdeznénk, a napszakra soha
+            # (nincs a `_KRITIKUS_MEZOK` között, nem blokkoló mező). Itt
+            # tehát a „mindegy" és az alapértelmezett „bármikor"
+            # viselkedésben azonos — két név ugyanarra a dologra, épp az
+            # a hibaosztály, amit a szentinel bevezetésekor
+            # felszámoltunk (docs/ALTALANOSITAS.md 1.6).
+            #
+            # **Mérés, ami eldöntötte** (2026-08-30, végigjátszás,
+            # `qwen3.5:9b`): 54 fordulóból 6-ban jött `napszak: MINDEGY`
+            # — és MINDEGYIK olyan mondatra, amiben egy szó sem esett
+            # időpontról („Petárdázni szeretnék.", „Szundihoz mennék.").
+            # A modell tehát „nincs megadva" értelemben használta,
+            # nem „elengedtem" értelemben. Ha ezt átengednénk, a
+            # naplóban egy ki nem mondott vásárlói döntés állna.
+            return "barmikor"
         if rule_based.napszak_feloldas(mondat) is None:
             _LOG.info("kaszkád: a modell napszaka nem az aktuális mondatból való (%r)", napszak)
             return None

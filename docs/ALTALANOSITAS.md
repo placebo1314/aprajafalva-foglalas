@@ -115,6 +115,20 @@ használhatja — a felismerése nyelvi feladat, nem kulcsszólista.
 `None` egyszerre jelenti azt, hogy „nem tudjuk", és azt, hogy „nincs
 megkötés".
 
+**És a fordítottja is hibaosztály — ezt a végigjátszás fogta meg.** A
+szentinel bevezetése után a modell a `napszak` mezőn olyan mondatokra
+is `MINDEGY`-et adott, amikben egy szó sem esett időpontról (54
+fordulóból 6: „Petárdázni szeretnék.", „Szundihoz mennék."). Vagyis
+„nincs megadva" értelemben használta, nem „elengedtem" értelemben.
+
+A javítás nem a prompt szigorítása lett, hanem a HATÁR kimondása: **a
+szentinel ott ér valamit, ahol egy KÉRDÉST némít el.** A boltra és a
+szolgáltatásra rákérdeznénk, a napszakra soha — ott tehát a három
+állapot kettőre esik össze, és a kapu `barmikor`-ra normalizál. Egy
+elengedés, aminek nincs elnémítandó kérdése, csak egy második név
+ugyanarra az értékre — ami megint az 1.6 hibaosztálya, csak a másik
+irányból.
+
 ### 1.7 A lazítás dimenziói bolton belülre kerültek (2026-08-30, ADR-024)
 
 **A bukás:** a „nincs hely" válaszra a rendszer másik BOLTOT ajánlott.

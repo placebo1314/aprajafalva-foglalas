@@ -42,6 +42,15 @@ from core.repo import torzsadat_repo
 # Zárt halmazbeli érték (a sémák enumjában is szerepel), tehát a modell
 # is használhatja — a felismerése nyelvi feladat, nem kulcsszólista
 # (`assistant/interpreter/llm_based.py` rendszerprompt).
+#
+# **Hol ér valamit, és hol nem.** A szentinel ott hasznos, ahol egy
+# KÉRDÉST némít el: a `bolt_id`-ra és a `szolgaltatas_id`-ra
+# rákérdeznénk, tehát ott a három állapot valóban három. A `napszak`-ra
+# SOHA nem kérdezünk vissza (nem blokkoló mező), ezért ott a MINDEGY és
+# az alapértelmezett „barmikor" viselkedésben azonos — a determinisztikus
+# kapu emiatt normalizálja („barmikor"), l.
+# `forditott_kaszkad::_mondatbeli_napszak`. A `pult` pedig nem is mező:
+# a keresés soha nem szűkít pultra (ADR-024).
 MINDEGY = "MINDEGY"
 
 # slug -> a torzsadat_repo-ban tárolt pontos bolt-név.
