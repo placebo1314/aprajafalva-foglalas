@@ -299,3 +299,83 @@ def test_beszelheto_puffer_nem_csordul_at_a_kovetkezo_fordulora():
 
     assert gazda.kiirt == ["Melyik boltba szeretnél menni?"]
     assert gazda._rendszer_puffer == []
+
+
+# --- nyomkövetés: a rövidzár nem örökölheti az előző fordulót --------
+
+
+class _NyomGazda:
+    """A `VasarloApp` nyomkövetés-gyűjtő metódusai Tkinter nélkül."""
+
+    _llm_reteg = vasarlo_modul.VasarloApp._llm_reteg
+    _modellhivasok_szama = vasarlo_modul.VasarloApp._modellhivasok_szama
+    _nyomkovetes = vasarlo_modul.VasarloApp._nyomkovetes
+    _valasz_mondatok = vasarlo_modul.VasarloApp._valasz_mondatok
+
+    def __init__(self, ertelmezo):
+        self.orchestrator = type("Orch", (), {"ertelmezo": ertelmezo})()
+
+
+class _AlEertelmezo:
+    """Egy értelmező, aminek MARADT nyomkövetése egy korábbi fordulóból."""
+
+    def __init__(self):
+        self.utolso_nyomkovetes = {
+            "lepesek": [{"nev": "modellhívás", "masodperc": 13.5}],
+            "datum": {"nyertes": "parser (a modell idézetéből)"},
+            "mezo_forras": {"bolt_id": "modell"},
+        }
+        self.llm = type(
+            "LLM",
+            (),
+            {
+                "hivasok_szama": 7,
+                "utolso_prompt": {"vasarlo": "Törpillához mennék holnap"},
+                "utolso_nyers_valasz": '{"eszkoz": "szabad_idopontok"}',
+                "utolso_sema_ok": True,
+                "utolso_hiba": None,
+            },
+        )()
+
+
+def test_nyomkovetes_rovidzarnal_nem_orokli_az_elozo_fordulot():
+    """A sorszámos hivatkozásnál az orchestrator dönt, az értelmező meg
+    sem szólal — az ő nyomkövetése ilyenkor az ELŐZŐ fordulóé. Átmásolva
+    néma hazugság lenne a jelentésben: lépések, dátumfeloldás és prompt
+    egy másik mondatról."""
+    gazda = _NyomGazda(_AlEertelmezo())
+    valasz = {"tipus": "megerositest_ker", "reteg": "orchestrator:sorszam"}
+
+    nyom = gazda._nyomkovetes(valasz, hivasok_elotte=7)
+
+    assert nyom["rovidzar"] == "orchestrator:sorszam"
+    assert nyom["lepesek"] == []
+    assert nyom["datum"] == {}
+    assert nyom["prompt"] is None
+    assert nyom["modellhivas_db"] == 0
+
+
+def test_nyomkovetes_modellhivas_nelkul_nincs_prompt():
+    """Ugyanez a csapda a kapuőrös és a tartalék fordulóban: a modell-hívó
+    réteg megőrzi az utolsó hívás adatait, tehát hívás nélkül a KORÁBBI
+    forduló promptja állna a jelentésben."""
+    gazda = _NyomGazda(_AlEertelmezo())
+
+    nyom = gazda._nyomkovetes({"tipus": "elutasitas"}, hivasok_elotte=7)
+
+    assert nyom["modellhivas_db"] == 0
+    assert nyom["prompt"] is None
+    assert nyom["nyers_valasz"] is None
+    # …a réteg saját nyomkövetése viszont ÉRVÉNYES (a kapuőr ebben a
+    # fordulóban futott le), azt megtartjuk.
+    assert nyom["lepesek"]
+
+
+def test_nyomkovetes_modellhivassal_atveszi_a_promptot():
+    gazda = _NyomGazda(_AlEertelmezo())
+
+    nyom = gazda._nyomkovetes({"tipus": "ajanlat", "jeloltek": []}, hivasok_elotte=6)
+
+    assert nyom["modellhivas_db"] == 1
+    assert nyom["prompt"]["vasarlo"] == "Törpillához mennék holnap"
+    assert nyom["sema_ok"] is True

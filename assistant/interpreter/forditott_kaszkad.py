@@ -97,6 +97,7 @@ determinisztikusak, és a modell nem kerülheti meg őket:
 from __future__ import annotations
 
 import logging
+import time
 
 from assistant import kapuor
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, rule_based
@@ -175,6 +176,13 @@ class ForditottKaszkadErtelmezo:
         # (`ui/vasarlo.py` próba-naplója: mit LÁTOTT a modell). Nem a
         # protokoll része, a hívók `getattr`-ral olvassák.
         self.utolso_normalizalt: str | None = None
+        # NYOMKÖVETÉS: lépésenkénti idő, dátumfeloldás (modell vs.
+        # parser), és mezőnkénti FORRÁS. A beszélgetés-elemző
+        # (`tools/beszelgetes_riport.py`) ebből mutatja meg, hogy egy
+        # paraméter honnan jött — a modelltől, a parsertől, a zárt
+        # halmazból vagy a megőrzött kontextusból. Enélkül a naplóból
+        # csak az látszik, MI lett a végeredmény.
+        self.utolso_nyomkovetes: dict = {}
 
     def ertelmez(
         self,
@@ -188,11 +196,20 @@ class ForditottKaszkadErtelmezo:
         (`onkonzisztencia.py`, ADR-021) adja át — a MODELLIG megy le
         változatlanul, a determinisztikus kapukat nem érinti. `None`
         esetén minden pontosan úgy fut, mint eddig (`temperature: 0`)."""
+        self.utolso_nyomkovetes = {"lepesek": [], "mezo_forras": {}, "datum": {}}
+        kezdet = time.monotonic()
+
         # 0. KAPUŐR — hatókör-döntés a modell ELŐTT (ADR-020, blueprint
         # 10.). Kívül eső kérésnél a modell MEG SEM SZÓLAL: nem hívjuk
         # meg. Ez nem prompt-fegyelem kérdése, hanem architektúráé — és
         # egyben a leggyorsabb ág is (nulla modellhívás).
         kapuor_dontes = kapuor.dontes(mondat)
+        self._lepes("kapuőr", kezdet)
+        self.utolso_nyomkovetes["kapuor"] = {
+            "kategoria": kapuor_dontes.kategoria,
+            "ok": kapuor_dontes.ok,
+            "minta": kapuor_dontes.minta,
+        }
         if kapuor_dontes.kivul:
             self.utolso_reteg = RETEG_KAPUOR
             self.utolso_normalizalt = normalizal(mondat)
@@ -213,13 +230,14 @@ class ForditottKaszkadErtelmezo:
         # mutatja, mert a feldolgozás mindkét úton azon történik.
         normalizalt = normalizal(mondat)
         self.utolso_normalizalt = normalizalt
+        self._lepes("normalizáló", kezdet)
 
         if self.llm is None:
             self.utolso_reteg = RETEG_SZABALY_TARTALEK
-            return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
+            return self._szabaly_uttal(mondat, most, kontextus, kezdet)
         if self._zart_valasz_e(normalizalt):
             self.utolso_reteg = RETEG_SZABALY_ZART_VALASZ
-            return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
+            return self._szabaly_uttal(mondat, most, kontextus, kezdet)
 
         # A KAPUŐR MÁSODIK KATEGÓRIÁJA: engedélyezett tényválasz, zárt
         # listából. A blueprint 10. szakasza szerint ez "nem hívja az
@@ -236,21 +254,48 @@ class ForditottKaszkadErtelmezo:
             bolt_id = rule_based.bolt_feloldas(mondat)
             if bolt_id is not None:
                 self.utolso_reteg = RETEG_SZABALY_TENYVALASZ
-                return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
+                return self._szabaly_uttal(mondat, most, kontextus, kezdet)
 
         llm_eredmeny = self.llm.ertelmez(
             normalizalt, most=most, kontextus=kontextus, mintavetel=mintavetel
         )
+        self._lepes("modellhívás", kezdet)
         if self.llm.utolso_hiba is not None:
             # TARTALÉK: az Ollama nem elérhető vagy értelmezhetetlen
             # választ adott — a determinisztikus réteg veszi át, HIBA
             # NÉLKÜL (a vásárló ebből semmit nem vesz észre).
             _LOG.info("kaszkád: tartalék=szabaly (%s)", self.llm.utolso_hiba)
             self.utolso_reteg = RETEG_SZABALY_TARTALEK
-            return self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
+            return self._szabaly_uttal(mondat, most, kontextus, kezdet)
 
         self.utolso_reteg = RETEG_LLM
-        return self._determinisztikus_kapuk(llm_eredmeny, mondat, most, kontextus)
+        eredmeny = self._determinisztikus_kapuk(llm_eredmeny, mondat, most, kontextus)
+        self._lepes("determinisztikus kapuk", kezdet)
+        return eredmeny
+
+    def _szabaly_uttal(
+        self, mondat: str, most: str, kontextus: ErtelmezesKontextus, kezdet: float
+    ) -> dict:
+        """A determinisztikus réteg futtatása, a lépés idejével együtt —
+        mindhárom `szabaly:*` ág ezen megy át, hogy a nyomkövetésben ne
+        maradjon lyuk."""
+        eredmeny = self.szabaly.ertelmez(mondat, most=most, kontextus=kontextus)
+        self._lepes(f"szabály-alapú réteg ({self.utolso_reteg})", kezdet)
+        return eredmeny
+
+    def _lepes(self, nev: str, kezdet: float) -> None:
+        """Egy feldolgozási lépés lezárása a nyomkövetésben.
+
+        Az idő a forduló KEZDETÉTŐL mért, tehát a lépések összege nem az
+        összidő — a lépésenkénti időt a különbségük adja. Ez szándékos:
+        így egy kihagyott lépés sem tud „elveszni" a mérésből."""
+        nyom = self.utolso_nyomkovetes.setdefault("lepesek", [])
+        eddig = sum(lepes["masodperc"] for lepes in nyom)
+        # A `max(0.0, …)` az órafelbontás miatt kell: egy mikroszekundum
+        # alatti lépésnél a kivonás apró negatív számot adna, ami a
+        # jelentésben zavaró (és értelmetlen).
+        telt = max(0.0, time.monotonic() - kezdet - eddig)
+        nyom.append({"nev": nev, "masodperc": round(telt, 4)})
 
     def _determinisztikus_kapuk(
         self, llm_eredmeny: dict, mondat: str, most: str, kontextus: ErtelmezesKontextus
@@ -435,7 +480,7 @@ class ForditottKaszkadErtelmezo:
 
     @staticmethod
     def _datum_ablak(
-        nyers: dict, mondat: str, most: str
+        nyers: dict, mondat: str, most: str, nyom: dict | None = None
     ) -> tuple[str | None, str | None, str | None]:
         """`(datum_tol, datum_ig, napszak_a_kifejezesbol)` — a
         determinisztikus dátumfeloldás.
@@ -487,6 +532,14 @@ class ForditottKaszkadErtelmezo:
                     modell_tol,
                     parser_tol,
                 )
+            ForditottKaszkadErtelmezo._datum_nyom(
+                nyom,
+                modell_kifejezes=kifejezes or None,
+                modell_datum_tol=modell_tol,
+                parser_tol=parser_tol,
+                parser_ig=parser_ig,
+                nyertes="parser (a modell idézetéből)",
+            )
             return parser_tol, parser_ig, napszak
 
         if nyers.get("datum_tol"):
@@ -498,7 +551,28 @@ class ForditottKaszkadErtelmezo:
         napszak = napszak or rule_based.napszak_feloldas(mondat)
         if mondat_tol:
             _LOG.info("kaszkád: a dátum a mondat egészéből oldódott fel (%s)", mondat_tol)
+        ForditottKaszkadErtelmezo._datum_nyom(
+            nyom,
+            modell_kifejezes=kifejezes or None,
+            modell_datum_tol=nyers.get("datum_tol"),
+            parser_tol=mondat_tol,
+            parser_ig=mondat_ig,
+            nyertes=("parser (a mondat egészéből)" if mondat_tol else "nincs feloldható dátum"),
+        )
         return mondat_tol, mondat_ig, napszak
+
+    @staticmethod
+    def _datum_nyom(nyom: dict | None, **mezok) -> None:
+        """A dátumfeloldás nyomkövetése: mit adott a MODELL, mit adott a
+        PARSER, és melyik nyert.
+
+        Ez a rendszer legkevésbé átlátható lépése — a modell szövegesen
+        idéz, a parser oldja fel, és eltérésnél a parser nyer. A
+        beszélgetés-elemzőben (`tools/beszelgetes_riport.py`) ez a
+        három adat egymás mellett áll, mert a dátumhiba a leggyakoribb
+        panasz, és a naplóból eddig csak a VÉGEREDMÉNY látszott."""
+        if nyom is not None:
+            nyom.update(mezok)
 
     def _kereses_kapu(
         self,
@@ -518,20 +592,38 @@ class ForditottKaszkadErtelmezo:
                 megorzott=self._megorzendo(parameterek, nyers, mondat, most, kontextus),
             )
 
-        datum_tol, datum_ig, kifejezes_napszak = self._datum_ablak(nyers, mondat, most)
+        datum_tol, datum_ig, kifejezes_napszak = self._datum_ablak(
+            nyers, mondat, most, self.utolso_nyomkovetes.get("datum")
+        )
         napszak = self._mondatbeli_napszak(parameterek.get("napszak"), mondat) or kifejezes_napszak
+
+        # MEZŐNKÉNTI FORRÁS — a nyomkövetéshez (`utolso_nyomkovetes`).
+        # A beszélgetés-elemzőben minden paraméter mellett ott áll, hogy
+        # HONNAN jött: a modelltől, a parsertől, a zárt halmazból, a
+        # megőrzött kontextusból vagy a dokumentált tartalékból. Ez az a
+        # kérdés, amire a napló eddig nem felelt.
+        forras = self.utolso_nyomkovetes.setdefault("mezo_forras", {})
+        forras["bolt_id"] = "modell" if parameterek.get("bolt_id") else "megőrzött kontextus"
 
         vegleges: dict = {"bolt_id": bolt_id}
         if datum_tol:
             vegleges["datum_tol"] = datum_tol
             vegleges["datum_ig"] = datum_ig
+            forras["datum"] = "dátumparser"
         elif self._tartalek(kontextus, "datum_tol"):
             vegleges["datum_tol"] = self._tartalek(kontextus, "datum_tol")
             vegleges["datum_ig"] = self._tartalek(kontextus, "datum_ig")
+            forras["datum"] = "megőrzött kontextus"
         else:
             vegleges["datum_tol"], vegleges["datum_ig"] = rule_based.altalanos_ablak(most)
+            forras["datum"] = "TARTALÉK ablak (egy hét, a mondatban nincs dátum)"
 
         vegleges["napszak"] = napszak or "barmikor"
+        forras["napszak"] = (
+            "modell (a mondatból igazolva)"
+            if napszak and parameterek.get("napszak")
+            else ("dátumkifejezés" if napszak else "alapértelmezés (bármikor)")
+        )
         if napszak:
             vegleges["datum_ig"] = rule_based.napszak_ablak_vagas(
                 vegleges["datum_tol"], vegleges["datum_ig"], napszak
@@ -549,6 +641,15 @@ class ForditottKaszkadErtelmezo:
         )
         if szolgaltatas:
             vegleges["szolgaltatas_id"] = szolgaltatas
+            forras["szolgaltatas_id"] = (
+                "modell"
+                if parameterek.get("szolgaltatas_id")
+                else (
+                    "szabály-alapú kinyerés"
+                    if rule_based.szolgaltatas_feloldas(mondat, bolt_id)
+                    else "a bolt egyértelmű szolgáltatása"
+                )
+            )
         # A preferált óra ("kb 10 körül") ugyanúgy determinisztikusan
         # kinyerhető, mint a szolgáltatás — a modell kihagyása nem
         # jelenti, hogy nincs is a mondatban.
@@ -557,6 +658,11 @@ class ForditottKaszkadErtelmezo:
             preferalt_ora = rule_based.preferalt_ora_feloldas(mondat)
         if preferalt_ora is not None:
             vegleges["preferalt_ora"] = preferalt_ora
+            forras["preferalt_ora"] = (
+                "modell"
+                if parameterek.get("preferalt_ora") is not None
+                else "szabály-alapú kinyerés"
+            )
 
         return {
             "eszkoz": "szabad_idopontok",

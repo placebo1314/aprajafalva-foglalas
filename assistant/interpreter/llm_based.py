@@ -419,6 +419,23 @@ class LLMErtelmezo:
     def __init__(self, szolgaltato: LLMSzolgaltato | None = None):
         self.szolgaltato = szolgaltato or LLMSzolgaltato()
         self.utolso_hiba: str | None = None
+        # -- NYOMKÖVETÉS (megfigyelhetőség, nem a protokoll része) -----
+        #
+        # A beszélgetés-elemző (`tools/beszelgetes_riport.py`) ezekből
+        # dolgozik: mi ment a modellhez, mit adott vissza nyersen,
+        # átment-e a séma-ellenőrzésen. Enélkül a próba-naplóból csak az
+        # látszik, MI LETT az eredmény — az nem, hogy miért.
+        #
+        # A hívók `getattr`-ral olvassák, tehát egy másik `Ertelmezo`
+        # implementáció nélkülük is használható marad.
+        self.utolso_prompt: dict[str, str] | None = None
+        self.utolso_nyers_valasz: str | None = None
+        self.utolso_sema_ok: bool | None = None
+        # KUMULATÍV hívásszám. Fordulónkénti bontást a hívó számol
+        # belőle (különbség a forduló előtt és után) — így az
+        # önkonzisztencia három hívása is helyesen látszik, anélkül
+        # hogy ez az osztály tudna a burkolójáról.
+        self.hivasok_szama = 0
 
     def ertelmez(
         self,
@@ -429,6 +446,9 @@ class LLMErtelmezo:
         mintavetel: Mintavetel | None = None,
     ) -> dict:
         self.utolso_hiba = None
+        self.utolso_nyers_valasz = None
+        self.utolso_sema_ok = None
+        self.hivasok_szama += 1
         payload = {
             "model": self.szolgaltato.modell,
             "messages": [
@@ -454,6 +474,12 @@ class LLMErtelmezo:
             "logprobs": True,
             "top_logprobs": 1,
         }
+        self.utolso_prompt = {
+            "rendszer": payload["messages"][0]["content"],
+            "vasarlo": payload["messages"][1]["content"],
+            "modell": self.szolgaltato.modell,
+            "opciok": payload["options"],
+        }
         req = urllib.request.Request(
             self.szolgaltato.url,
             data=json.dumps(payload).encode("utf-8"),
@@ -465,22 +491,27 @@ class LLMErtelmezo:
                 valasz = json.loads(resp.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             self.utolso_hiba = f"Ollama nem elérhető: {exc}"
+            self.utolso_sema_ok = None  # nem volt mit validálni
             _LOG.warning(self.utolso_hiba)
             return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {}}
 
         tartalom = valasz.get("message", {}).get("content", "")
+        self.utolso_nyers_valasz = tartalom
         try:
             ertelmezes = json.loads(tartalom)
         except json.JSONDecodeError as exc:
             self.utolso_hiba = f"JSON parse hiba: {exc} — nyers: {tartalom[:200]!r}"
+            self.utolso_sema_ok = False
             _LOG.warning(self.utolso_hiba)
             return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {}}
 
         if not isinstance(ertelmezes, dict) or "eszkoz" not in ertelmezes:
             self.utolso_hiba = f"Váratlan alak a modell válaszában: {ertelmezes!r}"
+            self.utolso_sema_ok = False
             _LOG.warning(self.utolso_hiba)
             return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": {}}
 
+        self.utolso_sema_ok = True
         ertelmezes.setdefault("parameterek", {})
         ertelmezes["bizonyossag"] = bizonyossag_szamol(valasz.get("logprobs"), ertelmezes)
         return ertelmezes

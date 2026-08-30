@@ -205,6 +205,7 @@ def _proba_naplo_ir(
     uzenet_kulcs: str | None = None,
     kapuor_ok: str | None = None,
     egyetertes: int | None = None,
+    nyomkovetes: dict | None = None,
 ) -> None:
     """Egy fordulót ír a `naplo/probak.jsonl`-be — l. modul docstring,
     "Próba-napló". A mezők azért ennyien vannak, mert tesztelés közben
@@ -223,9 +224,21 @@ def _proba_naplo_ir(
     önkonzisztencia hatása mérhetetlen lenne éles használat közben.
     Mind a négy opcionális: a régi naplósorok is olvashatók maradnak.
 
+    **A `nyomkovetes` a beszélgetés-elemzőé** (`tools/
+    beszelgetes_riport.py`, `python feladat.py riport`): a modellhez
+    ténylegesen elküldött prompt, a nyers modellválasz, a
+    séma-ellenőrzés eredménye, a dátumfeloldás három adata (mit adott a
+    modell, mit a parser, melyik nyert), a lépésenkénti idő, a
+    mezőnkénti forrás, és a kimenő válasz MINDKÉT módban. Ezek egyike
+    sem fér el egy naplósor olvasható alakjában — az elemző viszont
+    összecsukható blokkokban meg tudja mutatni őket.
+
     **REDAKTÁLÁS TÁROLÁS ELŐTT** (CLAUDE.md 2. invariáns, ADR-005): a
     vásárló mondata és az abból kinyert paraméterek egyaránt átmennek a
-    `privacy/redakcio`-n, MIELŐTT lemezre kerülnének. Ez nem elméleti
+    `privacy/redakcio`-n, MIELŐTT lemezre kerülnének. **A
+    nyomkövetés is** — és ott ez még fontosabb: a prompt SZÓ SZERINT
+    tartalmazza a beszélgetés utolsó fordulóit, tehát mindent, amit a
+    vásárló bediktált. Ez nem elméleti
     óvatosság: a robusztussági halmaz "személyes adat" kategóriája
     pontosan azt méri, mi történik, ha valaki KÉRETLENÜL bediktálja a
     telefonszámát — enélkül a szám nyersen kerülne a naplófájlba, és
@@ -246,6 +259,7 @@ def _proba_naplo_ir(
         "valaszido_masodperc": (
             None if valaszido_masodperc is None else round(valaszido_masodperc, 3)
         ),
+        "nyomkovetes": redaktal_ertekek(nyomkovetes) if nyomkovetes else None,
     }
     with _PROBA_NAPLO_UTVONAL.open("a", encoding="utf-8") as fajl:
         fajl.write(json.dumps(sor, ensure_ascii=False) + "\n")
@@ -826,6 +840,7 @@ class VasarloApp(tk.Tk):
         # A válaszidő a TELJES fordulót méri (értelmezés + eszközhívás),
         # mert a vásárló is ezt érzékeli — nem csak a modellhívást.
         kezdet = time.monotonic()
+        hivasok_elotte = self._modellhivasok_szama()
         valasz = self.orchestrator.fordulo(
             self.session_id, szoveg, self._most_iso(), elozmenyek=elozmenyek
         )
@@ -845,8 +860,106 @@ class VasarloApp(tk.Tk):
             uzenet_kulcs=valasz.get("uzenet_kulcs"),
             kapuor_ok=valasz.get("kapuor_ok"),
             egyetertes=getattr(self.orchestrator.ertelmezo, "utolso_egyetertes", None),
+            nyomkovetes=self._nyomkovetes(valasz, hivasok_elotte),
         )
         self._szoveges_valasz_kezel(valasz)
+
+    def _llm_reteg(self):
+        """A modell-hívó réteg, ha van — a nyomkövetéshez.
+
+        A felület SOSEM importálja a modell-specifikus osztályokat
+        (CLAUDE.md, "Modulhatárok": a `ui/` nem hívhat LLM-et
+        közvetlenül), ezért `getattr`-ral kérdez: ha a felépített
+        értelmezőnek van `llm` attribútuma, azon keresztül olvassuk a
+        nyomkövetést. Determinisztikus úton ez `None`, és a
+        nyomkövetés egyszerűen szegényebb lesz."""
+        return getattr(self.orchestrator.ertelmezo, "llm", None)
+
+    def _modellhivasok_szama(self) -> int:
+        return getattr(self._llm_reteg(), "hivasok_szama", 0) or 0
+
+    def _nyomkovetes(self, valasz: dict, hivasok_elotte: int) -> dict:
+        """A forduló teljes nyomkövetése a beszélgetés-elemzőnek
+        (`tools/beszelgetes_riport.py`).
+
+        **A kimenő válasz MINDKÉT módban itt áll elő.** A `valasz`
+        modul tiszta (nem dönt, nem hív semmit), tehát a másik mód
+        mondatát utólag is elő lehet állítani — és épp ez a
+        legérdekesebb összevetés: ugyanaz a döntés, kétféleképpen
+        kimondva. Az előállítás nem befolyásolja azt, amit a vásárló
+        lát: az már megtörtént."""
+        ertelmezo = self.orchestrator.ertelmezo
+        llm = self._llm_reteg()
+        hivasok = max(0, self._modellhivasok_szama() - hivasok_elotte)
+
+        # RÖVIDZÁR: van olyan út (sorszámos hivatkozás), ahol az
+        # orchestrator dönt, és az értelmező meg sem szólal. Ilyenkor az
+        # ő `utolso_nyomkovetes`-e az ELŐZŐ fordulóé — átmásolva néma
+        # hazugság lenne a jelentésben (lépések, dátumfeloldás,
+        # mezőforrás, mind a korábbi mondaté).
+        rovidzar = valasz.get("reteg")
+        if rovidzar:
+            nyom: dict = {"lepesek": [], "mezo_forras": {}, "datum": {}, "rovidzar": rovidzar}
+        else:
+            nyom = dict(getattr(ertelmezo, "utolso_nyomkovetes", {}) or {})
+
+        nyom["modell"] = aktiv_modell_neve()
+        nyom["modellhivas_db"] = hivasok
+        # A prompt és a nyers válasz UGYANEZ a csapda: a modell-hívó
+        # réteg megőrzi az utolsó hívás adatait, tehát egy kapuőrös vagy
+        # tartalék fordulóban a KORÁBBI forduló promptja állna itt. Csak
+        # akkor vesszük át őket, ha ebben a fordulóban tényleg volt hívás.
+        if hivasok:
+            nyom["prompt"] = getattr(llm, "utolso_prompt", None)
+            nyom["nyers_valasz"] = getattr(llm, "utolso_nyers_valasz", None)
+            nyom["sema_ok"] = getattr(llm, "utolso_sema_ok", None)
+            nyom["llm_hiba"] = getattr(llm, "utolso_hiba", None)
+        else:
+            nyom["prompt"] = None
+            nyom["nyers_valasz"] = None
+            nyom["sema_ok"] = None
+            nyom["llm_hiba"] = None
+        nyom["valasz_szovegesen"] = self._valasz_mondatok(valasz, valasz_szoveg.MOD_SZOVEGES)
+        nyom["valasz_beszelhetoen"] = self._valasz_mondatok(valasz, valasz_szoveg.MOD_BESZELHETO)
+        return nyom
+
+    def _valasz_mondatok(self, valasz: dict, mod: str) -> str:
+        """A kimenő válasz szövege egy adott módban — a képernyőtől
+        FÜGGETLENÜL, mellékhatás nélkül.
+
+        Ugyanazokat a `valasz`-hívásokat használja, mint a megjelenítés
+        (`_szoveges_valasz_mondatok`), csak nem widgetet épít, hanem
+        mondatokat gyűjt. A két kód azért nem közös, mert a
+        megjelenítés gombokat is rajzol, és azt egy jelentéshez nem
+        akarjuk lefuttatni."""
+        tipus = valasz.get("tipus")
+        reszek: list[str] = []
+        if tipus in ("elutasitas", "kiut") and valasz.get("uzenet_kulcs"):
+            if tipus == "kiut" and not valasz.get("emberhez"):
+                reszek.append(
+                    valasz_szoveg.kiut_szoveg(valasz.get("valaszthato_dimenziok", []), mod=mod)[0]
+                )
+            else:
+                reszek.append(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
+        elif tipus == "visszakerdezes":
+            reszek.append(valasz_szoveg.visszakerdezes_szoveg(valasz.get("hianyzo_mezo"), mod=mod))
+        elif tipus == "ajanlat":
+            reszek.append(valasz_szoveg.nyugtazo_szoveg(valasz.get("felismert_ablak", {}), mod=mod))
+            reszek.append(
+                valasz_szoveg.ajanlat_mondat(
+                    valasz.get("jeloltek") or [],
+                    legkozelebbi=bool(valasz.get("legkozelebbi")),
+                    mod=mod,
+                )
+            )
+        elif tipus == "megerositest_ker":
+            jelolt = valasz.get("valasztott_jelolt") or {}
+            reszek.append(valasz_szoveg.megerosites_ker_szoveg(jelolt.get("kezdet"), mod=mod))
+        elif valasz.get("uzenet_kulcs"):
+            reszek.append(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
+        elif valasz.get("sikeres"):
+            reszek.append(valasz_szoveg.tenyvalasz_szoveg(valasz, mod=mod))
+        return valasz_szoveg.fordulo_szoveg(reszek, mod)
 
     def _szoveges_valasz_kezel(self, valasz: dict) -> None:
         """A forduló válaszát mondatokká alakítja és kiírja.
