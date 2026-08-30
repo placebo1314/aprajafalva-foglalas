@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from assistant import valasz
+from assistant.tools import szabad_idopontok
 from assistant.valasz import beszelheto, szamok
 from assistant.valasz.sablonok import SABLONOK
 
@@ -335,7 +336,9 @@ def _minden_beszelheto_mondat() -> list[tuple[str, str]]:
             valasz.tenyvalasz_szoveg({"sikeres": True, "valami_uj": "x"}, mod=BESZELHETO),
         ),
     ]
-    for dimenzio in ("napszak", "nap", "het"):
+    # A zárt halmazból, nem kézzel felsorolva: ha új lazítási dimenzió
+    # kerül be, a beszélhetőség-ellenőrzés magától kiterjed rá.
+    for dimenzio in szabad_idopontok.LAZITAS_DIMENZIOK:
         darabok.append(
             (f"alternativa:{dimenzio}", valasz.alternativa_szoveg(dimenzio, mod=BESZELHETO)[0])
         )

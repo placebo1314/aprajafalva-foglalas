@@ -13,7 +13,7 @@ import time
 from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 from assistant.orchestrator import BizonyossagKuszobok, Orchestrator, kovetkezo_kontextus
-from assistant.tools.katalogus import BOLT_SLUGOK
+from assistant.tools.katalogus import BOLT_SLUGOK, MINDEGY
 from core.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo
 from core.slot import generator
 from core.slot.blokk import FixedBlock
@@ -758,7 +758,7 @@ def test_ismetles_a_MASODIK_azonos_valasz_helyett_mar_kiut(tmp_path):
     assert elso["tipus"] == "visszakerdezes"
     assert masodik["tipus"] == "kiut"
     assert masodik["uzenet_kulcs"] == "ismetlodo_valasz_kiut"
-    assert masodik["valaszthato_dimenziok"] == ["bolt", "nap", "napszak"]
+    assert masodik["valaszthato_dimenziok"] == ["nap", "napszak", "legkorabbi"]
 
 
 def test_ismetles_a_nyitottrol_zartra_valtas_NEM_ismetles(tmp_path):
@@ -1313,3 +1313,118 @@ def test_a_bolthoz_tartozo_szolgaltatas_megmarad(tmp_path):
     )
 
     assert teljes["szolgaltatas_id"] == "nagy_petarda"
+
+
+# --- lazítási sorrend bolton belül (ADR-024) -------------------------
+
+
+def test_alternativa_kesobb_a_legkozelebbi_idopont_eszkozre_megy(tmp_path):
+    """A `kesobb` dimenzió NEM ablaktágítás: a gomb a
+    `legkozelebbi_idopont` eszközt futtatja, tehát a válasz EGY konkrét,
+    holdolt időpont — akár hetekkel a kért ablak után (ADR-024).
+
+    A régi `het` dimenzió csak egy héttel lépett előre; a demóadat
+    slotja (2026-08-18) a kért ablak (2026-08-10 - 2026-08-16) után egy
+    HÉTTEL van, ezért a régi úton is előjött volna — a különbség az,
+    hogy most a horizont végéig néz, és a válasz az eszközé, nem egy
+    kitalált ablaké."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch = Orchestrator(conn, SzabalyAlapuErtelmezo(), org_id=ctx["org_id"])
+    orch.kereses_strukturaltan(
+        "s1",
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-10T00:00:00Z",
+            "datum_ig": "2026-08-16T23:59:59Z",
+        },
+    )
+
+    valasz = orch.alternativa_kereses("s1", "kesobb")
+
+    assert valasz["tipus"] == "ajanlat"
+    assert valasz["legkozelebbi"] is True
+    assert len(valasz["jeloltek"]) == 1
+    assert valasz["jeloltek"][0]["kezdet"].startswith("2026-08-18")
+
+
+def test_alternativa_varians_elengedi_a_szolgaltatast(tmp_path):
+    """A `varians` gomb ugyanabba az ablakba keres, de elengedett
+    szolgáltatás-szűréssel (`MINDEGY`) — ez a "más változat a bolton
+    belül" lazítás. A tervet a `szabad_idopontok.lazitas_terve` adja,
+    nem az orchestrator: itt csak az látszik, hogy a keresés tényleg
+    MINDEGY-gyel fut."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch = Orchestrator(conn, SzabalyAlapuErtelmezo(), org_id=ctx["org_id"])
+    orch.kereses_strukturaltan(
+        "s1",
+        {
+            "bolt_id": "ugyifogyi",
+            "szolgaltatas_id": "nagy_petarda",
+            "datum_tol": "2026-08-17T00:00:00Z",
+            "datum_ig": "2026-08-17T23:59:59Z",
+        },
+    )
+
+    valasz = orch.alternativa_kereses("s1", "varians")
+
+    assert orch._allapot("s1").utolso_kereses["szolgaltatas_id"] == MINDEGY
+    # A kért napon (08-17) semmi sincs, tehát a keresés üres — a lényeg
+    # a PARAMÉTER, nem a találat.
+    assert valasz["tipus"] == "eszkoz_hiba"
+
+
+def test_a_bolt_nem_szerepel_a_kiut_dimenziok_kozott():
+    """ADR-024: a bolt nem lazítási dimenzió, hanem maga a termék. Aki
+    petárdát kér, annak a boldogság-bolt nem alternatíva, hanem MÁS
+    KÉRDÉSRE adott válasz."""
+    from assistant.orchestrator import _KIUT_DIMENZIOK
+
+    assert "bolt" not in _KIUT_DIMENZIOK
+    assert "legkorabbi" in _KIUT_DIMENZIOK
+
+
+# --- MINDEGY szentinel (ADR-024) -------------------------------------
+
+
+def test_mindegy_bolt_eseten_nem_kerdez_vissza_es_mindenhol_keres(tmp_path):
+    """A `MINDEGY` nem hiányzó érték: a keresés lefut, minden boltra.
+
+    A hiba, amit kizár: a "mindegy melyik" válasz korábban ugyanoda
+    vezetett, mint a hallgatás — a mező üres maradt, a rendszer pedig
+    újra rákérdezett arra, amit a vásárló épp elengedett."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": MINDEGY,
+                    "datum_tol": "2026-08-18T00:00:00Z",
+                    "datum_ig": "2026-08-18T23:59:59Z",
+                },
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "mindegy melyik, csak legyen hely", _MOST)
+
+    assert valasz["tipus"] == "ajanlat"
+    assert valasz["jeloltek"]
+
+
+def test_mindegy_tulel_egy_fordulot_ugyanugy_mint_egy_konkret_ertek(tmp_path):
+    """Az orchestrator a MINDEGY-et a kontextusban ugyanúgy őrzi meg,
+    mint egy konkrét slugot — ez teszi lehetővé, hogy a következő
+    fordulóban se kérdezzen rá."""
+    kovetkezo = kovetkezo_kontextus(
+        {},
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "ugyifogyi", "szolgaltatas_id": MINDEGY},
+        },
+    )
+    assert kovetkezo == {"bolt_id": "ugyifogyi", "szolgaltatas_id": MINDEGY}

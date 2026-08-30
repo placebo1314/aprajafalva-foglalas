@@ -745,12 +745,16 @@ class VasarloApp(tk.Tk):
     # fordulóként megy vissza az orchestratorba, hogy onnantól a szokásos
     # út fusson (értelmező → állapotgép), ne külön ág.
     _KIUT_MONDAT = {
-        "bolt": "másik boltban szeretnék",
         # A „másik nap" a hét EGÉSZÉT nyitja meg, nem egy konkrét másik
         # napot: azt, hogy melyik nap jó, a keresés eredménye mondja meg,
         # nem mi találjuk ki helyette.
         "nap": "bármelyik nap jó ezen a héten",
         "napszak": "bármikor jó, bármelyik napszakban",
+        # A `legkorabbi` a `bolt` helyére lépett (ADR-024). A mondat
+        # szándékosan a vásárló szavaival kérdez, és az értelmező ezt
+        # a `legkozelebbi_idopont` eszközre fordítja — nem kér rá
+        # időablakot.
+        "legkorabbi": "mikor tudok legkorábban menni?",
     }
 
     def _kiut_valasztas(self, dimenzio: str) -> None:

@@ -24,6 +24,7 @@ from assistant.tools import (
     semak,
     szabad_idopontok,
 )
+from core.api import ajanlatpontozo
 from core.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo
 from core.slot import generator
 from core.slot.blokk import FixedBlock
@@ -262,10 +263,192 @@ def test_szabad_idopontok_alternativ_dimenzio_nap(tmp_path):
     assert eredmeny["alternativ_dimenzio"] == "nap"
 
 
-def test_szabad_idopontok_alternativ_dimenzio_het(tmp_path):
-    """A kért hét (2026-08-10 - 2026-08-16) teljesen üres, de a
-    KÖVETKEZŐ héten (2026-08-18) van a slot — az alternatíva
-    dimenziója "het"."""
+def _masodik_szolgaltatas(conn, ctx, *, nev: str, start: str, end: str) -> str:
+    """Ugyanabban a boltban egy MÁSIK szolgáltatás, saját műszakkal —
+    ezen a szerkezeten szólal meg a `varians` lazítási dimenzió."""
+    counter_id = torzsadat_repo.counter_create(
+        conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name=f"Pult {nev}"
+    )
+    employee_id = torzsadat_repo.employee_create(
+        conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name=f"Eladó {nev}"
+    )
+    service_id = torzsadat_repo.service_create(
+        conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name=nev, alap_duration_minute=15
+    )
+    shift_id = muszak_repo.shift_create(
+        conn,
+        org_id=ctx["org_id"],
+        shop_id=ctx["shop_id"],
+        counter_id=counter_id,
+        employee_id=employee_id,
+        service_id=service_id,
+        start=start,
+        end=end,
+        duration_minute=15,
+        buffer_after_minute=0,
+        min_grid_minute=15,
+        bookable_ratio=1.0,
+        block_rule={"szunetek": []},
+    )
+    shift = muszak_repo.shift_load(conn, shift_id)
+    eredmeny = generator.generate(shift, FixedBlock())
+    muszak_repo.blocks_slots_save(
+        conn, shift_id=shift_id, org_id=ctx["org_id"], blocks=eredmeny.blocks, slots=eredmeny.slots
+    )
+    return service_id
+
+
+def test_szabad_idopontok_alternativ_dimenzio_varians(tmp_path):
+    """A kért szolgáltatásra nincs szabad hely SEHOL a horizonton, de a
+    boltban egy MÁSIK szolgáltatásra van, a kért ablakban — az
+    alternatíva dimenziója "varians" (ADR-024, "Váltás mire" 4. pont).
+
+    A sorrend itt látszik a legjobban: a `varians` az UTOLSÓ. Előbb a
+    napszakot, a napot és a későbbi időpontot próbáljuk ugyanarra a
+    termékre — a termék elengedését csak akkor javasoljuk, ha időben
+    nincs mit engedni."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    # A petárda MINDEN slotja lefoglalva — van meghirdetve, de nincs
+    # szabad (tehát nem az "őszinteség-ág" fut, hanem a szűkösség).
+    for sorszam, (slot_id,) in enumerate(conn.execute("SELECT id FROM slot").fetchall()):
+        foglalas_repo.booking_create(conn, slot_id, "a" * 64, f"idem-{sorszam}", "session-0")
+    _masodik_szolgaltatas(
+        conn, ctx, nev="csillagszóró", start="2026-08-18T08:00:00Z", end="2026-08-18T09:00:00Z"
+    )
+
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "szolgaltatas_id": "nagy_petarda",
+            # A TELJES hét, hogy se a `napszak`, se a `nap` tágítás ne
+            # legyen értelmezhető.
+            "datum_tol": "2026-08-17T00:00:00Z",
+            "datum_ig": "2026-08-23T23:59:59Z",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+    assert eredmeny["sikeres"] is False
+    assert eredmeny["alternativ_dimenzio"] == "varians"
+
+
+def test_lazitas_terve_varians_nincs_mit_elengedni():
+    """Ha a vásárló MÁR elengedte a terméket (`MINDEGY`) vagy meg sem
+    adta, a `varians` lazítás értelmetlen — nincs mit elengedni, mert a
+    keresés eleve minden változatot nézi."""
+    for szures in (False,):
+        assert (
+            szabad_idopontok.lazitas_terve(
+                "varians",
+                datum_tol="2026-08-17T00:00:00Z",
+                datum_ig="2026-08-17T23:59:59Z",
+                napszak="barmikor",
+                szolgaltatas_szures=szures,
+            )
+            is None
+        )
+    terv = szabad_idopontok.lazitas_terve(
+        "varians",
+        datum_tol="2026-08-17T00:00:00Z",
+        datum_ig="2026-08-17T23:59:59Z",
+        napszak="barmikor",
+        szolgaltatas_szures=True,
+    )
+    assert terv == {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+            "datum_tol": "2026-08-17T00:00:00Z",
+            "datum_ig": "2026-08-17T23:59:59Z",
+            "napszak": "barmikor",
+            "szolgaltatas_id": katalogus.MINDEGY,
+        },
+    }
+
+
+def test_lazitas_terve_kesobb_a_kert_ablak_vegetol_nez():
+    """A `kesobb` NEM ablaktágítás: a `legkozelebbi_idopont` eszközre
+    megy, aminek nincs dátumablaka — ez a lényege. A `most` itt a kért
+    ablak VÉGE, tehát a válasz biztosan későbbi a kértnél."""
+    terv = szabad_idopontok.lazitas_terve(
+        "kesobb",
+        datum_tol="2026-08-17T00:00:00Z",
+        datum_ig="2026-08-23T23:59:59Z",
+        napszak="delelott",
+        szolgaltatas_szures=True,
+    )
+    assert terv == {
+        "eszkoz": "legkozelebbi_idopont",
+        "parameterek": {"most": "2026-08-23T23:59:59Z", "napszak": "delelott"},
+    }
+
+
+def test_a_kereses_nem_szukit_pultra(tmp_path):
+    """A `pult` azért nincs a lazítási dimenziók között, mert nincs mit
+    lazítani rajta: a keresés MA SEM szűkít pultra (ADR-024, "Váltás
+    mire" 3. pont — "ha a keresés ma pultra szűkít, ne tegye").
+
+    Bizonyíték, nem ígéret: két pult, két műszak ugyanarra a
+    szolgáltatásra, és MINDKETTŐ slotjai megjelennek egyetlen keresés
+    eredményében."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)  # Pult 1, petárda, 2026-08-18 06:00-07:00
+    masodik_pult = torzsadat_repo.counter_create(
+        conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name="Pult 2"
+    )
+    dolgozo = torzsadat_repo.employee_create(
+        conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name="Sercegő"
+    )
+    shift_id = muszak_repo.shift_create(
+        conn,
+        org_id=ctx["org_id"],
+        shop_id=ctx["shop_id"],
+        counter_id=masodik_pult,
+        employee_id=dolgozo,
+        service_id=ctx["service_id"],
+        start="2026-08-18T10:00:00Z",
+        end="2026-08-18T11:00:00Z",
+        duration_minute=15,
+        buffer_after_minute=0,
+        min_grid_minute=15,
+        bookable_ratio=1.0,
+        block_rule={"szunetek": []},
+    )
+    shift = muszak_repo.shift_load(conn, shift_id)
+    eredmeny = generator.generate(shift, FixedBlock())
+    muszak_repo.blocks_slots_save(
+        conn, shift_id=shift_id, org_id=ctx["org_id"], blocks=eredmeny.blocks, slots=eredmeny.slots
+    )
+
+    # Közvetlenül az ajánlatpontozó, `limit` nélkül: az eszköz legfeljebb
+    # három jelöltet ad vissza, és a pontozás sorrendje elfedné, hogy a
+    # SZŰRÉS mit engedett át — itt épp az a kérdés.
+    jeloltek = ajanlatpontozo.find_candidates(
+        conn,
+        org_id=ctx["org_id"],
+        shop_id=ctx["shop_id"],
+        service_id=ctx["service_id"],
+        datum_tol="2026-08-18T00:00:00Z",
+        datum_ig="2026-08-18T23:59:59Z",
+        session_id="session-1",
+        limit=50,
+    )
+    kezdetek = {jelolt["kezdet"][11:16] for jelolt in jeloltek}
+    # Mindkét pult műszakából van jelölt — a keresés nem választott
+    # pultot a vásárló helyett.
+    assert any(k.startswith("06") for k in kezdetek)
+    assert any(k.startswith("10") for k in kezdetek)
+
+
+def test_szabad_idopontok_alternativ_dimenzio_kesobb(tmp_path):
+    """A kért hét (2026-08-10 - 2026-08-16) teljesen üres, de KÉSŐBB
+    (2026-08-18) van a slot — az alternatíva dimenziója "kesobb".
+
+    A korábbi `het` dimenzió csak a KÖVETKEZŐ hetet nézte, tehát egy
+    két héttel későbbi szabad időpontról azt mondta, hogy nincs
+    alternatíva. A `kesobb` az egész horizontot nézi (ADR-024,
+    "Váltás mire" 2. pont: "akár hetekkel később")."""
     conn = _conn(tmp_path)
     ctx = _seed(conn)
     eredmeny = szabad_idopontok.hivas(
@@ -279,11 +462,11 @@ def test_szabad_idopontok_alternativ_dimenzio_het(tmp_path):
         org_id=ctx["org_id"],
     )
     assert eredmeny["sikeres"] is False
-    assert eredmeny["alternativ_dimenzio"] == "het"
+    assert eredmeny["alternativ_dimenzio"] == "kesobb"
 
 
 def test_szabad_idopontok_alternativ_dimenzio_nap_megorzi_a_kert_napszakot(tmp_path):
-    """A 'nap' (és 'het') dimenzió próbája a kért napszakot VÁLTOZATLANUL
+    """A 'nap' (és 'kesobb') dimenzió próbája a kért napszakot VÁLTOZATLANUL
     hagyja — blueprint 5. szakasz: "péntek délelőtt jövő héten", a
     napszak kemény, csak a hét puha. Egy másik napon, de MÁS napszakban
     szabad időpont nem számít 'nap' alternatívának — különben hamis

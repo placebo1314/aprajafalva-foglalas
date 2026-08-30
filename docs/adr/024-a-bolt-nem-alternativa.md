@@ -92,16 +92,60 @@ Bármelyik újranyitja:
 A bolt helyett a bolton BELÜLI lazítási sorrend a helyes válasz arra,
 hogy „nincs hely" (blueprint 1., 5. igény):
 
-1. **más időpont a kért ablakban** (a preferált óra / napszak elengedése),
-2. **tágabb ablak** — a következő szabad időpont, akár hetekkel később
-   (`legkozelebbi_idopont`, holddal, tehát kimondható időponttal),
-3. **más pult ugyanabban a boltban** — ma nem szűkítünk pultra, tehát
-   ez nem is szólal meg; ha valaha szűkítenénk, itt a helye,
-4. **más variáns a bolton belül** (kis/nagy petárda), de csak ha a
-   vásárló elengedte a terméket (`szolgaltatas_id: MINDEGY`).
+1. **más időpont a kért ablakban** — a napszak-kötöttséget engedjük el,
+   a nap marad (`napszak`),
+2. **tágabb ablak** — előbb ugyanazon a héten másik nap (`nap`), aztán
+   a kért ablak vége utáni legkorábbi szabad időpont, akár hetekkel
+   később (`kesobb`, a `legkozelebbi_idopont` eszközzel, tehát holddal,
+   tehát kimondható időponttal: „a legkorábbi szabad időpont december
+   huszonharmadikán van"),
+3. **más pult ugyanabban a boltban** — l. lent, nincs mit lazítani,
+4. **más variáns a bolton belül** — a szolgáltatás-szűrés elengedése
+   (`varians`).
 
-Ez a sorrend a `szabad_idopontok._alternativ_dimenzio` kimenete, és a
-válasz megmondja, melyik dimenzióban engedett.
+Ez a sorrend a `szabad_idopontok.LAZITAS_DIMENZIOK`, a lépés tartalma a
+`lazitas_terve()`, a döntés az `_alternativ_dimenzio()`. **Mindegyik
+mondat kimondja, melyik dimenzióban engedtünk** — az „van egy másik
+időpont" önmagában nem válasz, mert a vásárló nem tudja, mit adott fel
+érte (`assistant/valasz/sablonok.py`, `alternativa`).
+
+### Két dimenzió ma nem tud megszólalni — és a kettő nem ugyanúgy
+
+Ezt a mérés mondta ki, nem a terv:
+
+- **`pult`: nincs mit lazítani.** A keresés ma sem szűkít pultra —
+  sem az ajánlatpontozó, sem a repo (`free_slots_search`: a szűrés
+  bolt és szolgáltatás szerint megy, a pult csak a slot
+  GENERÁLÁSÁBAN szerepel). Ezért nem került be a listába: egy mindig
+  üresen visszatérő ág hazugság lenne. Bizonyíték rá teszt van
+  (`test_a_kereses_nem_szukit_pultra`), nem ígéret. Ha valaha
+  szűkítenénk pultra, a helye a `nap` és a `kesobb` közé kerül.
+- **`varians`: van mit lazítani, csak a mai KATALÓGUSBAN nincs.** A
+  dimenzió megvalósult, és valódi lekérdezéssel próbálkozik; hogy ma
+  mégsem szólal meg, az az adaton múlik: a `kis_petarda` és a
+  `nagy_petarda` slug UGYANARRA a „petárda" szolgáltatás-sorra mutat
+  (`katalogus.py`, `docs/domain.md`: „Szolgáltatás ≠ variáns"), tehát
+  a szűrés elhagyása ugyanazokat a slotokat adja. Amint egy boltnak
+  két, ütemezésileg különböző szolgáltatása lesz, magától megszólal —
+  a teszt (`test_szabad_idopontok_alternativ_dimenzio_varians`) épp
+  ilyen adaton méri.
+
+**A „ha a vásárló elengedte a terméket" feltételt úgy értjük, hogy a
+felajánlás MAGA a kérés az elengedésre.** A gomb megnyomása állítja
+`MINDEGY`-re a `szolgaltatas_id`-t; ha már eleve `MINDEGY` volt, a
+dimenzió értelmetlen (nincs mit elengedni, mert minden változatot
+nézünk), és a `lazitas_terve` ilyenkor `None`-t ad. A fordított
+olvasat — csak akkor ajánljuk, ha már elengedte — halott ággá tenné,
+és épp azt a mondatot venné el, amiért a dimenzió van.
+
+### A kiút-gombok is átálltak
+
+A beszélgetés-zsákutca kiútja (`orchestrator._KIUT_DIMENZIOK`) eddig
+„másik boltot" ajánlott elsőként. Ugyanaz a hiba, kisebb helyen: ott is
+a bolt volt a cserélhető dimenzió. A három gomb mostantól **másik nap /
+másik napszak / a legkorábbi szabad időpont** — az utolsó a
+`legkozelebbi_idopont` eszközre megy, tehát valódi választ ad, nem újabb
+kérdést.
 
 ## Váltás költsége
 

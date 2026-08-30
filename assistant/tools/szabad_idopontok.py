@@ -38,10 +38,42 @@ def _het_vege_iso(datum_iso: str) -> str:
     return f"{vege.isoformat()}T23:59:59Z"
 
 
-# A három tágítási dimenzió, a kért ablakhoz legközelebbitől a
-# legtávolabbiig. A `napszak` a kért napon belül enged, a `nap` a
-# folyó héten belül, a `het` a következő hétre lép.
-TAGITASI_DIMENZIOK = ("napszak", "nap", "het")
+# A LAZÍTÁSI SORREND — bolton belül, a kért ablakhoz legközelebbitől a
+# legtávolabbiig (ADR-024).
+#
+# **A bolt szándékosan NINCS köztük.** A bolt nem cserélhető dimenzió,
+# hanem maga a termék: Aprajafalva három boltja három különböző dolgot
+# árul (altató / petárda / boldogság), tehát aki petárdát kér, annak a
+# boldogság-bolt nem alternatíva, hanem MÁS KÉRÉSRE adott válasz.
+#
+# - `napszak` — más időpont a KÉRT ablakban: a napszak-kötöttséget
+#   engedjük el, a nap marad.
+# - `nap` — ugyanazon a héten másik nap, UGYANAZZAL a napszakkal.
+# - `kesobb` — tágabb ablak: a kért ablak VÉGE utáni legkorábbi szabad
+#   időpont, akár hetekkel később ("a legkorábbi szabad időpont
+#   december huszonharmadikán van"). Ez az egyetlen dimenzió, ami nem
+#   ablakot tágít, hanem elhagyja az ablak fogalmát —
+#   `legkozelebbi_idopont`-tal fut, tehát holddal, tehát a konkrét
+#   dátum kimondható (CLAUDE.md 6. invariáns).
+# - `varians` — más változat a bolton BELÜL (kis/nagy petárda): a
+#   szolgáltatás-szűrést engedjük el. Csak akkor van értelme, ha a
+#   vásárló KONKRÉT terméket kért; ha már `MINDEGY`, nincs mit
+#   elengedni, mert minden változatot nézünk.
+#
+# **A `pult` (más pult ugyanabban a boltban) azért nincs a listán, mert
+# nincs mit lazítani rajta**: a keresés MA SEM szűkít pultra — sem az
+# ajánlatpontozó (`core/api/ajanlatpontozo.py`), sem a repo
+# (`foglalas_repo.free_slots_search`: a szűrés bolt és szolgáltatás
+# szerint megy, a `pult` csak a slot generálásában szerepel). Egy
+# mindig üresen visszatérő ág itt hazugság lenne. Ha valaha
+# szűkítenénk pultra, a helye a `nap` és a `kesobb` közé kerül.
+LAZITAS_DIMENZIOK = ("napszak", "nap", "kesobb", "varians")
+
+# Meddig nézünk előre a `kesobb` dimenzióban — ugyanaz a horizont, mint
+# a `legkozelebbi_idopont` eszközé, mert ugyanaz a kérdés. Nem
+# importáljuk onnan: az a modul EBBŐL importál (`_bolt_es_szolgaltatas`,
+# `napszak_ertek`), a fordítottja körkörös lenne.
+_KESOBB_HORIZONT_NAP = 60
 
 
 def tagitott_ablak(
@@ -62,20 +94,63 @@ def tagitott_ablak(
             return None
         return {"datum_tol": datum_tol, "datum_ig": datum_ig, "napszak": "barmikor"}
 
-    het_vege = _het_vege_iso(datum_tol)
     if dimenzio == "nap":
+        het_vege = _het_vege_iso(datum_tol)
         if datum_ig >= het_vege:
             return None
         return {"datum_tol": datum_tol, "datum_ig": het_vege, "napszak": napszak}
 
-    if dimenzio == "het":
-        kovetkezo_vege_dt = datetime.fromisoformat(het_vege.replace("Z", "+00:00")).replace(
-            tzinfo=None
-        ) + timedelta(days=7)
+    # `kesobb` és `varians` NEM ablaktágítás — l. `lazitas_terve`.
+    return None
+
+
+def lazitas_terve(
+    dimenzio: str,
+    *,
+    datum_tol: str,
+    datum_ig: str,
+    napszak: str,
+    szolgaltatas_szures: bool,
+) -> dict | None:
+    """Egy lazítási dimenzióhoz megadja, MIT kell futtatni:
+    `{"eszkoz": ..., "parameterek": {...}}`, vagy `None`, ha ez a
+    lazítás ebben a helyzetben nem értelmezhető.
+
+    **Egyetlen forrás** (ugyanaz az elv, mint korábban a
+    `tagitott_ablak`-é, csak most a nem-ablak dimenziókra is): ebből
+    dönti el az `_alternativ_dimenzio`, hogy VAN-e mit ajánlani, és
+    ugyanebből futtatja az orchestrator a felajánlott gombot. Ha a kettő
+    szétdriftelne, a gomb mást mutatna, mint amit a rendszer ígért.
+
+    `szolgaltatas_szures`: szűkít-e MA a keresés konkrét szolgáltatásra.
+    Ha nem (hiányzik vagy `MINDEGY`), a `varians` dimenzió értelmetlen —
+    nincs mit elengedni."""
+    if dimenzio in ("napszak", "nap"):
+        ablak = tagitott_ablak(dimenzio, datum_tol=datum_tol, datum_ig=datum_ig, napszak=napszak)
+        if ablak is None:
+            return None
+        return {"eszkoz": "szabad_idopontok", "parameterek": ablak}
+
+    if dimenzio == "kesobb":
+        # A kért ablak VÉGÉTŐL nézve a legkorábbi — az eszköz `most`
+        # paramétere itt nem rendszeridő, hanem a keresés kezdőpontja
+        # (a séma szerint is csak ennyi a dolga).
         return {
-            "datum_tol": het_vege,
-            "datum_ig": f"{kovetkezo_vege_dt.date().isoformat()}T23:59:59Z",
-            "napszak": napszak,
+            "eszkoz": "legkozelebbi_idopont",
+            "parameterek": {"most": datum_ig, "napszak": napszak},
+        }
+
+    if dimenzio == "varians":
+        if not szolgaltatas_szures:
+            return None
+        return {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "datum_tol": datum_tol,
+                "datum_ig": datum_ig,
+                "napszak": napszak,
+                "szolgaltatas_id": katalogus.MINDEGY,
+            },
         }
     return None
 
@@ -84,7 +159,7 @@ def _alternativ_dimenzio(
     conn,
     *,
     org_id: str,
-    bolt_id: str,
+    bolt_id: str | None,
     szolgaltatas_id: str | None,
     datum_tol: str,
     datum_ig: str,
@@ -92,45 +167,78 @@ def _alternativ_dimenzio(
     session_id: str,
 ) -> str | None:
     """Ha a kért ablakra nincs jelölt, megmondja, MELYIK dimenzió
-    tágításával van — a blueprint 1. szakasz ("Kapjon őszinte választ —
-    ha nincs hely, alternatíva jöjjön") és a szándék-rétegzés közös
-    nevezője: nem elég azt mondani, hogy nincs hely, azt is meg kell
-    mondani, min érdemes lazítani. Csak PRÓBÁL (`find_candidates`, hold
-    nélkül) — nem foglal le és nem zárol semmit.
+    mentén van — a blueprint 1. szakasz ("Kapjon őszinte választ — ha
+    nincs hely, alternatíva jöjjön"): nem elég azt mondani, hogy nincs
+    hely, azt is meg kell mondani, min érdemes engedni. Csak PRÓBÁL
+    (`find_candidates` / `earliest_free`, hold nélkül) — nem foglal le
+    és nem zárol semmit.
 
-    A három dimenzió **nem egyenrangú** — a `nap` és a `het` próba a
-    kért `napszak`-ot VÁLTOZATLANUL hagyja, csak a dátumablakot tágítja
-    (pl. "péntek délelőtt jövő héten": a napszak — délelőtt — itt kemény,
-    csak a hét puha, l. blueprint 5. szakasz). Csak a `napszak` dimenzió
-    próbája engedi el magát a napszak-kötöttséget. Anélkül ez a
-    megkülönböztetés hamis pozitívot adna: egy máshol, más napszakban
-    szabad időpontot "nap"/"het" alternatívaként ajánlana, holott az a
-    vásárló tényleges (napszak-)kérésének nem felel meg.
+    A sorrend és a dimenziók jelentése a `LAZITAS_DIMENZIOK`-nál van
+    leírva; a lépés tartalmát a `lazitas_terve` adja, hogy a próba és a
+    felajánlott gomb ugyanaz legyen.
 
-    Sorrend, a kért ablakhoz legközelebbitől a legtávolabbiig:
-    `napszak` (ugyanaz a nap/ablak, más napszak) → `nap` (ugyanazon a
-    héten, más nap, UGYANAZ a napszak) → `het` (a következő héten,
-    UGYANAZ a napszak). `None`, ha egyik tágítás sem hoz találatot —
-    ekkor tényleg nincs mit ajánlani."""
+    A dimenziók **nem egyenrangúak** — a `nap` és a `kesobb` próba a
+    kért `napszak`-ot VÁLTOZATLANUL hagyja, csak az időben lép (pl.
+    "péntek délelőtt": a délelőtt itt kemény, csak a nap puha, l.
+    blueprint 5. szakasz). Csak a `napszak` dimenzió engedi el magát a
+    napszak-kötöttséget. Anélkül ez a megkülönböztetés hamis pozitívot
+    adna: egy más napszakban szabad időpontot "nap"/"kesobb"
+    alternatívaként ajánlana, holott az a vásárló tényleges kérésének
+    nem felel meg.
 
-    def van_jelolt(*, datum_tol: str, datum_ig: str, napszak: str) -> bool:
+    `None`, ha egyik lazítás sem hoz találatot — ekkor tényleg nincs
+    mit ajánlani."""
+
+    def van_jelolt(parameterek: dict) -> bool:
         return bool(
             ajanlatpontozo.find_candidates(
                 conn,
                 org_id=org_id,
                 shop_id=bolt_id,
-                service_id=szolgaltatas_id,
-                datum_tol=datum_tol,
-                datum_ig=datum_ig,
-                napszak=napszak,
+                # A `varians` terve MINDEGY-et ad, ami itt a szűrés
+                # elhagyását jelenti (l. `_bolt_es_szolgaltatas`).
+                service_id=(
+                    None
+                    if parameterek.get("szolgaltatas_id") == katalogus.MINDEGY
+                    else szolgaltatas_id
+                ),
+                datum_tol=parameterek["datum_tol"],
+                datum_ig=parameterek["datum_ig"],
+                napszak=parameterek["napszak"],
                 session_id=session_id,
                 limit=1,
             )
         )
 
-    for dimenzio in TAGITASI_DIMENZIOK:
-        ablak = tagitott_ablak(dimenzio, datum_tol=datum_tol, datum_ig=datum_ig, napszak=napszak)
-        if ablak is not None and van_jelolt(**ablak):
+    def van_kesobb(parameterek: dict) -> bool:
+        tol = parameterek["most"]
+        tol_dt = datetime.fromisoformat(tol.replace("Z", "+00:00")).replace(tzinfo=None)
+        ig = f"{(tol_dt + timedelta(days=_KESOBB_HORIZONT_NAP)).date().isoformat()}T23:59:59Z"
+        return (
+            ajanlatpontozo.earliest_free(
+                conn,
+                org_id=org_id,
+                shop_id=bolt_id,
+                service_id=szolgaltatas_id,
+                tol_iso=tol,
+                ig_iso=ig,
+                napszak=parameterek["napszak"],
+            )
+            is not None
+        )
+
+    for dimenzio in LAZITAS_DIMENZIOK:
+        terv = lazitas_terve(
+            dimenzio,
+            datum_tol=datum_tol,
+            datum_ig=datum_ig,
+            napszak=napszak,
+            szolgaltatas_szures=szolgaltatas_id is not None,
+        )
+        if terv is None:
+            continue
+        probal = van_kesobb if terv["eszkoz"] == "legkozelebbi_idopont" else van_jelolt
+        if probal(terv["parameterek"]):
             return dimenzio
     return None
 

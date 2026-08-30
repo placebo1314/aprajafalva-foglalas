@@ -290,9 +290,10 @@ def alternativa_szoveg(
     vagy `None`, ha nincs mit felajánlani.
 
     A `dimenzio` az `assistant/tools/szabad_idopontok.py::
-    _alternativ_dimenzio` zárt kimenete (`napszak` | `nap` | `het`) — ez
-    a függvény csak megfogalmazza, nem dönt: azt, hogy VAN-e alternatíva,
+    _alternativ_dimenzio` zárt kimenete (`LAZITAS_DIMENZIOK`) — ez a
+    függvény csak megfogalmazza, nem dönt: azt, hogy VAN-e alternatíva,
     a determinisztikus eszköz állapította meg egy tényleges kereséssel.
+    A mondat mindig kimondja, MELYIK dimenzióban engedtünk (ADR-024).
 
     Beszélhető módban a mondat a kérdést is tartalmazza („Megnézzem?") —
     hangon a gombfelirat nem látszik, tehát a felajánlásnak a mondatban

@@ -89,10 +89,15 @@ _ISMETLES_KUSZOB = 1
 #
 # A `het` helyett `nap` (2026-08-30): a másik NAP a gyakoribb és
 # olcsóbb engedmény (a beosztás heteken át ugyanaz a szerkezet, egy
-# héttel odébb ugyanúgy nem lesz hely, ha a napszak a szűk keresztmetszet
-# — ezt a `szabad_idopontok::_alternativ_dimenzio` is így sorolja:
-# napszak, nap, hét).
-_KIUT_DIMENZIOK = ("bolt", "nap", "napszak")
+# héttel odébb ugyanúgy nem lesz hely, ha a napszak a szűk keresztmetszet).
+#
+# **A `bolt` kiesett** (ADR-024, ugyanaznap): a bolt nem lazítási
+# dimenzió, hanem maga a termék — „másik boltot?" felajánlani annyi,
+# mint más kérdésre válaszolni. A helyére a `legkorabbi` lépett, ami
+# valódi engedmény ugyanabban a boltban, és amire van eszközünk
+# (`legkozelebbi_idopont`). A lazítási sorrend teljes leírása:
+# `szabad_idopontok.LAZITAS_DIMENZIOK`.
+_KIUT_DIMENZIOK = ("nap", "napszak", "legkorabbi")
 
 # A sorszámos hivatkozás rétegneve a naplóban (`ui/vasarlo.py`). Nem az
 # értelmező rétege — az orchestrator dönt, mert egyedül ő ismeri a
@@ -703,29 +708,43 @@ class Orchestrator:
 
     def alternativa_kereses(self, session_id: str, dimenzio: str) -> dict:
         """A felajánlott alternatíva ("mutasd a hét többi napját")
-        elfogadása — ugyanazt a keresést futtatja újra, a megadott
-        dimenzió mentén kitágított ablakkal.
+        elfogadása — a megadott lazítási dimenzió mentén futtatja újra a
+        keresést.
 
-        A tágítás szabálya NEM itt van, hanem
-        `assistant/tools/szabad_idopontok.py::tagitott_ablak()`-ban —
+        A lazítás szabálya NEM itt van, hanem
+        `assistant/tools/szabad_idopontok.py::lazitas_terve()`-ben —
         ugyanaz a függvény, amivel az eszköz eldöntötte, hogy VAN
-        alternatíva. Így a gomb pontosan azt a keresést futtatja, amit a
-        rendszer ígért; ha a kettő külön élne, szétdriftelhetnének."""
+        alternatíva. Így a gomb pontosan azt futtatja, amit a rendszer
+        ígért; ha a kettő külön élne, szétdriftelhetnének.
+
+        Két dimenzió nem ablaktágítás, ezért másik eszközre megy:
+        a `kesobb` a `legkozelebbi_idopont`-ra (nincs ablak — ez a
+        lényege), a `varians` pedig ugyanabba az ablakba, de elengedett
+        szolgáltatás-szűréssel (`MINDEGY`)."""
         allapot = self._allapot(session_id)
         if not allapot.utolso_kereses:
             return {"tipus": "hiba", "uzenet_kulcs": "nincs_korabbi_kereses"}
 
         elozo = allapot.utolso_kereses
-        ablak = szabad_idopontok.tagitott_ablak(
+        terv = szabad_idopontok.lazitas_terve(
             dimenzio,
             datum_tol=elozo["datum_tol"],
             datum_ig=elozo["datum_ig"],
             napszak=elozo.get("napszak", "barmikor"),
+            szolgaltatas_szures=elozo.get("szolgaltatas_id") not in (None, MINDEGY),
         )
-        if ablak is None:
+        if terv is None:
             return {"tipus": "hiba", "uzenet_kulcs": "ervenytelen_alternativa"}
 
-        return self._szabad_idopontok(allapot, {**elozo, **ablak})
+        if terv["eszkoz"] == "legkozelebbi_idopont":
+            parameterek = dict(terv["parameterek"])
+            most = parameterek.pop("most")
+            for mezo in _KEMENY_MEZOK:
+                if mezo in elozo:
+                    parameterek.setdefault(mezo, elozo[mezo])
+            return self._legkozelebbi_idopont(allapot, parameterek, most)
+
+        return self._szabad_idopontok(allapot, {**elozo, **terv["parameterek"]})
 
     def kereses_strukturaltan(self, session_id: str, parameterek: dict) -> dict:
         """A koppintós út belépési pontja (blueprint 10. szakasz,

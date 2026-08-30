@@ -153,24 +153,31 @@ SABLONOK: dict[str, dict[str, object]] = {
         "kiut": {
             "bevezetes": (
                 "Úgy látom, így nem jutunk előre. Melyiket próbáljuk: "
-                "másik boltot, másik napot vagy másik napszakot?"
+                "másik napot, másik napszakot vagy a legkorábbi szabad időpontot?"
             ),
             "dimenzio": {
-                "bolt": "Másik bolt",
                 "nap": "Másik nap",
                 "napszak": "Másik napszak",
+                "legkorabbi": "A legkorábbi szabad időpont",
             },
         },
+        # A kulcsok a `szabad_idopontok.LAZITAS_DIMENZIOK` zárt halmaza
+        # — bolton BELÜLI dimenziók (ADR-024). **Mindegyik mondat
+        # kimondja, MELYIK dimenzióban engedtünk**: az "van egy másik
+        # időpont" önmagában nem válasz, mert a vásárló nem tudja,
+        # mit adott fel érte.
         "alternativa": {
             "bevezetes": {
                 "napszak": "Ebben a napszakban nincs, de aznap más napszakban van szabad időpont.",
                 "nap": "Ezen a napon nincs, de a héten másik napon van szabad időpont.",
-                "het": "Ezen a héten nincs, de a következő héten van szabad időpont.",
+                "kesobb": "Ebben az időszakban nincs, de később van szabad időpont.",
+                "varians": "Erre a változatra nincs, de a boltban másikra van szabad időpont.",
             },
             "gomb": {
                 "napszak": "Mutasd az aznapi többi időpontot",
                 "nap": "Mutasd a hét többi napját",
-                "het": "Mutasd a következő hetet",
+                "kesobb": "Mutasd a legkorábbi szabad időpontot",
+                "varians": "Mutasd a többi változatot",
             },
         },
         # ------------------------------------------------------------
@@ -363,16 +370,17 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "bevezetes": "Úgy látom, így nem jutunk előre.",
                 "kerdes": "Próbáljunk {dimenziok}?",
                 "dimenzio": {
-                    "bolt": "másik boltot",
                     "nap": "másik napot",
                     "napszak": "másik napszakot",
+                    "legkorabbi": "a legkorábbi szabad időpontot",
                 },
             },
             "alternativa": {
                 "bevezetes": {
                     "napszak": "Ebben a napszakban nincs, de aznap máskor van szabad időpont.",
                     "nap": "Ezen a napon nincs, de a héten másik napon van.",
-                    "het": "Ezen a héten nincs, de a következő héten van.",
+                    "kesobb": "Ebben az időszakban nincs, de később van szabad időpont.",
+                    "varians": "Erre a változatra nincs, de a boltban másikra van.",
                 },
                 "kerdes": "Megnézzem?",
             },
