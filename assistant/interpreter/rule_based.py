@@ -278,13 +278,27 @@ def _preferalt_ora(also: str) -> int | None:
     return ora if 0 <= ora <= 23 else None
 
 
+# Hány NAPOT fog át a tartalék ablak, a mai napot is beleszámítva. Egy
+# hét: ma + hat nap. A `+7` (ami nyolc naptári napot jelentett) egy
+# nappal TÚLNYÚLT a hétnyi beosztáson, és a nyugtázó sor ezt ki is
+# mondta („2026-12-21 és 2026-12-28 között"), holott a beosztás
+# 12-27-ig szólt — kézi próba találata, 2026-08-30.
+_TARTALEK_ABLAK_NAP = 7
+
+
 def _altalanos_ablak(most_iso: str) -> tuple[str, str]:
     """Ha a mondatból SEMMILYEN dátum nem oldható fel, de a keresést
-    (bolt ismert) mégis el kell indítani — most-tól +7 napig, napvégi
-    határral (golden set, koznyelvi-02/egyszerusitett-04 mintája:
-    "legkorábban"/"mikor mehetek" típusú, nyitott végű kérés)."""
+    (bolt ismert) mégis el kell indítani — EGY HÉT: mostantól a hetedik
+    nap végéig (golden set, koznyelvi-02/egyszerusitett-04 mintája:
+    "legkorábban"/"mikor mehetek" típusú, nyitott végű kérés).
+
+    **A hetedik nap a mai naptól számítva a hetedik**, tehát az ablak
+    hét naptári napot fog át, nem nyolcat. Ez nem szőrszálhasogatás: az
+    ablakot a nyugtázó sor KIMONDJA („2026-12-21 és 2026-12-27
+    között"), és egy nappal túlnyúló ablak olyan napot ígér, amire nincs
+    is beosztás."""
     most_dt = datetime.fromisoformat(most_iso.replace("Z", "+00:00")).replace(tzinfo=None)
-    vege_nap = (most_dt + timedelta(days=7)).date()
+    vege_nap = (most_dt + timedelta(days=_TARTALEK_ABLAK_NAP - 1)).date()
     return most_iso, f"{vege_nap.isoformat()}T23:59:59Z"
 
 

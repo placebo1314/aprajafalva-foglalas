@@ -346,7 +346,7 @@ esetek:
       parameterek:
         bolt_id: ugyifogyi
         datum_tol: "2026-08-17T09:00:00Z"
-        datum_ig: "2026-08-24T23:59:59Z"
+        datum_ig: "2026-08-23T23:59:59Z"
         napszak: barmikor
     megjegyzes: >
       A bolt egyértelmű ("petárdát"), a dátum nyitott — ez elég a kereséshez.
@@ -463,7 +463,7 @@ esetek:
         bolt_id: szundi
         szolgaltatas_id: altato
         datum_tol: "2026-08-17T09:00:00Z"
-        datum_ig: "2026-08-24T23:59:59Z"
+        datum_ig: "2026-08-23T23:59:59Z"
         napszak: este
     megjegyzes: >
       Napszakváltás: a 2. forduló ("inkább este") sem boltot, sem
@@ -484,7 +484,7 @@ esetek:
         bolt_id: torpilla
         szolgaltatas_id: nagy_orom
         datum_tol: "2026-08-17T09:00:00Z"
-        datum_ig: "2026-08-24T23:59:59Z"
+        datum_ig: "2026-08-23T23:59:59Z"
         napszak: barmikor
     megjegyzes: >
       Boltváltás: a 2. forduló EXPLICIT módon más boltot mond ki — ez
@@ -503,7 +503,7 @@ esetek:
       parameterek:
         bolt_id: ugyifogyi
         datum_tol: "2026-08-17T09:00:00Z"
-        datum_ig: "2026-08-24T23:59:59Z"
+        datum_ig: "2026-08-23T23:59:59Z"
         napszak: barmikor
     megjegyzes: >
       Elutasítás után alternatíva: a valós menetben az 1. forduló
@@ -579,7 +579,7 @@ esetek:
       parameterek:
         bolt_id: ugyifogyi
         datum_tol: "2026-08-17T09:00:00Z"
-        datum_ig: "2026-08-24T23:59:59Z"
+        datum_ig: "2026-08-23T23:59:59Z"
         napszak: barmikor
     megjegyzes: >
       A kemény rész MÁSIK fele: a szolgáltatás (méret) esik ki, a bolt

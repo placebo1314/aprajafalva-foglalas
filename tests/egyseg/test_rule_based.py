@@ -199,7 +199,7 @@ def test_sima_mikor_kerdes_marad_kereses():
     időszak-keresés, nyitott ablakkal."""
     eredmeny = _ertelmez("Mikor mehetek Törpillához?")
     assert eredmeny["eszkoz"] == "szabad_idopontok"
-    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-24T23:59:59Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-23T23:59:59Z"
 
 
 def test_kereses_ma_a_jelen_pillanattol_indul():
@@ -429,3 +429,22 @@ def test_bizonyossag_kontextusbol_orokolt_datum_is_tudas():
         ),
     )["bizonyossag"]
     assert b["datum"] == 1.0
+
+
+def test_tartalek_ablak_pontosan_egy_hetet_fog_at():
+    """KÉZI PRÓBA találata (2026-08-30): a tartalék ablak `+7` napja
+    NYOLC naptári napot fogott át, tehát egy nappal túlnyúlt a hétnyi
+    beosztáson — és a nyugtázó sor ezt ki is mondta („2026-12-21 és
+    2026-12-28 között"), holott a beosztás 12-27-ig szólt.
+
+    Az ablakot a vásárló HALLJA, tehát nem mindegy, mit ígér."""
+    from datetime import date
+
+    from assistant.interpreter.rule_based import altalanos_ablak
+
+    tol, ig = altalanos_ablak("2026-12-21T00:00:00Z")
+
+    assert tol == "2026-12-21T00:00:00Z"
+    assert ig == "2026-12-27T23:59:59Z"
+    napok = (date.fromisoformat(ig[:10]) - date.fromisoformat(tol[:10])).days + 1
+    assert napok == 7, "a tartalék ablak pontosan egy hét, a mai napot is beleszámítva"

@@ -176,7 +176,7 @@ def test_feloldhatatlan_kifejezes_nelkuli_iso_datumot_eldobunk():
     eredmeny = _ertelmez(_kaszkad(llm), "mikor lehet menni?")
 
     assert eredmeny["parameterek"]["datum_tol"] == "2026-08-17T09:00:00Z"
-    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-24T23:59:59Z"
+    assert eredmeny["parameterek"]["datum_ig"] == "2026-08-23T23:59:59Z"
 
 
 def test_ket_datumkifejezes_ablaka_osszevonodik():
