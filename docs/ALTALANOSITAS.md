@@ -297,7 +297,98 @@ közben a helyes megoldás egyszerű: az adminban kimondható szöveget kell
 
 ---
 
-## 3. Amit a robusztussági mérés NEM tud megmutatni
+## 3. A KIUTAK ANATÓMIÁJA (2026-08-30 mérés)
+
+A kiút a rendszer beismerése, hogy nem jut előre. Ezért a SZÁMA
+mérőszám — de csak akkor mond bármit, ha tudjuk, MI vezetett oda. Ez a
+szakasz azt írja le, amit a fej nélküli végigjátszás naplója mutat.
+Nem esetenkénti javítás: a MINTÁKAT rögzíti, a javítás máshol dől el.
+
+### 3.1 A mérés: ugyanaz a kód, ugyanaz a 204 forduló, más ADAT
+
+A demóadat korábban csak a Törpillába adott beosztást, tehát a másik
+két boltra irányuló minden kérés üres eredményre futott. A kérdés az
+volt: **a kiutak hány százaléka jött ebből?**
+
+Az A/B ugyanazon a kódon, ugyanazzal a 15 beszélgetéssel és a teljes
+robusztussági halmazzal, mindkét kimeneti módban futott — csak az
+adatbázis különbözött:
+
+| | régi adat (csak Törpilla) | új adat (mindhárom bolt) |
+|---|---|---|
+| ajánlat | 70 (34,3%) | **95 (46,6%)** |
+| eszközhiba | 30 (14,7%) | **13 (6,4%)** |
+| **kiút** | **26 (12,7%)** | **18 (8,8%)** |
+| ebből emberhez irányítás | 14 | 12 |
+| ismételt visszakérdezés | 7 | 6 |
+
+**A hipotézis RÉSZBEN igazolódott.** A kiutak harmada (8 / 26) tűnt el
+az adat pótlásától — nem a „nagy része". A maradék 18 nem adathiány.
+
+**Ami eltűnt, névvel** (mind a nyolc ugyanabba a mintába esik):
+
+| Bemenet, ami kiúthoz vezetett | régi | új |
+|---|---|---|
+| „talán jövő héten, még nem tudom biztosan" | 2 | 0 |
+| „jövő héten, vagy 28-án tudok menni?" | 2 | 0 |
+| „mégsem, inkább maradjunk a keddnél" | 2 | 0 |
+| „és jövő héten péntek?" | 2 | 0 |
+
+**A mechanizmus fontosabb, mint a szám.** Ezek a fordulók az ÚJ adaton
+is üres eredményt adnak (a „jövő hét" a demóhéten kívül esik) — mégsem
+lesz belőlük kiút. Azért, mert a kiutat nem az egyedi üres keresés
+váltotta ki, hanem a MÁSODIK EGYFORMA üres válasz: a beszélgetés első
+fordulója most már ajánlattal indul, tehát a számláló nem gyűlik fel.
+Ebből következik, amit a szám önmagában nem árul el: **egy üres válasz
+nem baj; kettő egymás után az.**
+
+### 3.2 A maradék 18 kiút: mind INFORMÁCIÓ NÉLKÜLI forduló
+
+Mind a 18 három bemenet-mintából jön (fordulónként két mód, ezért
+párosak a számok):
+
+| Minta | db | Mi történik |
+|---|---|---|
+| **Üres szándék ismételve** — „Mennék valamikor." ötször; „mennék" / „szeretnék menni" / „menni szeretnék" | 12 | A rendszer zárt kérdést tesz fel (melyik bolt), a vásárló nem válaszol rá, hanem újrafogalmazza ugyanazt a semmit |
+| **Kimondott elakadás** — „nem értem, mit kell csinálni" négyszer | 6 | A frusztráció-figyelő tervezett útja: kiút, majd ember |
+
+**Egyik sem párbeszédhiba.** Mindkét mintában a forduló NEM TARTALMAZ
+foglalható információt: nincs benne bolt, nincs benne nap. A rendszer
+egyetlen alternatívája a találgatás lenne — pontosan az, amit a
+robusztussági halmaz `ismetles-01` esete TILT.
+
+**A kiút itt nem a beszélgetés hibája, hanem a vége.** A 18-ból 12 már
+emberhez irányít, ami a vásárló 8. igénye szerinti helyes kimenetel.
+
+**A mérőszám ezért félrevezető önmagában.** A próbakorpusz
+SZÁNDÉKOSAN tartalmaz ilyen eseteket (a robusztussági halmaz egész
+kategóriája erről szól), tehát a kiút-arány nem csökkenthető nullára
+anélkül, hogy a rendszer elkezdene tippelni. Amit érdemes figyelni: a
+kiutak közül hány jött ADATHIÁNYBÓL (ma 0) és hány EGYFORMA VÁLASZ
+ISMÉTLŐDÉSÉBŐL (ma 6, a többi eszkaláció).
+
+### 3.3 Az ismételt visszakérdezés két mintája
+
+A hat ismételt visszakérdezés (ugyanarra a mezőre kétszer) két
+csoportba esik, és egyik sem hiba:
+
+- **Idegen nyelvű bemenet** („Ich möchte einen Termin für morgen früh
+  vereinbaren.") — a rendszer magyarul kérdez vissza a boltra, mert a
+  mondatból a boltot nem tudja kiolvasni. Ismert korlát (2.5).
+- **Sorszámos hivatkozás kontextus nélkül** („az utolsó jó lesz", „Az
+  elsőt kérem.") — nincs felajánlott lista, tehát nincs mire
+  hivatkozni; a visszakérdezés a helyes válasz (a robusztussági halmaz
+  14. kategóriája pontosan ezt írja elő).
+
+**Amit ez a kettő közösen mutat:** az ismételt visszakérdezés akkor
+keletkezik, amikor a vásárló mondata ÉRTELMES, de a rendszer számára
+használhatatlan. Ez más, mint az üres forduló — és ma ugyanoda vezet.
+Ha valaha javítani akarjuk, a különbséget kell megfognunk, nem a
+számot csökkenteni.
+
+---
+
+## 4. Amit a robusztussági mérés NEM tud megmutatni
 
 A halmaz az ÉRTELMEZŐT méri (mondat → eszközhívás). Ezért nem látszik
 benne:

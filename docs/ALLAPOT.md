@@ -4,6 +4,15 @@ BESZÉLGETÉS-ELEMZŐ HTML; feltűnő figyelmeztetés, ha nincs modell.
 Előzőleg: beszélhető kimeneti mód és ASR-hibatűrés (M6-előkészítés), a
 válaszidő-elvárás ELOSZLÁSSÁ vált — ADR-022)
 
+**A 2026-08-30-i kör NEGYEDIK mondata (a demóadat köre):**
+
+4. **A kiutak harmada nem párbeszédhiba volt, hanem ADATHIÁNY.** A
+   demóadat korábban csak a Törpillába adott beosztást; mostantól
+   mindhárom bolt kap, három különböző ritmusban. Ugyanazon a kódon,
+   ugyanazon a 204 fordulón mérve a kiút 26 → 18, az ajánlat 34,3% →
+   46,6%. A maradék 18 kiút MIND információ nélküli fordulóból jön —
+   a részletes bontás: `docs/ALTALANOSITAS.md` 3. szakasz.
+
 **A 2026-08-30-i kör három mondata:**
 
 1. **A KÉZI PRÓBA négy hibát talált, amit sem a teszt, sem a mérés nem
@@ -179,6 +188,35 @@ tényt, hogy a kérdés zárt-e, hogy ugyanaz a mondat megy-e ki
 harmadszor. Erre továbbra is két dolog van: a fej nélküli végigjátszás
 (gépi, gyors, de csak kivételt lát) és a kézi próba (lassú, de a
 beszélgetést nézi).
+
+### A/1b) A DEMÓADAT MINT ZAJFORRÁS — A/B mérés (2026-08-30)
+
+A demóadat korábban csak a Törpillába adott beosztást, tehát a másik
+két boltra irányuló MINDEN kérés üres eredményre futott. Ez a
+DEMÓADAT tulajdonsága volt, nem a rendszeré — de a próbákban
+megkülönböztethetetlen volt egy párbeszédhibától.
+
+**A/B: ugyanaz a kód, ugyanaz a 204 forduló, csak az adat más.**
+
+| | régi adat (csak Törpilla) | új adat (mindhárom bolt) |
+|---|---|---|
+| ajánlat | 70 (34,3%) | **95 (46,6%)** |
+| eszközhiba | 30 (14,7%) | **13 (6,4%)** |
+| **kiút** | **26 (12,7%)** | **18 (8,8%)** |
+| ebből emberhez irányítás | 14 | 12 |
+| ismételt visszakérdezés | 7 | 6 |
+
+**A hipotézis RÉSZBEN igazolódott:** a kiutak HARMADA (8/26) volt
+adathiány, nem a nagy része. A maradék 18 mind információ nélküli
+fordulóból jön („Mennék valamikor." ötször; „nem értem, mit kell
+csinálni" négyszer) — ott a kiút nem a beszélgetés hibája, hanem a
+vége, és 12 esetben már emberhez irányít.
+
+**A mechanizmus tanulságosabb, mint a szám** (`docs/ALTALANOSITAS.md`
+3.1): az eltűnt nyolc forduló az ÚJ adaton is üres eredményt ad (a
+„jövő hét" a demóhéten kívül esik) — mégsem lesz belőlük kiút, mert a
+kiutat nem az egyedi üres keresés váltja ki, hanem a MÁSODIK EGYFORMA
+üres válasz. Egy üres válasz nem baj; kettő egymás után az.
 
 ### A/2) MÉRÉSI HIBÁK — kettő, mindkettő a saját javunkra tévedett
 
@@ -449,7 +487,7 @@ mérhető legyen, nem órákban. Ehhez még hiányzik:
 ## Ismert korlátok
 
 - **A NYELVI és viselkedési korlátok külön dokumentumban vannak:**
-  `docs/ALTALANOSITAS.md`. Tíz tétel, mindegyiknél kimondva, hogy a
+  `docs/ALTALANOSITAS.md`. Tizenhárom tétel, mindegyiknél kimondva, hogy a
   javítás miért lenne RÁIGAZÍTÁS (egyetlen mondat megjavítása), és
   ezért miért nem csináljuk meg. Az alábbi lista a RENDSZER-szintű
   korlátoké.

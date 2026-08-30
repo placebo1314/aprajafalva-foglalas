@@ -39,8 +39,18 @@ Menet közben átkapcsolható; a következő fordulótól érvényes.
 
 ## 3. Amit érdemes beírni
 
-**Bolt: a Törpilla.** A demóadat csak oda generál beosztást — a Szundi
-és az Ügyifogyi keresésre az üres válasz helyes, nem hiba.
+**Mindhárom boltban van beosztás**, három különböző ritmusban — ez
+2026-08-30 óta van így, és érdemes kihasználni:
+
+| Bolt | Ritmus | Nyitva (helyi idő) |
+|---|---|---|
+| **Szundi** | hosszú, ritka: 30 perc, óránként egy | 14–20 |
+| **Ügyifogyi** | rövid, sűrű: 5 perc, 10 percenként | 9–17 |
+| **Törpilla** | három pult, három ritmus | 8–16 |
+
+Ugyanaz a mondat háromféle választ ad — ezt érdemes összevetni. Ami
+`jövő hétre` szól, ott továbbra is üres a válasz: a demóadat egy hétre
+generál, és az üres válasz ilyenkor helyes.
 
 | Beírás | Mit nézz szöveges módban | Mit nézz beszélhető módban |
 |---|---|---|
