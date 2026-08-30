@@ -1177,3 +1177,92 @@ def test_frusztracio_sikeres_ajanlat_utan_nem_szolal_meg(tmp_path):
 
     assert negyedik["tipus"] == "ajanlat"
     assert otodik["tipus"] == "visszakerdezes", "a sikeres ajánlatnak nulláznia kellett"
+
+
+# --- sorszámos hivatkozás (assistant/sorszam.py) -----------------------
+
+
+def _ajanlat_harom_jelolttel(conn, ctx, ertelmezo=None):
+    """Egy valódi ajánlat, hogy legyen mire hivatkozni."""
+    orch = Orchestrator(conn, ertelmezo or _ScriptedErtelmezo([]), org_id=ctx["org_id"])
+    ajanlat = orch.kereses_strukturaltan(
+        "s1",
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+        },
+    )
+    assert ajanlat["tipus"] == "ajanlat"
+    return orch, ajanlat
+
+
+def test_sorszamos_hivatkozas_a_MODELL_ELOTT_dont(tmp_path):
+    """„A másodikat" — a leggyakoribb természetes válasz egy listára.
+    Az értelmezőt meg sem hívjuk: annyi lehetőség van, ahány jelöltet
+    mi ajánlottunk fel, és egy elrontott sorszám nem visszakérdezést
+    okoz, hanem MÁS IDŐPONTOT foglal le."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([])
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "a másodikat", _MOST)
+
+    assert valasz["tipus"] == "megerositest_ker"
+    assert valasz["slot_id"] == ajanlat["jeloltek"][1]["slot_id"]
+    assert valasz["reteg"] == "orchestrator:sorszam"
+    assert ertelmezo.hivasok == [], "az értelmezőt meg sem kellett hívni"
+
+
+def test_sorszamos_hivatkozas_az_utolso_a_lista_vegere_mutat(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx)
+
+    valasz = orch.fordulo("s1", "az utolsó jó lesz", _MOST)
+
+    assert valasz["slot_id"] == ajanlat["jeloltek"][-1]["slot_id"]
+
+
+def test_sorszamos_hivatkozas_csak_akkor_ha_van_jelolt(tmp_path):
+    """Felajánlott jelöltek nélkül a „második" bármi lehet — ilyenkor a
+    szokásos út megy, az értelmezővel."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    valasz = orch.fordulo("s1", "a másodikat", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
+    assert len(ertelmezo.hivasok) == 1
+
+
+def test_sorszamos_hivatkozas_tartomanyon_kivul_nem_valaszt(tmp_path):
+    """Ha hármat ajánlottunk és a vásárló a hatodikat kéri, nem
+    kerekítünk — a mondat a szokásos úton megy tovább, és a rendszer
+    kérdez."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "a hatodikat", _MOST)
+
+    assert valasz["tipus"] != "megerositest_ker"
+    assert len(ertelmezo.hivasok) == 1
+
+
+def test_sorszamos_hivatkozas_utan_a_megerosites_ugyanoda_vezet(tmp_path):
+    """A rövidzár nem mellékbejárat: onnantól a szokásos út megy —
+    megerősítés, majd foglalási kód."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx)
+
+    orch.fordulo("s1", "az elsőt kérem", _MOST)
+    vegleges = orch.megerosit("s1", "a" * 64)
+
+    assert vegleges["tipus"] == "visszaigazolas"
+    assert vegleges["foglalasi_kod"]

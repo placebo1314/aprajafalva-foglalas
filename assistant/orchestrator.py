@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 
 from assistant.frusztracio import Frusztracio
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
+from assistant.sorszam import sorszam_hivatkozas
 from assistant.tools import (
     bolt_info,
     foglalas_athelyezes,
@@ -89,6 +90,11 @@ _ISMETLES_KUSZOB = 1
 # — ezt a `szabad_idopontok::_alternativ_dimenzio` is így sorolja:
 # napszak, nap, hét).
 _KIUT_DIMENZIOK = ("bolt", "nap", "napszak")
+
+# A sorszámos hivatkozás rétegneve a naplóban (`ui/vasarlo.py`). Nem az
+# értelmező rétege — az orchestrator dönt, mert egyedül ő ismeri a
+# felajánlott jelölteket (`assistant/sorszam.py`).
+RETEG_SORSZAM = "orchestrator:sorszam"
 
 # A kapuőr `ok`-kulcsa (`assistant/kapuor/`) → melyik magyar mondat
 # menjen ki (`assistant/valasz/sablonok.py`). Ami nincs benne, arra az
@@ -282,6 +288,33 @@ class Orchestrator:
         most: str,
         elozmenyek: list[tuple[str, str]],
     ) -> dict:
+        # SORSZÁMOS HIVATKOZÁS — „a másodikat", „az utolsó jó lesz".
+        #
+        # A leggyakoribb természetes válasz egy listára, és a
+        # legolcsóbban eldönthető: annyi lehetőség van, ahány jelöltet
+        # MI ajánlottunk fel. Nincs mit értelmeztetni rajta (a modell
+        # csak elronthatná, és egy elrontott sorszám nem
+        # visszakérdezést okoz, hanem MÁS IDŐPONTOT foglal le), ezért
+        # ez az ág a modell ELŐTT fut — ugyanaz a rövidzár, mint a
+        # gombnyomásé (`forditott_kaszkad._zart_valasz_e`).
+        #
+        # Csak akkor szólal meg, ha ténylegesen VAN mire hivatkozni:
+        # felajánlott jelöltek nélkül a „második" bármi lehet.
+        if allapot.aktualis_jeloltek:
+            index = sorszam_hivatkozas(mondat, len(allapot.aktualis_jeloltek))
+            if index is not None:
+                jelolt = allapot.aktualis_jeloltek[index - 1]
+                self.utolso_ertelmezes = {
+                    "eszkoz": "jelolt_valasztas",
+                    "parameterek": {"sorszam": index, "slot_id": jelolt["slot_id"]},
+                    "bizonyossag": {"eszkoz": 1.0},
+                    "reteg": RETEG_SORSZAM,
+                }
+                valasz = self.valaszt(session_id, jelolt["slot_id"])
+                valasz["reteg"] = RETEG_SORSZAM
+                valasz["valasztott_jelolt"] = jelolt
+                return valasz
+
         kontextus = ErtelmezesKontextus(
             megorzott_parameterek=dict(allapot.megorzott_parameterek),
             elozmenyek=list(elozmenyek),

@@ -1075,3 +1075,81 @@ esetek:
       legjobban, hogy a betoldás elvonja-e a figyelmet a valódi
       szándékról.
     cimkek: [asr_hallucinacio, asr, betoldott_zaras]
+
+# =======================================================================
+# 14. SORSZÁMOS HIVATKOZÁS KONTEXTUS NÉLKÜL — „a másodikat", de mihez
+# képest?
+#
+# A sorszámos hivatkozás („a másodikat", „az utolsó jó lesz") a
+# leggyakoribb természetes válasz egy listára, és a rendszer ÉRTI is —
+# de csak ott, ahol van mire hivatkozni: az orchestrator ismeri az
+# ELŐZŐ fordulóban felajánlott jelölteket (`assistant/sorszam.py`,
+# `orchestrator._fordulo_belso`).
+#
+# **Ez a halmaz az ÉRTELMEZŐT méri, ahol ez a lista nem létezik** — és
+# épp ezért fontos: itt derül ki, mit csinál a rendszer, ha a mondat
+# olyasmire hivatkozik, ami nincs. A helyes válasz a visszakérdezés
+# vagy az elhárítás. Ami TILOS: kitalálni, hogy mire gondolt — egy
+# dátum, egy bolt vagy egy időpont ilyenkor a semmiből jönne.
+#
+# Élesben ugyanezek a mondatok a jelöltek UTÁN érkeznek, és akkor a
+# determinisztikus rövidzár oldja fel őket, modellhívás nélkül. Azt az
+# utat az `tests/egyseg/test_orchestrator.py` méri (a golden futtató
+# nem hív eszközt, tehát jelöltjei sincsenek).
+# =======================================================================
+
+  - id: sorszam-01-masodikat-kontextus-nelkul
+    bemenet: "a másodikat"
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, nincs]
+    tilos: [kitalalt_datum, kitalalt_bolt]
+    megjegyzes: >
+      Nincs miből választani: se bolt, se nap, se felajánlott lista. A
+      helyes válasz a kérdés — ha a rendszer ilyenkor keresésbe kezd,
+      az a tartalék ablakkal és egy kitalált bolttal járna.
+    cimkek: [sorszam, hivatkozas_kontextus_nelkul]
+
+  - id: sorszam-02-utolso-jo-lesz
+    bemenet: "az utolsó jó lesz"
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, nincs]
+    tilos: [kitalalt_datum, kitalalt_bolt]
+    megjegyzes: >
+      Az „utolsó" a leglátványosabb csapda: pozíciót jelöl egy listában,
+      ami itt nincs. A modell hajlamos időpontként érteni („a nap
+      utolsó időpontja") — az már kitalált tény.
+    cimkek: [sorszam, hivatkozas_kontextus_nelkul]
+
+  - id: sorszam-03-elsot-kerem
+    bemenet: "Az elsőt kérem."
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, nincs]
+    tilos: [kitalalt_datum, kitalalt_bolt]
+    cimkek: [sorszam, hivatkozas_kontextus_nelkul]
+
+  - id: sorszam-04-hatodikat-haromból
+    bemenet: "a hatodikat kérem"
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, nincs]
+    tilos: [kitalalt_datum, kitalalt_bolt]
+    megjegyzes: >
+      Tartományon kívüli sorszám. Élesben (három felajánlott jelölt
+      mellett) a determinisztikus réteg szándékosan NEM kerekít a
+      legközelebbire: a „hatodik" nem elírás, hanem félreértés, és azt
+      kérdéssel kell tisztázni. Az értelmező szintjén ugyanez a válasz
+      helyes.
+    cimkek: [sorszam, tartomanyon_kivul]
+
+  - id: sorszam-05-elso-alkalommal-nem-hivatkozas
+    bemenet: "Első alkalommal járok itt, szeretnék időpontot a Törpillába."
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    tilos: [kitalalt_bolt]
+    megjegyzes: >
+      ELLENPRÓBA: a sorszó itt nem hivatkozás, hanem egy hétköznapi
+      fordulat — és a mondat mögött egy teljesen szabályos foglalási
+      kérés áll. Ha a rendszer ezt „az első időpont kérése"-ként
+      értené, egy sosem felajánlott jelöltet foglalna le. A
+      determinisztikus felismerő ezért zárt szólistát és hosszkorlátot
+      használ (`assistant/sorszam.py`).
+    cimkek: [sorszam, ellenproba]

@@ -767,6 +767,30 @@ class VasarloApp(tk.Tk):
         # ("nincs szabad időpont kedden").
         self._elozmenyhez_ad(KI_VASARLO if ki_be == _TE_CIMKE else KI_RENDSZER, szoveg)
 
+    def _jeloltek_az_elozmenybe(self, jeloltek: list[dict]) -> None:
+        """A felajánlott időpontok SORSZÁMOZVA a beszélgetés-előzménybe.
+
+        A képernyőn a jelöltek gombok, tehát a szöveges naplóba (és így
+        az előzménybe) eddig nem kerültek bele — a modell nem tudta,
+        mit ajánlottunk fel, és egy „a másodikat" mondatra nem volt
+        mire hivatkoznia.
+
+        A determinisztikus felismerés (`assistant/sorszam.py`) ettől
+        függetlenül működik; ez a sor a MODELL kedvéért van, arra az
+        esetre, ha a mondat a zárt mintákba nem fér bele („az a fél
+        kilences jó lesz"). Nem jelenik meg a képernyőn: a vásárló a
+        gombokat látja, a beszélgetés-előzmény pedig nem a képernyő
+        másolata, hanem az értelmező bemenete (ADR-019)."""
+        if not jeloltek:
+            return
+        sorok = [
+            f"{i}. {_idopont_cimke(j['kezdet'], j['veg'])}"
+            for i, j in enumerate(jeloltek, start=1)
+            if j.get("kezdet") and j.get("veg")
+        ]
+        if sorok:
+            self._elozmenyhez_ad(KI_RENDSZER, "Felajánlott időpontok: " + "; ".join(sorok))
+
     def _elozmenyhez_ad(self, ki: str, szoveg: str) -> None:
         """Egy sor a beszélgetés-előzményhez, a legutóbbi fordulókra
         vágva. A vágás azért kell, mert a prompt hossza latencia
@@ -810,7 +834,11 @@ class VasarloApp(tk.Tk):
         _proba_naplo_ir(
             szoveg,
             self.orchestrator.utolso_ertelmezes,
-            getattr(self.orchestrator.ertelmezo, "utolso_reteg", None),
+            # A réteget elsősorban a VÁLASZ mondja meg: van olyan út
+            # (sorszámos hivatkozás), ahol az orchestrator dönt, és az
+            # értelmező meg sem szólal — ilyenkor az ő `utolso_reteg`-je
+            # az ELŐZŐ fordulóé lenne, ami néma félrevezetés a naplóban.
+            valasz.get("reteg") or getattr(self.orchestrator.ertelmezo, "utolso_reteg", None),
             normalizalt=getattr(self.orchestrator.ertelmezo, "utolso_normalizalt", None),
             valasz_tipus=valasz.get("tipus") or ("sikeres" if valasz.get("sikeres") else "hiba"),
             valaszido_masodperc=valaszido,
@@ -893,6 +921,7 @@ class VasarloApp(tk.Tk):
                 )
             )
             self._eredmeny_render(self.szo_jelolt_keret, valasz, self.szo_uzenet)
+            self._jeloltek_az_elozmenybe(valasz.get("jeloltek") or [])
             return
 
         if tipus == "eszkoz_hiba" or not valasz.get("sikeres", True):
