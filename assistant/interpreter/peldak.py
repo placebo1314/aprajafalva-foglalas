@@ -134,4 +134,43 @@ PELDAK: list[tuple[str, dict]] = [
         "Hány fok van odakint?",
         {"eszkoz": "nincs", "parameterek": {}},
     ),
+    # MINDEGY — a vásárló ELENGEDI a szolgáltatást. A mező nem marad
+    # üresen: az azt jelentené, hogy nem tudjuk, és a rendszer újra
+    # rákérdezne arra, amit a vásárló épp az imént engedett el.
+    (
+        "Mindegy, melyik petárda, csak legyen szerdán.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "ugyifogyi",
+                "szolgaltatas_id": "MINDEGY",
+                "datum_kifejezes": "szerdán",
+            },
+        },
+    ),
+    # MINDEGY a napszakra — „ami van" ugyanaz az elengedés, más szóval.
+    (
+        "A Szundiba mennék csütörtökön, nekem tényleg mindegy, hány órakor.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "szundi",
+                "napszak": "MINDEGY",
+                "datum_kifejezes": "csütörtökön",
+            },
+        },
+    ),
+    # ELLENPRÓBA a MINDEGY-re: a „mindegyik" NEM elengedés, hanem
+    # lista-kérés. A kettőt egy szólista nem tudja megkülönböztetni (a
+    # szótő ugyanaz) — a mondattan igen, és ez a modell dolga.
+    (
+        "Mindegyik petárda érdekel, mit árulnak?",
+        {"eszkoz": "bolt_info", "parameterek": {"bolt_id": "ugyifogyi", "mit": "termek"}},
+    ),
+    # A LEGKORÁBBI időpont mint önálló kérés — nincs benne időszak,
+    # tehát nem is szabad rákérdezni: egyetlen válasz van rá.
+    (
+        "Bármikor jó, ami legközelebb van a Törpillánál.",
+        {"eszkoz": "legkozelebbi_idopont", "parameterek": {"bolt_id": "torpilla"}},
+    ),
 ]

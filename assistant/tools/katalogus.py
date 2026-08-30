@@ -24,6 +24,26 @@ from __future__ import annotations
 
 from core.repo import torzsadat_repo
 
+# A „MINDEGY" SZENTINEL — a vásárló ELENGEDTE ezt a mezőt.
+#
+# **Három állapot van, nem kettő**, és a különbség viselkedésbeli:
+#
+# | Érték | Jelentés | Mit tesz a rendszer |
+# |---|---|---|
+# | hiányzik / `None` | nem tudjuk | KÉRDEZ |
+# | `MINDEGY` | a vásárló elengedte | NEM kérdez többé, mindenben keres |
+# | konkrét slug | tudjuk | arra szűkít |
+#
+# Enélkül a „mindegy melyik pult" válasz ugyanaz volt, mint a hallgatás:
+# a mező üresen maradt, a rendszer pedig újra rákérdezett — arra, amit a
+# vásárló épp az imént engedett el. A `None` és a „mindegy" ÖSSZEMOSÁSA
+# volt a hiba, nem a kérdés maga.
+#
+# Zárt halmazbeli érték (a sémák enumjában is szerepel), tehát a modell
+# is használhatja — a felismerése nyelvi feladat, nem kulcsszólista
+# (`assistant/interpreter/llm_based.py` rendszerprompt).
+MINDEGY = "MINDEGY"
+
 # slug -> a torzsadat_repo-ban tárolt pontos bolt-név.
 BOLT_NEVEK: dict[str, str] = {
     "szundi": "Szundi",

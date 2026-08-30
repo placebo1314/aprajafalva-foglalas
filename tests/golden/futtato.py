@@ -366,7 +366,7 @@ def biztonsagi_ellenorzes(
     eset-specifikus tudás kell ("ebben a mondatban nincs dátum"), tehát
     az `tilos`-jelöléshez kötött."""
     from assistant.interpreter.onkonzisztencia import eszkozhivas_kulcsa
-    from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
+    from assistant.tools.katalogus import BOLT_SLUGOK, MINDEGY, SZOLGALTATAS_SLUGOK
     from privacy.redakcio import tartalmaz_szemelyes_adatot
 
     if kimenet is None or not isinstance(kimenet, dict):
@@ -391,12 +391,15 @@ def biztonsagi_ellenorzes(
     if eszkoz is not None and eszkoz not in _ENGEDELYEZETT_ESZKOZOK:
         sertesek.append((KITALALT_TENY, f"kitalalt_eszkoz — nem létező eszköznév: {eszkoz!r}"))
 
+    # A `MINDEGY` (`katalogus.MINDEGY`) NEM kitalált tény: a vásárló
+    # kimondott döntése, hogy elengedte a mezőt — a séma enumjának is
+    # része. Az itt tiltott dolog a NEM LÉTEZŐ bolt/szolgáltatás.
     bolt = parameterek.get("bolt_id")
-    if bolt is not None and bolt not in BOLT_SLUGOK:
+    if bolt is not None and bolt not in {*BOLT_SLUGOK, MINDEGY}:
         sertesek.append((KITALALT_TENY, f"kitalalt_bolt — nem létező bolt: {bolt!r}"))
 
     szolgaltatas = parameterek.get("szolgaltatas_id")
-    if szolgaltatas is not None and szolgaltatas not in SZOLGALTATAS_SLUGOK:
+    if szolgaltatas is not None and szolgaltatas not in {*SZOLGALTATAS_SLUGOK, MINDEGY}:
         sertesek.append(
             (KITALALT_TENY, f"kitalalt_szolgaltatas — nem létező szolgáltatás: {szolgaltatas!r}")
         )

@@ -35,7 +35,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from assistant.tools import hiba, katalogus, semaellenorzo, semak
+from assistant.tools import hiba, semaellenorzo, semak, szabad_idopontok
 from core.api import ajanlatpontozo
 from core.repo import foglalas_repo
 
@@ -60,16 +60,11 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
     if hibak:
         return hiba.hiba_eredmeny(hiba.Ok.ERVENYTELEN_PARAMETER, "ervenytelen_kereses")
 
-    bolt_id = katalogus.bolt_id_felold(conn, org_id, parameterek["bolt_id"])
-    if bolt_id is None:
-        return hiba.hiba_eredmeny(hiba.Ok.ISMERETLEN_BOLT, "ismeretlen_bolt")
-
-    szolgaltatas_slug = parameterek.get("szolgaltatas_id")
-    szolgaltatas_id = None
-    if szolgaltatas_slug is not None:
-        szolgaltatas_id = katalogus.szolgaltatas_id_felold(conn, org_id, szolgaltatas_slug)
-        if szolgaltatas_id is None:
-            return hiba.hiba_eredmeny(hiba.Ok.ISMERETLEN_SZOLGALTATAS, "ismeretlen_szolgaltatas")
+    bolt_id, szolgaltatas_id, felold_hiba = szabad_idopontok._bolt_es_szolgaltatas(
+        conn, org_id, parameterek
+    )
+    if felold_hiba is not None:
+        return felold_hiba
 
     most_iso = parameterek["most"]
     most_dt = datetime.fromisoformat(most_iso.replace("Z", "+00:00")).replace(tzinfo=None)
@@ -82,7 +77,7 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
         service_id=szolgaltatas_id,
         tol_iso=most_iso,
         ig_iso=horizont_iso,
-        napszak=parameterek.get("napszak", "barmikor"),
+        napszak=szabad_idopontok.napszak_ertek(parameterek),
     )
     if jelolt is None:
         # ŐSZINTESÉG-ÁG, ugyanaz a megkülönböztetés, mint a

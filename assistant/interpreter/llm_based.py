@@ -55,7 +55,6 @@ from dataclasses import dataclass
 from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
 from assistant.interpreter.peldak import PELDAK
 from assistant.tools import semak
-from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
 
 _LOG = logging.getLogger(__name__)
 
@@ -76,6 +75,8 @@ ESZKOZOK = [
 ]
 
 _NAPSZAK_ENUM = semak.SEMAK["szabad_idopontok"]["v1"]["properties"]["napszak"]["enum"]
+_BOLT_ENUM = semak.SEMAK["szabad_idopontok"]["v1"]["properties"]["bolt_id"]["enum"]
+_SZOLGALTATAS_ENUM = semak.SEMAK["szabad_idopontok"]["v1"]["properties"]["szolgaltatas_id"]["enum"]
 _BOLT_INFO_MIT_TELJES = semak.SEMAK["bolt_info"][semak.legutobbi_verzio("bolt_info")]["properties"][
     "mit"
 ]["enum"]
@@ -98,8 +99,14 @@ FORMAT_SEMA = {
         "parameterek": {
             "type": "object",
             "properties": {
-                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
-                "szolgaltatas_id": {"type": "string", "enum": sorted(SZOLGALTATAS_SLUGOK)},
+                # A MINDEGY szentinel a séma része (`semak.py`), tehát a
+                # kötött dekódolásé is: a modell CSAK így tudja kifejezni,
+                # hogy a vásárló elengedte a mezőt. Enélkül a „mindegy
+                # melyik" válaszra üresen hagyná — ami a rendszernek
+                # ugyanaz, mintha nem mondott volna semmit, és újra
+                # rákérdeznénk arra, amit épp elengedett.
+                "bolt_id": {"type": "string", "enum": _BOLT_ENUM},
+                "szolgaltatas_id": {"type": "string", "enum": _SZOLGALTATAS_ENUM},
                 # A dátum ELSŐDLEGESEN szöveges kifejezés — a modell
                 # IDÉZI a mondatból, nem számolja ki (ADR-018). A
                 # feloldás a `hun-date-parser` dolga; a `datum_tol`/
@@ -204,7 +211,16 @@ kétféle adat kétféleképp viselkedik:
 
 - BOLT és SZOLGÁLTATÁS: a beszélgetés során végig érvényes marad. Töltsd
   ki akkor is, ha az utolsó mondat nem ismétli meg. KIVÉVE, ha a vásárló
-  mást kér, vagy azt mondja, hogy mindegy melyik — akkor hagyd ki a mezőt.
+  mást kér — akkor az újat.
+
+MINDEGY: ha a vásárló ELENGED egy mezőt ("mindegy melyik", "bármelyik jó",
+"nem számít", "ami van", "akármelyik"), írd a mező értékének azt, hogy
+MINDEGY — ne hagyd üresen. Az üres mező azt jelenti, hogy NEM TUDJUK, és
+a rendszer újra rákérdez; a MINDEGY azt, hogy a vásárló eldöntötte, hogy
+nem érdekli. Ez a bolt_id, a szolgaltatas_id és a napszak mezőre
+használható.
+FIGYELEM, ez NEM mindegy-válasz: "mindegyik érdekel", "mindet kérem",
+"melyek vannak?" — ezek a LISTÁT kérik, nem engednek el semmit.
 - IDŐPONT (datum_kifejezes, napszak): MINDIG csak a vásárló UTOLSÓ
   mondatából veheted. A korábbi fordulókban említett napot vagy napszakot
   NE vidd tovább, és ne is vond össze az újjal — ha az utolsó mondat nem

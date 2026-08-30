@@ -108,6 +108,7 @@ from assistant.tools import katalogus
 from assistant.tools.katalogus import (
     BOLT_EGYERTELMU_SZOLGALTATAS,
     BOLT_SLUGOK,
+    MINDEGY,
     SZOLGALTATAS_SLUGOK,
 )
 
@@ -310,9 +311,14 @@ class ForditottKaszkadErtelmezo:
 
         # ZÁRT HALMAZOK — az enum a dekódolás szintjén véd, de ha egy
         # jövőbeli szolgáltató mégis mást adna vissza, itt is kiesik.
-        if parameterek.get("bolt_id") not in BOLT_SLUGOK:
+        #
+        # A `MINDEGY` a halmaz RÉSZE (`katalogus.MINDEGY`): nem kitalált
+        # érték, hanem a vásárló kimondott döntése, hogy elengedi a
+        # mezőt. Ha itt kiesne, a rendszer újra rákérdezne arra, amit
+        # épp elengedtek — pontosan az a hiba, amiért a szentinel van.
+        if parameterek.get("bolt_id") not in {*BOLT_SLUGOK, MINDEGY}:
             parameterek.pop("bolt_id", None)
-        if parameterek.get("szolgaltatas_id") not in SZOLGALTATAS_SLUGOK:
+        if parameterek.get("szolgaltatas_id") not in {*SZOLGALTATAS_SLUGOK, MINDEGY}:
             parameterek.pop("szolgaltatas_id", None)
 
         if eszkoz == "nincs":
@@ -330,6 +336,9 @@ class ForditottKaszkadErtelmezo:
                 "parameterek": {"foglalasi_kod": kod},
                 "bizonyossag": bizonyossag,
             }
+
+        if eszkoz == "legkozelebbi_idopont":
+            return self._legkozelebbi_kapu(parameterek, mondat, kontextus, bizonyossag)
 
         if eszkoz == "visszakerdez":
             hianyzo = parameterek.get("hianyzo_mezo") or "bolt_id"
@@ -413,7 +422,7 @@ class ForditottKaszkadErtelmezo:
             parameterek.get("bolt_id"),
             ForditottKaszkadErtelmezo._tartalek(kontextus, "bolt_id"),
         ):
-            if jelolt in BOLT_SLUGOK:
+            if jelolt in {*BOLT_SLUGOK, MINDEGY}:
                 return jelolt
         return None
 
@@ -634,11 +643,17 @@ class ForditottKaszkadErtelmezo:
         # alapértelmezett szolgáltatására esünk vissza azonnal, előbb
         # megnézzük, mit mond a mondat. A sorrend fontos: a modell
         # válasza nyer, a szabály csak pótol.
-        szolgaltatas = (
-            parameterek.get("szolgaltatas_id")
-            or rule_based.szolgaltatas_feloldas(mondat, bolt_id)
-            or BOLT_EGYERTELMU_SZOLGALTATAS.get(bolt_id)
-        )
+        # A MINDEGY MEGELŐZI a pótlást: ha a vásárló elengedte a
+        # szolgáltatást, nem tölthetjük ki helyette a bolt
+        # alapértelmezésével — az épp az ellenkezője annak, amit kért.
+        if parameterek.get("szolgaltatas_id") == MINDEGY:
+            szolgaltatas = MINDEGY
+        else:
+            szolgaltatas = (
+                parameterek.get("szolgaltatas_id")
+                or rule_based.szolgaltatas_feloldas(mondat, bolt_id)
+                or BOLT_EGYERTELMU_SZOLGALTATAS.get(bolt_id)
+            )
         if szolgaltatas:
             vegleges["szolgaltatas_id"] = szolgaltatas
             forras["szolgaltatas_id"] = (
@@ -666,6 +681,64 @@ class ForditottKaszkadErtelmezo:
 
         return {
             "eszkoz": "szabad_idopontok",
+            "parameterek": vegleges,
+            "bizonyossag": bizonyossag,
+        }
+
+    def _legkozelebbi_kapu(
+        self,
+        parameterek: dict,
+        mondat: str,
+        kontextus: ErtelmezesKontextus,
+        bizonyossag: dict,
+    ) -> dict:
+        """„Mikor tudok legkorábban menni?" — ELSŐRENDŰ kérés, nem
+        keresés dátumablak nélkül.
+
+        Enélkül a modell `legkozelebbi_idopont` válasza némán
+        `szabad_idopontok`-ká alakult (a kapuk végén álló
+        `_kereses_kapu` mindent azzá tesz), az pedig a hiányzó dátum
+        helyére a tartalék egyhetes ablakot tette — tehát a „bármikor
+        jó, ami legközelebb van" kérésre egy önkényes hét jött ki, és
+        ha abban a hétben nem volt hely, üres válasz. Pedig épp az
+        ellenkezőjét kérték: NE legyen ablak.
+
+        Ezért itt **dátumot nem oldunk fel és nem is kérdezünk vissza**
+        (a séma nem is fogad ablakot, `assistant/tools/semak.py`); a
+        bolt marad az egyetlen blokkoló mező, ahogy a keresésnél is."""
+        bolt_id = parameterek.get("bolt_id") or self._tartalek(kontextus, "bolt_id")
+        if bolt_id is None:
+            return self._visszakerdez("bolt_id", "zart", bizonyossag)
+
+        forras = self.utolso_nyomkovetes.setdefault("mezo_forras", {})
+        forras["bolt_id"] = "modell" if parameterek.get("bolt_id") else "megőrzött kontextus"
+        forras["datum"] = "nincs ablak — a legkorábbi szabad időpont a kérdés"
+
+        vegleges: dict = {"bolt_id": bolt_id}
+
+        napszak = self._mondatbeli_napszak(parameterek.get("napszak"), mondat)
+        if napszak:
+            vegleges["napszak"] = napszak
+            forras["napszak"] = "modell (a mondatból igazolva)"
+
+        if parameterek.get("szolgaltatas_id") == MINDEGY:
+            szolgaltatas = MINDEGY
+        else:
+            szolgaltatas = (
+                parameterek.get("szolgaltatas_id")
+                or rule_based.szolgaltatas_feloldas(mondat, bolt_id)
+                or BOLT_EGYERTELMU_SZOLGALTATAS.get(bolt_id)
+            )
+        if szolgaltatas:
+            vegleges["szolgaltatas_id"] = szolgaltatas
+            forras["szolgaltatas_id"] = (
+                "modell"
+                if parameterek.get("szolgaltatas_id")
+                else "a bolt egyértelmű szolgáltatása"
+            )
+
+        return {
+            "eszkoz": "legkozelebbi_idopont",
             "parameterek": vegleges,
             "bizonyossag": bizonyossag,
         }

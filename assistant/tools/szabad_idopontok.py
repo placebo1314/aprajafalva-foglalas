@@ -135,6 +135,49 @@ def _alternativ_dimenzio(
     return None
 
 
+def _bolt_es_szolgaltatas(conn, org_id: str, parameterek: dict):
+    """`(bolt_id | None, szolgaltatas_id | None, hiba | None)` — a két
+    zárt halmazbeli mező feloldása, a MINDEGY szentinel kezelésével.
+
+    **A `MINDEGY` nem ismeretlen érték, hanem ELENGEDETT mező**
+    (`katalogus.MINDEGY`): a vásárló azt mondta, „mindegy melyik". A
+    feloldás eredménye ilyenkor `None`, ami a lekérdező rétegben
+    pontosan azt jelenti, hogy nincs szűrés erre a mezőre
+    (`foglalas_repo.free_slots_search` már így is működik) — tehát
+    MINDEN boltban, illetve minden szolgáltatásra keresünk.
+
+    A hiányzó mező (`None` a bemenetben) NEM ugyanez: az a hívó dolga,
+    hogy kérdezzen rá; ide csak akkor jut el, ha a séma megengedi."""
+    bolt_slug = parameterek.get("bolt_id")
+    bolt_id = None
+    if bolt_slug is not None and bolt_slug != katalogus.MINDEGY:
+        bolt_id = katalogus.bolt_id_felold(conn, org_id, bolt_slug)
+        if bolt_id is None:
+            return None, None, hiba.hiba_eredmeny(hiba.Ok.ISMERETLEN_BOLT, "ismeretlen_bolt")
+
+    szolgaltatas_slug = parameterek.get("szolgaltatas_id")
+    szolgaltatas_id = None
+    if szolgaltatas_slug is not None and szolgaltatas_slug != katalogus.MINDEGY:
+        szolgaltatas_id = katalogus.szolgaltatas_id_felold(conn, org_id, szolgaltatas_slug)
+        if szolgaltatas_id is None:
+            return (
+                None,
+                None,
+                hiba.hiba_eredmeny(hiba.Ok.ISMERETLEN_SZOLGALTATAS, "ismeretlen_szolgaltatas"),
+            )
+    return bolt_id, szolgaltatas_id, None
+
+
+def napszak_ertek(parameterek: dict) -> str:
+    """A napszak, a MINDEGY szentinelt „barmikor"-ra fordítva — a kettő
+    a KERESÉS szempontjából ugyanaz, csak a szándék más: a „bármikor" a
+    rendszer alapértelmezése, a MINDEGY a vásárló kimondott döntése.
+    A megkülönböztetés a kontextusban számít (nem kérdezünk rá újra),
+    a szűrésben nem."""
+    napszak = parameterek.get("napszak", "barmikor")
+    return "barmikor" if napszak == katalogus.MINDEGY else napszak
+
+
 def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
     """`org_id`: melyik szervezetben keresünk — ezt a hívó (orchestrator)
     adja meg, nem az eszköz sémájának paramétere: a v1 hatókör egyetlen
@@ -145,16 +188,9 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
     if hibak:
         return hiba.hiba_eredmeny(hiba.Ok.ERVENYTELEN_PARAMETER, "ervenytelen_kereses")
 
-    bolt_id = katalogus.bolt_id_felold(conn, org_id, parameterek["bolt_id"])
-    if bolt_id is None:
-        return hiba.hiba_eredmeny(hiba.Ok.ISMERETLEN_BOLT, "ismeretlen_bolt")
-
-    szolgaltatas_slug = parameterek.get("szolgaltatas_id")
-    szolgaltatas_id = None
-    if szolgaltatas_slug is not None:
-        szolgaltatas_id = katalogus.szolgaltatas_id_felold(conn, org_id, szolgaltatas_slug)
-        if szolgaltatas_id is None:
-            return hiba.hiba_eredmeny(hiba.Ok.ISMERETLEN_SZOLGALTATAS, "ismeretlen_szolgaltatas")
+    bolt_id, szolgaltatas_id, felold_hiba = _bolt_es_szolgaltatas(conn, org_id, parameterek)
+    if felold_hiba is not None:
+        return felold_hiba
 
     jeloltek = ajanlatpontozo.find_candidates(
         conn,
@@ -163,13 +199,13 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
         service_id=szolgaltatas_id,
         datum_tol=parameterek["datum_tol"],
         datum_ig=parameterek["datum_ig"],
-        napszak=parameterek.get("napszak", "barmikor"),
+        napszak=napszak_ertek(parameterek),
         session_id=parameterek["session_id"],
     )
     if not jeloltek:
         datum_tol = parameterek["datum_tol"]
         datum_ig = parameterek["datum_ig"]
-        napszak = parameterek.get("napszak", "barmikor")
+        napszak = napszak_ertek(parameterek)
 
         # ŐSZINTESÉG-ÁG: ha a boltnak EGYÁLTALÁN nincs meghirdetett
         # slotja, az nem szűkösség — a bolt nem vitte fel a beosztást.

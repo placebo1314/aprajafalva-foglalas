@@ -73,7 +73,7 @@ def find_candidates(
     conn,
     *,
     org_id: str,
-    shop_id: str,
+    shop_id: str | None,
     service_id: str | None = None,
     datum_tol: str,
     datum_ig: str,
@@ -85,6 +85,12 @@ def find_candidates(
     hanem pontszám szerint csökkenően — a hívó (`szabad_idopontok` eszköz)
     dolga, hogy holdot tegyen rájuk, mielőtt felajánlja őket (CLAUDE.md
     6. invariáns: "csak olyan időpontot mutatunk, amit tartani is tudunk").
+
+    `shop_id=None`: MINDEN boltban keres — ez a `MINDEGY` szentinel
+    feloldott alakja (`assistant/tools/katalogus.MINDEGY`), nem
+    ajánlás, hanem a hiányzó szűkítés (ADR-024). A lekérdező réteg ezt
+    eddig is tudta (`foglalas_repo.free_slots_search`), csak a
+    típusjelölés kötötte meg.
 
     Visszatérési érték elemenként: `{"slot_id", "kezdet", "veg",
     "pontszam"}`. Üres lista = nincs a kért ablakban szabad, a napszaknak
@@ -142,7 +148,7 @@ def earliest_free(
     conn,
     *,
     org_id: str,
-    shop_id: str,
+    shop_id: str | None,
     service_id: str | None = None,
     tol_iso: str,
     ig_iso: str,

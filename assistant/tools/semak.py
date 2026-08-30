@@ -18,7 +18,7 @@ Verziózás: minden eszközhöz `SEMAK[eszkoz]["v1"]` — ha egy séma változik
 
 from __future__ import annotations
 
-from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_SLUGOK
+from assistant.tools.katalogus import BOLT_SLUGOK, MINDEGY, SZOLGALTATAS_SLUGOK
 
 _NAPSZAKOK = ["delelott", "delutan", "este", "barmikor"]
 _BOLT_INFO_MEZOK_V1 = ["nyitvatartas", "cim", "idotartam"]
@@ -29,16 +29,25 @@ _BOLT_INFO_MEZOK_V1 = ["nyitvatartas", "cim", "idotartam"]
 # lekérdezési KÉPESSÉGET rögzíti, nem a kapuőr-döntést.
 _BOLT_INFO_MEZOK_V2 = [*_BOLT_INFO_MEZOK_V1, "megjelenes", "termek", "ar"]
 
+# A KERESŐ eszközök enumjai a MINDEGY szentinellel bővülnek
+# (`katalogus.MINDEGY`): a vásárló elengedheti a boltot, a szolgáltatást
+# és a napszakot is. A `bolt_info` enumjai NEM bővülnek — ott a „mindegy
+# melyik bolt" kérdésnek nincs értelme (egy tény konkrét boltra
+# vonatkozik).
+_BOLT_ENUM = sorted([*BOLT_SLUGOK, MINDEGY])
+_SZOLGALTATAS_ENUM = sorted([*SZOLGALTATAS_SLUGOK, MINDEGY])
+_NAPSZAK_ENUM = [*_NAPSZAKOK, MINDEGY]
+
 SEMAK: dict[str, dict[str, dict]] = {
     "szabad_idopontok": {
         "v1": {
             "type": "object",
             "properties": {
-                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
-                "szolgaltatas_id": {"type": "string", "enum": sorted(SZOLGALTATAS_SLUGOK)},
+                "bolt_id": {"type": "string", "enum": _BOLT_ENUM},
+                "szolgaltatas_id": {"type": "string", "enum": _SZOLGALTATAS_ENUM},
                 "datum_tol": {"type": "string", "format": "date-time"},
                 "datum_ig": {"type": "string", "format": "date-time"},
-                "napszak": {"type": "string", "enum": _NAPSZAKOK},
+                "napszak": {"type": "string", "enum": _NAPSZAK_ENUM},
                 "preferalt_ora": {"type": "integer"},
                 "session_id": {"type": "string"},
             },
@@ -50,9 +59,9 @@ SEMAK: dict[str, dict[str, dict]] = {
         "v1": {
             "type": "object",
             "properties": {
-                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
-                "szolgaltatas_id": {"type": "string", "enum": sorted(SZOLGALTATAS_SLUGOK)},
-                "napszak": {"type": "string", "enum": _NAPSZAKOK},
+                "bolt_id": {"type": "string", "enum": _BOLT_ENUM},
+                "szolgaltatas_id": {"type": "string", "enum": _SZOLGALTATAS_ENUM},
+                "napszak": {"type": "string", "enum": _NAPSZAK_ENUM},
                 # Dátumablak SZÁNDÉKOSAN nincs: a "mikor tudok
                 # legkorábban?" kérdésben nincs ablak. A `most`-tól néz
                 # előre egy rögzített horizontig

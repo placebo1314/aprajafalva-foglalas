@@ -45,7 +45,7 @@ from assistant.tools import (
     legkozelebbi_idopont,
     szabad_idopontok,
 )
-from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_NEVEK
+from assistant.tools.katalogus import BOLT_SLUGOK, MINDEGY, SZOLGALTATAS_NEVEK
 from core.repo import foglalas_repo
 
 _LOG = logging.getLogger(__name__)
@@ -602,6 +602,10 @@ class Orchestrator:
         szolgaltatas = teljes.get("szolgaltatas_id")
         bolt = teljes.get("bolt_id")
         if not szolgaltatas or not bolt:
+            return teljes
+        if MINDEGY in (szolgaltatas, bolt):
+            # Elengedett mezőnél nincs "idegen" pár: a MINDEGY nem egy
+            # másik bolt szolgáltatása, hanem a szűrés hiánya.
             return teljes
         bejegyzes = SZOLGALTATAS_NEVEK.get(szolgaltatas)
         if bejegyzes is not None and bejegyzes[0] != bolt:
