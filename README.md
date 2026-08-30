@@ -16,6 +16,7 @@ működik: **`docs/TESZTELES.md`**. Ha azt akarod tudni, hol tartunk: **`docs/AL
 | `docs/KISOKOS.md` | belépő laikusoknak — telepítés, első futtatás, gyakori hibák |
 | `docs/ALLAPOT.md` | egy oldalas állapotjelentés: mérföldkövek, számok, nyitott döntések |
 | `docs/TESZTELES.md` | hogyan ellenőrizd, hogy a rendszer működik — automata és kézi próbák |
+| `docs/PROBA_JEGYZET.md` | öt perces használati sorrend: a két kimeneti mód, mit írj be, hogyan olvasd a naplót |
 | `docs/blueprint.md` | a teljes műszaki terv |
 | `docs/roadmap.md` | mérföldkövek és az első lépések |
 | `docs/domain.md` | a domain-fogalmak szótára (magyar), és a magyar↔angol kódnév-táblázat |
