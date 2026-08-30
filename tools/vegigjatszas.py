@@ -137,15 +137,39 @@ def _naplo_ujdonsag(app, korabbi_hossz: int) -> tuple[list[str], int]:
     return sorok[korabbi_hossz:], len(sorok)
 
 
+def _feliratok(keret) -> list[str]:
+    """Egy keret gyerekeinek FELIRATAI — ami nem felirattal rendelkező
+    widget (beviteli mező, beágyazott keret), az kimarad.
+
+    **Nem lehet feltételezni, hogy csak gombok vannak benne.** A
+    végigjátszás pontosan ezen szállt el: a sorszámos hivatkozás után
+    („a másodikat kérem") a jelöltkeretben nem gombok állnak, hanem a
+    megerősítő űrlap — címke, beviteli mező, gombsor. Egy `cget("text")`
+    a beviteli mezőn `TclError`-t dob, és a végigjátszás félbeszakad
+    azon a fordulón, amit épp ellenőrizni akartunk."""
+    feliratok = []
+    for widget in keret.winfo_children():
+        # Csak a FELIRATOS widgetek (címke, gomb). A beviteli mezőnek
+        # is van `-text` opciója egyes Tk-verziókban, de az a
+        # `textvariable` NEVÉT adja vissza (`PY_VAR5`), nem a
+        # tartalmát — a zaj rosszabb, mint a hiány.
+        if widget.winfo_class() not in ("TLabel", "TButton", "Label", "Button"):
+            continue
+        felirat = widget.cget("text")
+        if felirat:
+            feliratok.append(felirat)
+    return feliratok
+
+
 def _gombfeliratok(app) -> list[str]:
     """A forduló után felkínált gombok feliratai (zárt kérdés, kiút,
     alternatíva) — a szöveges naplóban ezek nem látszanak, pedig a
     vásárló élményének a fele."""
-    return [w.cget("text") for w in app.szo_gombsor.winfo_children()]
+    return _feliratok(app.szo_gombsor)
 
 
 def _jelolt_gombok(app) -> list[str]:
-    return [w.cget("text") for w in app.szo_jelolt_keret.winfo_children()]
+    return _feliratok(app.szo_jelolt_keret)
 
 
 def _widgetek(keret, osztaly: str) -> list:
