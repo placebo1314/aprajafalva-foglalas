@@ -482,6 +482,15 @@ class ForditottKaszkadErtelmezo:
         választania."""
         if not napszak:
             return None
+        if napszak == MINDEGY:
+            # A MINDEGY átjön a kapun. A kapu az ELSZIVÁRGÓ SZŰKÍTÉS
+            # ellen véd (egy korábbi forduló „délelőtt"-je némán
+            # levágná a kitágított ablakot); a MINDEGY az ellenkező
+            # irányba mutat — tágít, nem szűkít —, tehát ugyanaz a
+            # veszély nem áll fenn. Ellenőrizni pedig nem tudnánk
+            # kulcsszólista nélkül, az pedig épp az, amit nem akarunk:
+            # a „mindegy" felismerése nyelvi feladat, a modellé.
+            return napszak
         if rule_based.napszak_feloldas(mondat) is None:
             _LOG.info("kaszkád: a modell napszaka nem az aktuális mondatból való (%r)", napszak)
             return None

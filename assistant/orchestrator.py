@@ -757,6 +757,18 @@ class Orchestrator:
         allapot = self._allapot(session_id)
         return self._szabad_idopontok(allapot, parameterek)
 
+    def legkozelebbi_strukturaltan(self, session_id: str, parameterek: dict, most: str) -> dict:
+        """A koppintós út „legkorábbi szabad időpont" gombja — ELSŐRENDŰ
+        kérés, nem egy keresés speciális esete.
+
+        Nincs benne nap és napszak, és ez nem hiányosság: aki azt kérdezi,
+        „mikor tudok legkorábban menni?", annak visszakérdezni egy
+        időablakra annyi, mint nem válaszolni. Egy bolt kell hozzá, semmi
+        más — ahogy a szöveges úton is (`assistant/interpreter/
+        forditott_kaszkad.py::_legkozelebbi_kapu`)."""
+        allapot = self._allapot(session_id)
+        return self._legkozelebbi_idopont(allapot, parameterek, most)
+
     # -- jelölt-választás (koppintós ÉS szöveges út, blueprint 10.) --
 
     def valaszt(self, session_id: str, slot_id: str) -> dict:

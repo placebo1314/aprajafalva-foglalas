@@ -1,4 +1,4 @@
-# A golden set nyelvi magja — 20 kézzel írt eset, öt rétegben.
+# A golden set nyelvi magja — kézzel írt esetek, rétegekbe sorolva.
 #
 # Ez NEM a modell kimenetéből készült: előbb dőlt el, mi a helyes válasz,
 # és csak utána mérünk (golden-set skill: "Ne a modell kimenetéből írj
@@ -36,6 +36,8 @@ meta:
     valtozatossag: 0.90
     # Mintaillesztésen túl — l. a réteg fejlécét a fájl végén.
     mintan_tul: 0.90
+    # „Mindegy" mint ÉRTÉK, nem hiány (ADR-024) — l. a réteg fejlécét.
+    mindegy: 0.90
 
 esetek:
 
@@ -893,3 +895,140 @@ esetek:
       elvileg nem tudja EGYSZERRE megoldani: a szerkezet, nem a
       szókészlet dönti el, melyik napszak a kért.
     cimkek: [mintan_tul, indoklas_mellekmondattal]
+
+# -----------------------------------------------------------------------
+# „Mindegy" — az ELENGEDETT mező (ADR-024, `katalogus.MINDEGY`)
+#
+# Három állapot van, nem kettő: a hiányzó mezőre KÉRDEZÜNK, az elengedett
+# mezőre NEM kérdezünk többé (mindenben keresünk), a konkrét értékre
+# szűkítünk. A hiba, amit ez a réteg mér: a „mindegy melyik" korábban
+# ugyanoda vezetett, mint a hallgatás — a mező üres maradt, a rendszer
+# pedig újra rákérdezett arra, amit a vásárló épp elengedett.
+#
+# **Miért nyelvi réteg és nem kulcsszólista.** A „mindegyik" és a
+# „mindegy" szótöve azonos, a jelentésük ellentétes: az egyik LISTÁT kér
+# (mutasd az összeset), a másik elenged (ne kérdezz többet). Egy
+# szólista a kettőt nem tudja megkülönböztetni; a mondattan igen, és ez
+# a modell dolga — ezért `igenyel_llm: true` az egész réteg.
+#
+# Az ellenpróbák (05, 06) legalább olyan fontosak, mint a pozitív
+# esetek: egy réteg, ami mindenre MINDEGY-et mond, 100%-ot érne el a
+# pozitív eseteken, és használhatatlan lenne.
+# -----------------------------------------------------------------------
+
+  - id: mindegy-01-szolgaltatas
+    bemenet: "Bármelyik petárda jó, csak csütörtökön legyen."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: MINDEGY
+        datum_tol: "2026-08-20T00:00:00Z"
+        datum_ig: "2026-08-20T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A „bármelyik" itt ELENGEDÉS, nem hiány. A rossz válasz nem a
+      kitalált érték (azt az enum kizárja), hanem az ÜRESEN HAGYOTT
+      mező: abból a rendszer azt olvassa, hogy nem tudjuk, és a
+      következő fordulóban rákérdez a méretre — arra, amit a vásárló
+      épp az imént engedett el. Az Ügyifogyihoz két slug tartozik
+      (kis/nagy petárda), tehát a mező nem tölthető ki a boltból sem.
+    cimkek: [mindegy, elengedett_mezo]
+
+  - id: mindegy-02-napszak
+    bemenet: "A Törpillához mennék pénteken, nekem tényleg nem számít, hány órára."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-21T00:00:00Z"
+        datum_ig: "2026-08-21T23:59:59Z"
+        napszak: MINDEGY
+    megjegyzes: >
+      A „nem számít, hány órára" a napszak elengedése. A KERESÉS
+      szempontjából ez ugyanaz, mint a „barmikor" alapértelmezés
+      (`szabad_idopontok.napszak_ertek`), a SZÁNDÉK szempontjából nem:
+      a „barmikor" a mi feltevésünk, a MINDEGY a vásárló kimondott
+      döntése. Ezért kerül át a kontextusba is — hogy egy későbbi
+      szűkítő javaslat ne kerüljön szembe azzal, amit kimondott.
+    cimkek: [mindegy, elengedett_mezo]
+
+  - id: mindegy-03-pult
+    bemenet: "Mindegy, melyik pultnál, csak legyen hely holnap a petárdásnál."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A pultra a rendszer SOHA nem szűkít (ADR-024: a keresés bolt és
+      szolgáltatás szerint megy, a pult csak a slot generálásában
+      szerepel), tehát a „mindegy, melyik pultnál" olyan mezőt enged
+      el, amit nem is kérdeztünk volna. Épp ezért jó teszteset: a
+      helyes viselkedés az, hogy a mondat NEM zavarja meg — nem
+      keletkezik belőle se visszakérdezés, se kitalált paraméter. A
+      várt kimenetben nincs `pult` mező, mert olyan mező nincs a
+      sémában.
+
+      **MÉRT BUKÁS (2026-08-30, qwen3.5:9b, három futásból három):** a
+      modell a MINDEGY-et átviszi a SZOMSZÉD mezőre is
+      (`szolgaltatas_id: MINDEGY`), pedig a mondat a pultról beszél. A
+      várt érték ettől nem lesz más: az elengedés kimondott döntés, és
+      a szolgáltatást (ami a foglalás hosszát adja) itt senki nem
+      engedte el. Ez az eset ezért NEM „majdnem jó" — a
+      MINDEGY túláltalánosítása pont az a hiba, amit a szentinel
+      bevezetése olcsóvá tett, és amit mérni akarunk.
+
+  - id: mindegy-04-legkorabbi-elengedessel
+    bemenet: "Nekem tényleg mindegy mikor, csak a legkorábbi legyen az altatóshoz."
+    igenyel_llm: true
+    varhato:
+      eszkoz: legkozelebbi_idopont
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+    megjegyzes: >
+      Az időpont elengedése + a „legkorábbi" kérése EGYÜTT: nem
+      dátumablakot kér, hanem EGY konkrét választ. A rossz viselkedés
+      itt a visszakérdezés lenne („mikorra szeretnél időpontot?") —
+      arra, amit a mondat épp megválaszolt. A Szundi szolgáltatása
+      egyértelmű, ezért kitölthető.
+    cimkek: [mindegy, legkorabbi]
+
+  - id: mindegy-05-ellenproba-mindegyik-lista
+    bemenet: "Mindegyik boldogság-fajta érdekel, mi mindent lehet kapni a Törpillánál?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: torpilla
+        mit: termek
+    megjegyzes: >
+      ELLENPRÓBA. A „mindegyik" nem elengedés, hanem LISTA-kérés: a
+      vásárló nem azt mondja, hogy ne kérdezzünk többet, hanem azt,
+      hogy mutassuk meg az összeset. Ha erre MINDEGY-gyel válaszolna a
+      rendszer, egy keresést indítana egy kérdés helyett — udvariasan,
+      de a kérdés megválaszolása nélkül.
+    cimkek: [mindegy, ellenproba]
+
+  - id: mindegy-06-ellenproba-mindegy-nekem-melyik-nap
+    bemenet: "Mindegyik nap érdekelne, mikor van egyáltalán nyitva a Szundi?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: szundi
+        mit: nyitvatartas
+    megjegyzes: >
+      ELLENPRÓBA a 03-ra: ugyanaz a szótő („mindegyik"), ugyanaz a
+      mezőnév-környezet (nap), és mégsem keresés — a mondat MÁSODIK
+      fele a valódi kérés, egy engedélyezett tényválasz. Az elsőt
+      önmagában olvasva a „mindegyik nap" akár napszak-elengedésnek is
+      látszana; a mondat egészét olvasva nem az.
+    cimkek: [mindegy, ellenproba]

@@ -468,9 +468,18 @@ class VasarloApp(tk.Tk):
                 napszak_keret, text=cimke, variable=self.kop_napszak_valto, value=ertek
             ).pack(side="left")
 
-        ttk.Button(tab, text="Időpontok keresése", command=self._kop_kereses).grid(
-            row=3, column=0, columnspan=2, sticky="w", pady=(10, 0)
+        gomb_keret = ttk.Frame(tab)
+        gomb_keret.grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        ttk.Button(gomb_keret, text="Időpontok keresése", command=self._kop_kereses).pack(
+            side="left"
         )
+        # „A következő szabad időpont" ELSŐRENDŰ kérés (ADR-024), nem a
+        # keresés egy esete: se napot, se napszakot nem használ, mert a
+        # kérdésben nincs ilyen. A szöveges úton ugyanez a
+        # `legkozelebbi_idopont` eszköz felel.
+        ttk.Button(
+            gomb_keret, text="A legkorábbi szabad időpont", command=self._kop_legkorabbi
+        ).pack(side="left", padx=(8, 0))
 
         # A nyugtázó sor — a hangcsatorna töltelékmondatának szöveges
         # próbája (docs/blueprint.md 7. szakasz, "Kétlépcsős válasz").
@@ -506,6 +515,22 @@ class VasarloApp(tk.Tk):
         self.update_idletasks()
 
         valasz = self.orchestrator.kereses_strukturaltan(self.session_id, parameterek)
+        self._eredmeny_render(self.kop_tartalom, valasz, self.kop_uzenet)
+
+    def _kop_legkorabbi(self) -> None:
+        bolt_slug = self._kop_bolt_nev_map.get(self.kop_bolt_valto.get())
+        if not bolt_slug:
+            self.kop_uzenet.config(text=valasz_szoveg.hiba_szoveg("hianyzo_bolt_es_nap"))
+            return
+        self.kop_uzenet.config(text="")
+
+        parameterek = {"bolt_id": bolt_slug}
+        self.kop_nyugtazo.config(text=valasz_szoveg.nyugtazo_szoveg(parameterek))
+        self.update_idletasks()
+
+        valasz = self.orchestrator.legkozelebbi_strukturaltan(
+            self.session_id, parameterek, _most_iso()
+        )
         self._eredmeny_render(self.kop_tartalom, valasz, self.kop_uzenet)
 
     # ------------------------------------------------------------------
