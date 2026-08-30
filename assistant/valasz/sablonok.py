@@ -161,6 +161,23 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "napszak": "Másik napszak",
             },
         },
+        # masik_bolt — „itt nincs, de a szomszédban van". Az
+        # `alternativa` a boltON BELÜL tágít (napszak, nap, hét); ez a
+        # következő lépcső, amikor a bolton belül nincs mit ajánlani.
+        #
+        # **Konkrét időpontot NEM mond**, csak azt, hogy ott van szabad
+        # időpont — pontosan úgy, ahogy az `alternativa` sem mond
+        # darabszámot. Időpontot csak holddal szabad mutatni (CLAUDE.md
+        # 6. invariáns), az pedig akkor keletkezik, amikor a vásárló
+        # ténylegesen odalép.
+        "masik_bolt": {
+            # Szöveges módban a hiba-mondat MÁR kimondta, hogy itt
+            # nincs — ez a sor csak a folytatás. (Beszélhető módban
+            # fordítva: ott a két mondatból az elsőt a keret levágja,
+            # ezért a beszélt változat maga mondja ki a tényt is.)
+            "bevezetes": "{bolt} boltban viszont van szabad időpont.",
+            "gomb": "Nézzük a {bolt} boltban",
+        },
         "alternativa": {
             "bevezetes": {
                 "napszak": "Ebben a napszakban nincs, de aznap más napszakban van szabad időpont.",
@@ -367,6 +384,10 @@ SABLONOK: dict[str, dict[str, object]] = {
                     "nap": "másik napot",
                     "napszak": "másik napszakot",
                 },
+            },
+            "masik_bolt": {
+                "bevezetes": "Itt nincs szabad időpont, de {bolt} boltban van.",
+                "kerdes": "Megnézzem ott?",
             },
             "alternativa": {
                 "bevezetes": {

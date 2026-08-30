@@ -1266,3 +1266,50 @@ def test_sorszamos_hivatkozas_utan_a_megerosites_ugyanoda_vezet(tmp_path):
 
     assert vegleges["tipus"] == "visszaigazolas"
     assert vegleges["foglalasi_kod"]
+
+
+def test_boltvaltaskor_a_masik_bolt_szolgaltatasa_nem_marad_ra(tmp_path):
+    """KÉZI PRÓBA találata: a „nézzük a másik boltban" gomb után üres
+    lett a találat.
+
+    Ok: a szándék KEMÉNY része (bolt + szolgáltatás) átjön a következő
+    fordulóra, de a szolgáltatás bolt-specifikus — az „altató" a
+    Szundié. Boltváltáskor így egy olyan pár keletkezett, amire
+    definíció szerint nincs slot (Törpilla + altató), és a tünet néma
+    volt: „ez a bolt nem hirdetett meg időpontot", holott hirdetett."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch = Orchestrator(conn, _ScriptedErtelmezo([]), org_id=ctx["org_id"])
+
+    # A megőrzött kontextusba egy MÁSIK bolt szolgáltatása kerül.
+    orch._allapot("s1").megorzott_parameterek = {
+        "bolt_id": "szundi",
+        "szolgaltatas_id": "altato",
+    }
+
+    valasz = orch.kereses_strukturaltan(
+        "s1",
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+        },
+    )
+
+    assert valasz["tipus"] == "ajanlat", valasz
+    assert valasz["jeloltek"]
+
+
+def test_a_bolthoz_tartozo_szolgaltatas_megmarad(tmp_path):
+    """Az ellenpróba: ha a szolgáltatás ehhez a bolthoz tartozik, marad
+    — a szűrés zárt halmazon dolgozik, nem „minden szolgáltatást
+    eldobunk boltváltáskor"."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    orch = Orchestrator(conn, _ScriptedErtelmezo([]), org_id="bármi")
+
+    teljes = orch._idegen_szolgaltatast_eldob(
+        {"bolt_id": "ugyifogyi", "szolgaltatas_id": "nagy_petarda"}
+    )
+
+    assert teljes["szolgaltatas_id"] == "nagy_petarda"

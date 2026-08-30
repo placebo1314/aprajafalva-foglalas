@@ -181,7 +181,12 @@ def test_szabad_idopontok_semmi_nincs_meghirdetve_nem_tunik_teltnek(tmp_path):
         org_id=ctx["org_id"],
     )
     assert eredmeny == hiba.hiba_eredmeny(
-        hiba.Ok.NINCS_MEGHIRDETETT_IDOPONT, "nincs_meghirdetett_idopont", alternativ_dimenzio=None
+        hiba.Ok.NINCS_MEGHIRDETETT_IDOPONT,
+        "nincs_meghirdetett_idopont",
+        alternativ_dimenzio=None,
+        # A MÁSIK BOLT ajánlata: ebben a tesztadatban egyetlen bolt van,
+        # tehát nincs hova küldeni — a mező jelen van, az értéke `None`.
+        masik_bolt=None,
     )
 
 
@@ -729,3 +734,91 @@ def test_legkozelebbi_idopont_datumablakot_nem_fogad_el(tmp_path):
 
     assert eredmeny["sikeres"] is False
     assert eredmeny["uzenet_kulcs"] == "ervenytelen_kereses"
+
+
+# --- „itt nincs, de a szomszédban van" -------------------------------
+
+
+def _ket_boltos_seed(conn) -> dict:
+    """Két bolt: az Ügyifogyiban van beosztás, a Törpillában nincs.
+
+    Ez a valós helyzet kicsiben: egy bolt nem vitte fel a beosztást,
+    a másik igen — és a vásárló épp az üresbe kér időpontot."""
+    ctx = _seed(conn)
+    torzsadat_repo.shop_create(conn, org_id=ctx["org_id"], name="Törpilla")
+    return ctx
+
+
+def test_masik_bolt_ajanlas_ha_itt_nincs_meghirdetve(tmp_path):
+    """A „nincs meghirdetett időpont" válasz IGAZ, de haszontalan, ha
+    nem mondja meg, hol VAN. A vásárló 5. igénye (blueprint 1.): ha
+    nincs hely, alternatíva jöjjön — eddig ezt csak a naptáron BELÜL
+    néztük (napszak, nap, hét), a boltok között nem."""
+    conn = _conn(tmp_path)
+    ctx = _ket_boltos_seed(conn)
+
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "torpilla",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+
+    assert eredmeny["uzenet_kulcs"] == "nincs_meghirdetett_idopont"
+    assert eredmeny["masik_bolt"] == {
+        "bolt_id": "ugyifogyi",
+        "legkorabbi": "2026-08-18T06:00:00Z",
+    }
+
+
+def test_masik_bolt_ajanlas_nem_foglal_holdot(tmp_path):
+    """Konkrét időpontot csak HOLDDAL szabad mutatni (CLAUDE.md 6.
+    invariáns) — ezért az ajánlat a BOLTRÓL szól, nem az időpontról, és
+    nem is zárol semmit. A `legkorabbi` mező a naplóé: abból látszik,
+    miért épp azt a boltot ajánlottuk."""
+    conn = _conn(tmp_path)
+    ctx = _ket_boltos_seed(conn)
+
+    szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "torpilla",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+
+    (holdok,) = conn.execute("SELECT COUNT(*) FROM hold").fetchone()
+    assert holdok == 0, "az ajánlás nem zárolhat időpontot a másik boltban"
+
+
+def test_masik_bolt_csak_akkor_ha_a_bolton_belul_nincs_mit_ajanlani(tmp_path):
+    """A sorrend nem esztétika: a vásárló EZT a boltot kérte, tehát
+    előbb a napszakot/napot/hetet tágítjuk, és csak azután javasoljuk,
+    hogy menjen máshova."""
+    conn = _conn(tmp_path)
+    ctx = _ket_boltos_seed(conn)
+
+    # Az Ügyifogyiban VAN slot aznap (délelőtt), csak nem este — a
+    # bolton belüli alternatíva (másik napszak) tehát létezik.
+    eredmeny = szabad_idopontok.hivas(
+        conn,
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+            "napszak": "este",
+            "session_id": "session-1",
+        },
+        org_id=ctx["org_id"],
+    )
+
+    assert eredmeny["uzenet_kulcs"] == "nincs_szabad_hely_az_ablakban"
+    assert eredmeny["alternativ_dimenzio"] == "napszak"
+    assert eredmeny["masik_bolt"] is None, "előbb a bolton belüli alternatíva"

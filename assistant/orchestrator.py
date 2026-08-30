@@ -29,6 +29,7 @@ megerősítő-lépés bevezetéséhez."""
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 
@@ -44,8 +45,10 @@ from assistant.tools import (
     legkozelebbi_idopont,
     szabad_idopontok,
 )
-from assistant.tools.katalogus import BOLT_SLUGOK
+from assistant.tools.katalogus import BOLT_SLUGOK, SZOLGALTATAS_NEVEK
 from core.repo import foglalas_repo
+
+_LOG = logging.getLogger(__name__)
 
 # Ha a mondatból nem oldható fel egy kritikus mező ennyi egymást követő
 # fordulóban, az orchestrator zárt kérdésre vált (blueprint 7. szakasz,
@@ -579,12 +582,45 @@ class Orchestrator:
             time.sleep(hatralevo)
         return eredmeny
 
+    @staticmethod
+    def _idegen_szolgaltatast_eldob(teljes: dict) -> dict:
+        """A MÁSIK bolt szolgáltatását nem visszük tovább.
+
+        A szolgáltatás bolt-specifikus (`katalogus.SZOLGALTATAS_NEVEK`):
+        az „altató" a Szundié, a „petárda" az Ügyifogyié. A megőrzött
+        kontextus viszont a szándék KEMÉNY részét viszi tovább — benne a
+        szolgáltatást is —, tehát boltváltáskor egy olyan pár keletkezik,
+        amire definíció szerint nincs slot: Törpilla + altató.
+
+        A tünet néma és félrevezető: `nincs_meghirdetett_idopont`, azaz
+        „ez a bolt nem hirdetett meg időpontot" — holott hirdetett, csak
+        nem ilyen szolgáltatásra. A kézi próba ezen akadt fenn, amikor a
+        „nézzük a másik boltban" gomb után üres lett a találat.
+
+        Zárt halmazon dolgozik, tehát nem heurisztika: ha a
+        szolgáltatás nem ehhez a bolthoz tartozik, kiesik."""
+        szolgaltatas = teljes.get("szolgaltatas_id")
+        bolt = teljes.get("bolt_id")
+        if not szolgaltatas or not bolt:
+            return teljes
+        bejegyzes = SZOLGALTATAS_NEVEK.get(szolgaltatas)
+        if bejegyzes is not None and bejegyzes[0] != bolt:
+            _LOG.info(
+                "orchestrator: a %r szolgáltatás nem a %r bolté — eldobva",
+                szolgaltatas,
+                bolt,
+            )
+            teljes = {k: v for k, v in teljes.items() if k != "szolgaltatas_id"}
+        return teljes
+
     def _szabad_idopontok(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
-        teljes = {
-            **allapot.megorzott_parameterek,
-            **parameterek,
-            "session_id": allapot.session_id,
-        }
+        teljes = self._idegen_szolgaltatast_eldob(
+            {
+                **allapot.megorzott_parameterek,
+                **parameterek,
+                "session_id": allapot.session_id,
+            }
+        )
         # Amit a hívó (`ui/vasarlo.py`) a nyugtázó sorhoz felolvashat,
         # MIELŐTT a tényleges eredmény megvan — csak a felismert
         # keresési ablak és a beazonosított bolt, a blueprint 7. szakasz
@@ -634,12 +670,14 @@ class Orchestrator:
 
         A `most` az orchestratortól jön, nem a mondatból: a horizont
         kezdőpontja rendszeridő, nem vásárlói adat."""
-        teljes = {
-            **{k: v for k, v in allapot.megorzott_parameterek.items() if k in _KEMENY_MEZOK},
-            **parameterek,
-            "most": most,
-            "session_id": allapot.session_id,
-        }
+        teljes = self._idegen_szolgaltatast_eldob(
+            {
+                **{k: v for k, v in allapot.megorzott_parameterek.items() if k in _KEMENY_MEZOK},
+                **parameterek,
+                "most": most,
+                "session_id": allapot.session_id,
+            }
+        )
         felismert_ablak = {k: teljes[k] for k in ("bolt_id", "napszak") if k in teljes}
         eredmeny = legkozelebbi_idopont.hivas(self.conn, teljes, org_id=self.org_id)
 
