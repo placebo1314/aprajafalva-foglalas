@@ -688,7 +688,10 @@ class VasarloApp(tk.Tk):
     # út fusson (értelmező → állapotgép), ne külön ág.
     _KIUT_MONDAT = {
         "bolt": "másik boltban szeretnék",
-        "het": "jövő héten szeretnék",
+        # A „másik nap" a hét EGÉSZÉT nyitja meg, nem egy konkrét másik
+        # napot: azt, hogy melyik nap jó, a keresés eredménye mondja meg,
+        # nem mi találjuk ki helyette.
+        "nap": "bármelyik nap jó ezen a héten",
         "napszak": "bármikor jó, bármelyik napszakban",
     }
 

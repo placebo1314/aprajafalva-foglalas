@@ -70,14 +70,25 @@ _VISSZAKERDEZ_IRANYITASI_MEZOK = frozenset(
 _KEMENY_MEZOK = frozenset({"bolt_id", "szolgaltatas_id"})
 
 # Ugyanaz a válaszfajta legfeljebb ennyiszer mehet ki változatlanul; a
-# következőre a rendszer kiutat ajánl (`_ismetlest_figyel`). Kettő: az
-# első válasz maga, plusz egy megismétlés — a harmadikra már látszik,
-# hogy körbe futunk.
-_ISMETLES_KUSZOB = 2
+# MÁSODIKRA a rendszer már kiutat ajánl (`_ismetlest_figyel`).
+#
+# **Kettőről egyre szigorítva** (2026-08-30, kézi próba). A korábbi 2-es
+# küszöbnél a vásárló ugyanazt a mondatot KÉTSZER kapta meg, és a
+# stratégiaváltás csak a harmadik fordulóban jött. A képernyőn ez így
+# nézett ki: A, A, kiút, kiút. Aki elakadt, annak a második azonos
+# válasz már nem információ, hanem jelzés, hogy a rendszer nem érti —
+# és a válaszunk megismétlése ezen nem segít.
+_ISMETLES_KUSZOB = 1
 
 # A kiútban felajánlott, zárt választási lehetőségek — azok a
 # dimenziók, amelyek mentén a vásárló ténylegesen tud lazítani.
-_KIUT_DIMENZIOK = ("bolt", "het", "napszak")
+#
+# A `het` helyett `nap` (2026-08-30): a másik NAP a gyakoribb és
+# olcsóbb engedmény (a beosztás heteken át ugyanaz a szerkezet, egy
+# héttel odébb ugyanúgy nem lesz hely, ha a napszak a szűk keresztmetszet
+# — ezt a `szabad_idopontok::_alternativ_dimenzio` is így sorolja:
+# napszak, nap, hét).
+_KIUT_DIMENZIOK = ("bolt", "nap", "napszak")
 
 # A kapuőr `ok`-kulcsa (`assistant/kapuor/`) → melyik magyar mondat
 # menjen ki (`assistant/valasz/sablonok.py`). Ami nincs benne, arra az
@@ -390,12 +401,20 @@ class Orchestrator:
     @staticmethod
     def _valasz_kulcs(valasz: dict) -> str | None:
         """A válasz "fajtájának" stabil azonosítója az ismétlésfigyeléshez.
-        Visszakérdezésnél a HIÁNYZÓ MEZŐ a lényeg (ugyanazt a mezőt
-        kérdezzük-e újra), máshol az `uzenet_kulcs`. Sikeres ajánlat/
-        visszaigazolás nem ismétlés-gyanús — arra `None`."""
+        Visszakérdezésnél a HIÁNYZÓ MEZŐ és a KÉRDÉS TÍPUSA együtt a
+        lényeg, máshol az `uzenet_kulcs`. Sikeres ajánlat/
+        visszaigazolás nem ismétlés-gyanús — arra `None`.
+
+        **A kérdés típusa azért része a kulcsnak**, mert a blueprint 7.
+        szakaszának eszkalációja (nyitott kérdés → két sikertelen
+        értelmezés után ZÁRT kérdés) a képernyőn MÁS választ jelent:
+        más a mondat, és megjelennek a gombok. Az ilyen váltás tehát
+        előrelépés, nem ismétlés — a számláló helyesen nullázódik rá.
+        Ha viszont már a második alkalommal is ugyanaz a zárt kérdés
+        megy ki, ott nincs hova eszkalálni: jöhet a kiút."""
         tipus = valasz.get("tipus")
         if tipus == "visszakerdezes":
-            return f"visszakerdezes:{valasz.get('hianyzo_mezo')}"
+            return f"visszakerdezes:{valasz.get('hianyzo_mezo')}:{valasz.get('kerdes_tipusa')}"
         kulcs = valasz.get("uzenet_kulcs")
         return f"{tipus or 'eszkoz'}:{kulcs}" if kulcs else None
 
@@ -423,14 +442,47 @@ class Orchestrator:
         if allapot.valasz_ismetles["darab"] <= _ISMETLES_KUSZOB:
             return valasz
 
-        return {
-            "tipus": "kiut",
-            "uzenet_kulcs": "ismetlodo_valasz_kiut",
-            "valaszthato_dimenziok": list(_KIUT_DIMENZIOK),
+        return self._kiut_valasz(
+            allapot,
+            ok="ismetles",
             # Az eredeti válasz kulcsát megtartjuk, hogy a hívó (és a
             # próba-napló) lássa, MIBŐL futottunk körbe.
-            "eredeti_uzenet_kulcs": valasz.get("uzenet_kulcs"),
+            eredeti_uzenet_kulcs=valasz.get("uzenet_kulcs"),
+        )
+
+    def _kiut_valasz(
+        self,
+        allapot: _SessionAllapot,
+        *,
+        ok: str,
+        eredeti_uzenet_kulcs: str | None = None,
+        eredeti: dict | None = None,
+    ) -> dict:
+        """A kiút válasza — MINDKÉT jelzőnek (ismétlésfigyelő,
+        frusztráció-figyelő) ez az egyetlen kimenete.
+
+        **Egy számláló, egy eszkaláció.** Korábban a két figyelő külön
+        vezette a saját kiútjait, és emiatt az ismétlés-kiút a
+        végtelenségig ismételhette önmagát: a szöveges naplóban kétszer
+        ugyanaz a „körbe-körbe" mondat jelent meg. Mostantól minden
+        kiadott kiút ugyanabba a számlálóba megy
+        (`Frusztracio.kiut_ajanlva`), tehát a MÁSODIK kiút — jöjjön
+        bármelyik jelzőtől — már embert ajánl, nem újabb szűkítést
+        (a vásárló 8. igénye)."""
+        emberhez = allapot.frusztracio.kiut_ajanlva >= 1
+        allapot.frusztracio.kiut_kiadva()
+        valasz = {
+            "tipus": "kiut",
+            "uzenet_kulcs": "emberhez_iranyitas" if emberhez else "ismetlodo_valasz_kiut",
+            "valaszthato_dimenziok": [] if emberhez else list(_KIUT_DIMENZIOK),
+            "ok": ok,
+            "emberhez": emberhez,
         }
+        if eredeti_uzenet_kulcs is not None:
+            valasz["eredeti_uzenet_kulcs"] = eredeti_uzenet_kulcs
+        if eredeti is not None:
+            valasz["eredeti"] = eredeti
+        return valasz
 
     def _frusztraciot_figyel(self, allapot: _SessionAllapot, mondat: str, valasz: dict) -> dict:
         """Ha a vásárló elakadt, KIUTAT ajánlunk — akkor is, ha a
@@ -443,30 +495,21 @@ class Orchestrator:
         (a vásárló 8. igénye: "legyen kiút emberhez")."""
         allapot.frusztracio.fordulo(mondat, valasz.get("tipus"))
 
-        # A MÁSODIK kiút felülírja az ismétlés-kiutat is. A fej nélküli
-        # végigjátszás mutatta meg, miért kell: ha a vásárló ugyanazt a
-        # mondatot ismétli („nem értem, mit kell csinálni"), a rendszer
-        # ugyanazt válaszolja, tehát az `_ismetlest_figyel` már kiutat
-        # adott ki — és a régi `tipus == "kiut"` korai visszatérés
-        # miatt a frusztráció-figyelő SOSEM jutott el az emberhez
-        # irányításig. Épp a legrosszabb beszélgetésben nem szólalt meg
-        # az, ami arra való.
-        emberhez_kell = allapot.frusztracio.emberhez_kell(mondat)
-        if not emberhez_kell and (
-            valasz.get("tipus") == "kiut" or not allapot.frusztracio.kiutat_kell()
-        ):
+        # Ha az ismétlésfigyelő MÁR kiutat adott ebben a fordulóban, azt
+        # nem írjuk felül — az eszkalációt (kiút → ember) a közös
+        # számláló intézi (`_kiut_valasz`), nem egy második döntés
+        # ugyanabban a fordulóban.
+        if valasz.get("tipus") == "kiut":
             return valasz
 
-        emberhez = emberhez_kell or allapot.frusztracio.kiut_ajanlva >= 1
-        allapot.frusztracio.kiut_kiadva()
-        return {
-            "tipus": "kiut",
-            "uzenet_kulcs": "emberhez_iranyitas" if emberhez else "ismetlodo_valasz_kiut",
-            "valaszthato_dimenziok": [] if emberhez else list(_KIUT_DIMENZIOK),
-            "ok": "frusztracio",
-            "emberhez": emberhez,
-            "eredeti": valasz,
-        }
+        # KÉT külön feltétel, mert a két kiútnak más a kérdése. Az
+        # ELSŐHÖZ pontgyűjtés kell (onnan tudjuk meg, hogy baj van); a
+        # MÁSODIKHOZ az, hogy a felajánlott kiút UTÁN a vásárló még
+        # mindig kimondja, hogy elakadt — arra nem kell újabb pont.
+        if not (allapot.frusztracio.kiutat_kell() or allapot.frusztracio.emberhez_kell(mondat)):
+            return valasz
+
+        return self._kiut_valasz(allapot, ok="frusztracio", eredeti=valasz)
 
     def _visszakerdez(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
         allapot.sikertelen_ertelmezesek += 1

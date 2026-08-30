@@ -742,32 +742,63 @@ def _visszakerdez_valasz(mezo: str = "bolt_id") -> dict:
     }
 
 
-def test_ismetles_ugyanaz_a_valasz_ketszer_mehet_ki(tmp_path):
+def test_ismetles_a_MASODIK_azonos_valasz_helyett_mar_kiut(tmp_path):
+    """KÉZI PRÓBA találata (2026-08-30). Korábban ugyanaz a mondat
+    kétszer ment ki, és a stratégiaváltás csak a harmadik fordulóban
+    jött. Aki elakadt, annak a második azonos válasz már nem
+    információ — a válaszunk megismétlése ezen nem segít."""
     conn = _conn(tmp_path)
     _seed(conn)
+    # Mindkét forduló UGYANAZT a zárt kérdést adná ugyanarra a mezőre.
     orch = Orchestrator(conn, _ScriptedErtelmezo([_visszakerdez_valasz()] * 2), org_id="bármi")
 
     elso = orch.fordulo("s1", "hova is menjek", _MOST)
     masodik = orch.fordulo("s1", "hát nem tudom", _MOST)
 
     assert elso["tipus"] == "visszakerdezes"
-    assert masodik["tipus"] == "visszakerdezes"
+    assert masodik["tipus"] == "kiut"
+    assert masodik["uzenet_kulcs"] == "ismetlodo_valasz_kiut"
+    assert masodik["valaszthato_dimenziok"] == ["bolt", "nap", "napszak"]
 
 
-def test_ismetles_harmadikra_kiutat_ajanl_zart_valasztassal(tmp_path):
-    """A harmadik azonos válasz helyett más mondat és zárt választás —
-    a rendszer nem mondja harmadszor ugyanazt."""
+def test_ismetles_a_nyitottrol_zartra_valtas_NEM_ismetles(tmp_path):
+    """A blueprint 7. eszkalációja (nyitott kérdés → két sikertelen
+    értelmezés után ZÁRT kérdés) a képernyőn MÁS választ jelent: más a
+    mondat, és megjelennek a gombok. Ezt nem szabad ismétlésnek
+    számolni, különben a létra egy fokát ugornánk át."""
     conn = _conn(tmp_path)
     _seed(conn)
-    orch = Orchestrator(conn, _ScriptedErtelmezo([_visszakerdez_valasz()] * 3), org_id="bármi")
+    nyitott = {
+        "eszkoz": "visszakerdez",
+        "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "nyitott"},
+    }
+    orch = Orchestrator(conn, _ScriptedErtelmezo([nyitott] * 3), org_id="bármi")
 
-    orch.fordulo("s1", "hova is menjek", _MOST)
-    orch.fordulo("s1", "hát nem tudom", _MOST)
+    elso = orch.fordulo("s1", "mikor lehet menni", _MOST)
+    masodik = orch.fordulo("s1", "hát nem is tudom", _MOST)
     harmadik = orch.fordulo("s1", "nem tudom megmondani", _MOST)
 
+    assert (elso["tipus"], elso["kerdes_tipusa"]) == ("visszakerdezes", "nyitott")
+    assert (masodik["tipus"], masodik["kerdes_tipusa"]) == ("visszakerdezes", "zart")
+    # …és csak a MÁSODIK zárt kérdés helyett jön a kiút.
     assert harmadik["tipus"] == "kiut"
-    assert harmadik["uzenet_kulcs"] == "ismetlodo_valasz_kiut"
-    assert harmadik["valaszthato_dimenziok"] == ["bolt", "het", "napszak"]
+
+
+def test_ismetles_kiutja_nem_ismetlodhet_emberhez_eszkalal(tmp_path):
+    """A kézi próba a „körbe-körbe" mondatot is KÉTSZER látta. Minden
+    kiadott kiút ugyanabba a számlálóba megy, tehát a második kiút —
+    jöjjön bármelyik jelzőtől — már embert ajánl."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    orch = Orchestrator(conn, _ScriptedErtelmezo([_visszakerdez_valasz()] * 4), org_id="bármi")
+
+    valaszok = [orch.fordulo("s1", f"hát nem tudom {i}", _MOST) for i in range(4)]
+
+    kiutak = [v for v in valaszok if v["tipus"] == "kiut"]
+    assert len(kiutak) >= 2
+    assert kiutak[0]["emberhez"] is False
+    assert kiutak[1]["emberhez"] is True
+    assert kiutak[1]["uzenet_kulcs"] == "emberhez_iranyitas"
 
 
 def test_ismetles_mas_valaszfajta_nullazza_a_szamlalot(tmp_path):
@@ -778,25 +809,20 @@ def test_ismetles_mas_valaszfajta_nullazza_a_szamlalot(tmp_path):
     ertelmezo = _ScriptedErtelmezo(
         [
             _visszakerdez_valasz(),
-            _visszakerdez_valasz(),
             {"eszkoz": "nincs", "parameterek": {}},  # elmozdulás
-            _visszakerdez_valasz(),
             _visszakerdez_valasz(),
         ]
     )
     # A frusztráció-figyelő szándékosan kikapcsolva: ez a teszt az
-    # ISMÉTLÉS-számlálót méri, és öt eredménytelen forduló különben a
+    # ISMÉTLÉS-számlálót méri, és a sok eredménytelen forduló különben a
     # frusztráció-kiutat indítaná el (l. saját tesztjeit).
     orch = Orchestrator(conn, ertelmezo, org_id="bármi", frusztracio_kuszob=999)
 
     orch.fordulo("s1", "a", _MOST)
-    orch.fordulo("s1", "b", _MOST)
     orch.fordulo("s1", "milyen idő lesz?", _MOST)
-    negyedik = orch.fordulo("s1", "c", _MOST)
-    otodik = orch.fordulo("s1", "d", _MOST)
+    harmadik = orch.fordulo("s1", "c", _MOST)
 
-    assert negyedik["tipus"] == "visszakerdezes"
-    assert otodik["tipus"] == "visszakerdezes", "a számlálónak nullázódnia kellett"
+    assert harmadik["tipus"] == "visszakerdezes", "a számlálónak nullázódnia kellett"
 
 
 def test_ismetles_kulon_mezore_kulon_szamlal(tmp_path):

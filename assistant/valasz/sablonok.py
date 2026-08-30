@@ -140,13 +140,24 @@ SABLONOK: dict[str, dict[str, object]] = {
         # kulcsai az `assistant/orchestrator.py::_KIUT_DIMENZIOK` zárt
         # halmaza.
         # ------------------------------------------------------------
+        # kiut — ZÁRT kérdés, a gombokkal SZÓ SZERINT egyező
+        # lehetőségekkel (blueprint 7., "Négy technika" 2. pont:
+        # "két sikertelen értelmezés után ne nyitottan kérdezzen újra").
+        #
+        # A korábbi mondat („Min tudsz lazítani?") két hibát vétett
+        # egyszerre: NYITOTT kérdés volt (bármit lehetett rá válaszolni,
+        # tehát ugyanoda vezetett, ahonnan jöttünk), és TECHNIKAI
+        # (a „lazítás" a mi szavunk a keresési ablakra, nem a
+        # vásárlóé). A mai alak megnevezi a három választható dolgot,
+        # ugyanazokkal a szavakkal, amik a gombokon állnak.
         "kiut": {
             "bevezetes": (
-                "Úgy látom, itt körbe-körbe járunk — próbáljuk másképp. Min tudsz lazítani?"
+                "Úgy látom, így nem jutunk előre. Melyiket próbáljuk: "
+                "másik boltot, másik napot vagy másik napszakot?"
             ),
             "dimenzio": {
                 "bolt": "Másik bolt",
-                "het": "Másik hét",
+                "nap": "Másik nap",
                 "napszak": "Másik napszak",
             },
         },
@@ -349,11 +360,11 @@ SABLONOK: dict[str, dict[str, object]] = {
                 # összetétel, ami hangon szünetet szül a szó közepén. A
                 # kimeneti kapu szóközre cserélné („körbe körbe"), de
                 # egy jó mondatot nem javítgatni kell, hanem megírni.
-                "bevezetes": "Úgy látom, itt körben járunk.",
+                "bevezetes": "Úgy látom, így nem jutunk előre.",
                 "kerdes": "Próbáljunk {dimenziok}?",
                 "dimenzio": {
                     "bolt": "másik boltot",
-                    "het": "másik hetet",
+                    "nap": "másik napot",
                     "napszak": "másik napszakot",
                 },
             },
