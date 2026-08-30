@@ -222,6 +222,23 @@ SABLONOK: dict[str, dict[str, object]] = {
             "ertelmezo_szabaly": (
                 " Értelmező: szabály-alapú (nincs APRAJAFALVA_LLM_MODELL beállítva)."
             ),
+            # NINCS MODELL — külön, feltűnő sor, nem zárójeles megjegyzés.
+            #
+            # A tartalék ág csendben átveszi a fordulót (`assistant/
+            # interpreter/forditott_kaszkad.py`), és ez a helyes
+            # viselkedés: a vásárló nem eshet ki attól, hogy egy
+            # háttérszolgáltatás nem fut. A PRÓBÁLGATÓNAK viszont pont
+            # ez a legdrágább félreértés — végigpróbál egy
+            # beszélgetést, és a szabály-alapú réteget hiszi a
+            # modellnek. A mondat ezért megmondja, MI FUT, és azt is,
+            # hogy MIT KELL BEÍRNI a bekapcsoláshoz.
+            "nincs_modell_figyelmeztetes": (
+                "FIGYELEM: nincs beállítva nyelvi modell — a beszélgetés a TARTALÉK "
+                "(szabály-alapú) ágon fut, nem az éles úton.\n"
+                "Bekapcsolás: set APRAJAFALVA_LLM_MODELL=qwen3.5:9b   (PowerShell: "
+                '$env:APRAJAFALVA_LLM_MODELL="qwen3.5:9b"), fusson az Ollama, '
+                "majd indítsd újra ezt az ablakot."
+            ),
         },
         # ------------------------------------------------------------
         # nyugtazo — a hangcsatorna töltelékmondatai (blueprint 7.

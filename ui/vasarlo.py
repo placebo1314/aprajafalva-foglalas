@@ -367,10 +367,34 @@ class VasarloApp(tk.Tk):
         # Indító sor: melyik időszakra van beosztás, és mit jelent a
         # "ma" ezen a felületen. Ez az ELSŐ dolog, amit a próbálgató lát —
         # enélkül a demóadat távoli hete néma kudarcnak látszana.
+        modell_nev = aktiv_modell_neve()
+
+        # NINCS MODELL — a legfeltűnőbb sor az ablakban, a többi FÖLÖTT.
+        # A tartalék ág csendben átveszi a fordulót (helyes viselkedés),
+        # de a próbálgatónak tudnia kell, hogy nem az éles utat méri.
+        figyelmeztetes = valasz_szoveg.modell_figyelmeztetes_szoveg(modell_nev)
+        if figyelmeztetes:
+            # `tk.Label` (nem ttk): a háttérszín témafüggetlenül
+            # állítható rajta — a figyelmeztetésnek látszania kell,
+            # bármilyen ttk-témát használ a rendszer.
+            self.modell_figyelmeztetes = tk.Label(
+                self,
+                text=figyelmeztetes,
+                justify="left",
+                anchor="w",
+                background="#ffe9c7",
+                foreground="#7a3b00",
+                font=("TkDefaultFont", 10, "bold"),
+                wraplength=780,
+                padx=12,
+                pady=8,
+            )
+            self.modell_figyelmeztetes.pack(anchor="w", fill="x")
+
         self.idoszak_cimke = ttk.Label(
             self,
             text=valasz_szoveg.rendszersor_szoveg(
-                self.idoszak, self._most_iso(), _most_iso(), aktiv_modell_neve()
+                self.idoszak, self._most_iso(), _most_iso(), modell_nev
             ),
             padding=(12, 8),
             foreground="#046",

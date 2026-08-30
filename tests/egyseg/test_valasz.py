@@ -345,3 +345,22 @@ def test_rendszersor_megmondja_melyik_ertelmezo_dolgozik():
 
     assert "qwen3.5:9b" in modellel
     assert "APRAJAFALVA_LLM_MODELL" in modell_nelkul
+
+
+# --- modell_figyelmeztetes_szoveg -------------------------------------
+
+
+def test_nincs_modell_figyelmeztetes_megmondja_mi_fut_es_mit_kell_beirni():
+    """A tartalék ág csendben átveszi a fordulót — ez helyes viselkedés
+    a vásárló felé, de a PRÓBÁLGATÓNAK a legdrágább félreértés: végigvisz
+    egy beszélgetést abban a hitben, hogy a modellt méri."""
+    szoveg = valasz.modell_figyelmeztetes_szoveg(None)
+
+    assert szoveg is not None
+    assert "TARTALÉK" in szoveg
+    # A bekapcsolás módja is benne van, nem csak a tény.
+    assert "APRAJAFALVA_LLM_MODELL" in szoveg
+
+
+def test_nincs_figyelmeztetes_ha_van_modell():
+    assert valasz.modell_figyelmeztetes_szoveg("qwen3.5:9b") is None

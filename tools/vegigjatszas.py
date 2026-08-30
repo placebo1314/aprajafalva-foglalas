@@ -194,6 +194,16 @@ def vegigjatszas(
     # kapna, aki átkattint a beszélhető módra.
     app.kimeneti_mod.set(mod)
 
+    # NINCS MODELL — ugyanaz a figyelmeztetés, mint az ablakban. Itt
+    # legalább annyira kell: a végigjátszás percekig fut, és a végén a
+    # számok ugyanúgy néznek ki, akár a modell dolgozott, akár a
+    # tartalék ág.
+    figyelmeztetes = getattr(app, "modell_figyelmeztetes", None)
+    if figyelmeztetes is not None:
+        print("\n" + "!" * 72)
+        print(figyelmeztetes.cget("text"))
+        print("!" * 72 + "\n")
+
     print(f"Beosztás:  {app.idoszak}")
     print(f"Indító sor: {app.idoszak_cimke.cget('text')}")
     print(f"Értelmező: {type(app.orchestrator.ertelmezo).__name__}")

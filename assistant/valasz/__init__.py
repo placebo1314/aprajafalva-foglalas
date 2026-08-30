@@ -459,6 +459,30 @@ def rendszersor_szoveg(
     return szoveg
 
 
+def modell_figyelmeztetes_szoveg(
+    modell_nev: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT
+) -> str | None:
+    """A NINCS MODELL figyelmeztetés, vagy `None`, ha van konfigurált
+    modell.
+
+    Külön függvény és külön sor a felületen, nem a `rendszersor_szoveg`
+    végén álló zárójeles megjegyzés: azt át lehet siklani, és a
+    próbálgató végigcsinál egy egész beszélgetést abban a hitben, hogy
+    a modellt méri, holott a tartalék ágat látja. A mondat ezért
+    megmondja, mi fut, és mit kell beírni a bekapcsoláshoz.
+
+    **Nem** azt állítja, hogy az Ollama fut-e — azt csak egy tényleges
+    hívás derítené ki (`assistant/interpreter/__init__.py::
+    aktiv_modell_neve`). Ez a sor a KONFIGURÁCIÓ hiányát jelzi, ami a
+    gyakoribb és olcsóbban orvosolható eset; ha a modell be van
+    állítva, de nem fut, azt a próba-napló `reteg` mezője
+    (`szabaly:tartalek`) és a napló-elemző `csendes_tartalek`
+    detektora mutatja meg."""
+    if modell_nev:
+        return None
+    return SABLONOK[nyelv]["rendszersor"]["nincs_modell_figyelmeztetes"]
+
+
 def nyugtazo_szoveg(
     felismert_ablak: dict,
     *,
