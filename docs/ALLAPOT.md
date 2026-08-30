@@ -1,8 +1,23 @@
-# Állapot — 2026-08-30 (frissítve: KÉZI PRÓBA MODELLEL — a képernyőn
-talált hibák javítva; SORSZÁMOS HIVATKOZÁS („a másodikat");
-BESZÉLGETÉS-ELEMZŐ HTML; feltűnő figyelmeztetés, ha nincs modell.
-Előzőleg: beszélhető kimeneti mód és ASR-hibatűrés (M6-előkészítés), a
-válaszidő-elvárás ELOSZLÁSSÁ vált — ADR-022)
+# Állapot — 2026-08-30 (frissítve: A BOLT NEM ALTERNATÍVA — ADR-024:
+bolt-ajánlás visszavonva, lazítási sorrend bolton belül, MINDEGY
+szentinel, „a következő szabad időpont" elsőrendű kérés. Előzőleg:
+kézi próba modellel, sorszámos hivatkozás, beszélgetés-elemző HTML;
+beszélhető kimeneti mód és ASR-hibatűrés — ADR-022, ADR-023)
+
+**A 2026-08-30-i kör ÖTÖDIK mondata (az ADR-024 köre):**
+
+5. **Egy működő, tesztelt funkciót vontunk vissza, mert rossz fogalmon
+   állt.** A „itt nincs, de a szomszédban van" bolt-ajánlás ugyanaznap
+   készült el, és ugyanaznap tűnt el: Aprajafalva három boltja nem egy
+   szolgáltatás három telephelye, hanem három TERMÉK, tehát aki
+   petárdát kér, annak a boldogság-bolt nem gyengébb találat, hanem
+   más kérdésre adott válasz. A helyére a bolton BELÜLI lazítási
+   sorrend lépett (napszak → nap → később → variáns), és minden válasz
+   kimondja, melyik dimenzióban engedett. Ezzel együtt lett a
+   „mindegy" ÉRTÉK a hiány helyett (`MINDEGY` szentinel), és lett a
+   „mikor tudok legkorábban menni?" elsőrendű kérés — a modell
+   `legkozelebbi_idopont` válasza eddig némán `szabad_idopontok`-ká
+   alakult, egy önkényes egyhetes ablakkal.
 
 **A 2026-08-30-i kör NEGYEDIK mondata (a demóadat köre):**
 
@@ -217,6 +232,31 @@ vége, és 12 esetben már emberhez irányít.
 „jövő hét" a demóhéten kívül esik) — mégsem lesz belőlük kiút, mert a
 kiutat nem az egyedi üres keresés váltja ki, hanem a MÁSODIK EGYFORMA
 üres válasz. Egy üres válasz nem baj; kettő egymás után az.
+
+### A/1c) AZ ADR-024 KÖRE — mit mértünk utána (2026-08-30)
+
+| Mérés | Eredmény |
+|---|---|
+| nyelvi halmaz, `forditott`, `qwen3.5:9b` | **88,2%** (n=51, benne az új `mindegy` réteg 6 esete) |
+| ebből a `mindegy` réteg | 83,3% (5/6) — az egy bukás dokumentált, l. lent |
+| robusztussági halmaz | **100%** (n=68), mind a négy biztonsági szám **0** |
+| válaszidő (robusztus) | p50 **3,84 s**, p95 **4,19 s**, tendencia stabil |
+| végigjátszás, robusztussági halmaz, mindkét mód | **0 kivétel**, 1 kiút |
+
+**Az egy bukás nem ráigazítással tűnik el.** A `mindegy-03-pult`
+esetben („mindegy, melyik pultnál…") a modell a MINDEGY-et a SZOMSZÉD
+mezőre is átviszi (`szolgaltatas_id`). A várt érték ettől nem lett
+más: a szolgáltatás a foglalás hosszát adja, és azt senki nem engedte
+el. A megjegyzés az esetben rögzíti a mért viselkedést
+(`docs/ALTALANOSITAS.md` 2.9b) — a golden set nem a modell kimenetéből
+készül.
+
+**Két lazítási dimenzió ma nem tud megszólalni, és a kettő NEM ugyanaz
+a fajta korlát** (`docs/ALTALANOSITAS.md` 2.9c): a `pult`-on nincs mit
+lazítani, mert a keresés ma sem szűkít pultra (ez most tesztelt tény);
+a `varians` viszont megvalósult és valódi lekérdezéssel próbálkozik,
+csak a mai katalógusban mutat a kis- és a nagy petárda ugyanarra a
+szolgáltatás-sorra. Az első a KÓD tulajdonsága, a második az ADATÉ.
 
 ### A/2) MÉRÉSI HIBÁK — kettő, mindkettő a saját javunkra tévedett
 

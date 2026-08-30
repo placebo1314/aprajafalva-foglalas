@@ -157,6 +157,12 @@ hibafajtában, külön mérési bontással. A szituációs esetek továbbra is
 hiányoznak, és a kilépési feltétel a NYELVI halmazra vonatkozik: az 45
 eset, nem 150-200.
 
+**2026-08-30:** a nyelvi halmaz **51 esetre** nőtt — új réteg a
+`mindegy` (6 eset, `igenyel_llm: true`): az ELENGEDETT mező
+(`katalogus.MINDEGY`, ADR-024) felismerése, két ellenpróbával („a
+mindegyik LISTÁT kér, nem elengedés"). A robusztussági halmaz
+változatlanul 68 eset. Együtt **119 eset**.
+
 **Kilépési feltétel:** 150-200 eset, futtatható értékelő, két modell
 összehasonlítható.
 

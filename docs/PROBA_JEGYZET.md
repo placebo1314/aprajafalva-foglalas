@@ -52,6 +52,12 @@ Ugyanaz a mondat háromféle választ ad — ezt érdemes összevetni. Ami
 `jövő hétre` szól, ott továbbra is üres a válasz: a demóadat egy hétre
 generál, és az üres válasz ilyenkor helyes.
 
+**Ami 2026-08-30-tól NEM fog előjönni:** „Nézzük a … boltban" gomb. A
+bolt nem alternatíva, hanem maga a termék (ADR-024) — üres találatnál
+a felajánlás bolton BELÜL marad: másik napszak, másik nap, a legkorábbi
+szabad időpont, másik változat. A válasz mindig megmondja, melyikben
+engedett.
+
 | Beírás | Mit nézz szöveges módban | Mit nézz beszélhető módban |
 |---|---|---|
 | `Törpillához mennék holnap` | nyugtázó sor, majd időpont-gombok | *„A legkorábbi december huszonkettedikén hét órakor, de van hét tizenötkor is. Melyik jó?"* — **két** időpont, nem három |
@@ -62,6 +68,10 @@ generál, és az üres válasz ilyenkor helyes.
 | `nem értem, mit kell csinálni` ×4 | 2. fordulóra kiút-gombok, **3.-ra emberhez irányítás** | ugyanaz, egy mondatba építve |
 | ajánlat után: `a másodikat` vagy `az utolsó jó lesz` | egyből a megerősítés — **modellhívás nélkül** (a naplóban `orchestrator:sorszam`) | *„December huszonkettedikén kilenc órakor foglalnám le. Rendben?"* |
 | `Szeretnék időpontot nyolcvan órára a Törpillába` | keresés óra nélkül, vagy visszakérdezés | **soha nem** nyolc órára szűkített keresés |
+| `Bármelyik petárda jó, csak csütörtökön legyen` | keresés indul, és **nem kérdez rá a méretre** — a naplóban `szolgaltatas_id: MINDEGY` | ugyanaz, egy mondatban |
+| `Mindegyik boldogság-fajta érdekel, mit lehet kapni?` | a termék-felsorolás, **nem keresés** — ez lista-kérés, nem elengedés | ugyanaz |
+| `Mikor tudok legkorábban menni a Szundihoz?` | **EGY** időpont, nem lista, és **nem kérdez vissza időablakot** | *„A legkorábbi …"* |
+| koppintós fül: bolt kiválasztása → **„A legkorábbi szabad időpont"** | nap és napszak nélkül fut le | — (a koppintós út mód nélküli) |
 
 **Minden próba előtt nyomj „Új beszélgetés"-t** — a rendszer az előző
 fordulókat is átadja az értelmezőnek, tehát az előző próba különben

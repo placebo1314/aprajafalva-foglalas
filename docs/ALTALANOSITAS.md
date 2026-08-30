@@ -96,6 +96,38 @@ használja, amin az önkonzisztencia szavaztat
 parameterek}`). A hibaosztály: „ugyanannak a fogalomnak két
 definíciója van a kódban".
 
+### 1.6 A „mindegy" ÉRTÉK lett, nem hiány (2026-08-30, ADR-024)
+
+**A bukás:** a `null` és a „mindegy melyik" ugyanaz volt a rendszernek
+— mindkettő hiányzó mező, tehát mindkettőre visszakérdezés járt. Aki
+kimondta, hogy elengedi a boltot vagy a terméket, ugyanazt a kérdést
+kapta vissza még egyszer.
+
+**Miért strukturális javítás, nem eseti:** nem egy visszakérdezést
+tiltottunk le, hanem HÁROM állapotot vezettünk be kettő helyett
+(`katalogus.MINDEGY`): hiányzik → kérdezünk; `MINDEGY` → a vásárló
+elengedte, nem kérdezünk többé, mindenben keresünk; konkrét slug →
+szűkítünk. A szentinel a séma enumjának is része, tehát a modell
+használhatja — a felismerése nyelvi feladat, nem kulcsszólista.
+
+**A hibaosztály neve:** „két különböző dolog ugyanazzal az üres
+értékkel". Ugyanez a minta másutt is keresendő: mindenhol, ahol egy
+`None` egyszerre jelenti azt, hogy „nem tudjuk", és azt, hogy „nincs
+megkötés".
+
+### 1.7 A lazítás dimenziói bolton belülre kerültek (2026-08-30, ADR-024)
+
+**A bukás:** a „nincs hely" válaszra a rendszer másik BOLTOT ajánlott.
+Működött, tesztelt volt — és rossz: Aprajafalva három boltja három
+különböző terméket árul, tehát aki petárdát kér, annak a boldogság-bolt
+nem gyengébb találat, hanem MÁS KÉRDÉSRE adott válasz.
+
+**A tanulság általánosítható:** egy alternatíva akkor alternatíva, ha
+ugyanarra a kérésre válasz. A vesztes ág nem attól lesz kellemes, hogy
+tesz valamit, hanem attól, hogy hasznosat tesz. A helyére a bolton
+BELÜLI sorrend lépett (napszak → nap → később → variáns), és minden
+válasz kimondja, melyik dimenzióban engedett.
+
 ---
 
 ## 2. Ismert korlátok
@@ -242,6 +274,34 @@ Változatlan korlát az ADR-018 óta (`docs/ALLAPOT.md`). A szándék
 kemény részének elvetése („és bármelyik másik boltban?") a modell
 képessége; mintával reménytelen, mert a mondatban nincs olyan szó,
 amit keresni lehetne.
+
+### 2.9b A MINDEGY átszivárog a szomszéd mezőre
+
+`nyelvi_alap.yaml::mindegy-03-pult`. Mérve (2026-08-30, `qwen3.5:9b`,
+három futásból három): a „mindegy, melyik pultnál, csak legyen hely
+holnap a petárdásnál" mondatra a modell a `szolgaltatas_id`-t is
+`MINDEGY`-re állítja, pedig a mondat a pultról beszél.
+
+**Miért nem javítjuk determinisztikusan:** ahhoz tudni kellene, melyik
+mezőre vonatkozik a „mindegy" — azaz kulcsszó-alapú mezőhozzárendelést
+építenénk, pontosan azt, amit a szentinel bevezetésekor elkerültünk. A
+kár korlátos (egy elmaradó pontosító kérdés), a mérés viszont látja,
+tehát nem néma.
+
+### 2.9c Két lazítási dimenzió ma nem tud megszólalni
+
+- **`pult`**: nincs mit lazítani — a keresés ma sem szűkít pultra
+  (tesztelt tény: `test_a_kereses_nem_szukit_pultra`). Ezért nem is
+  szerepel a dimenziók között: egy mindig üresen visszatérő ág
+  hazugság lenne.
+- **`varians`**: a dimenzió megvalósult és valódi lekérdezéssel
+  próbálkozik, de a mai KATALÓGUSBAN a `kis_petarda` és a
+  `nagy_petarda` ugyanarra a szolgáltatás-sorra mutat, tehát a szűrés
+  elhagyása ugyanazokat a slotokat adja. Amint egy boltnak két,
+  ütemezésileg különböző szolgáltatása lesz, magától megszólal.
+
+A kettő nem ugyanaz a fajta korlát, és ezt érdemes szétválasztva
+tartani: az első a KÓD tulajdonsága, a második az ADATÉ.
 
 ### 2.10 A „hét eleje" szűkítés nincs modellezve
 
