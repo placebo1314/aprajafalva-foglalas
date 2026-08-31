@@ -54,11 +54,13 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import tkinter as tk
 from pathlib import Path
 
 GYOKER = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(GYOKER))
 
+import ui.vasarlo as ui_vasarlo  # noqa: E402
 from seed.betolt import ALAP_DB_PATH  # noqa: E402
 
 # A végigjátszott beszélgetések. Az első nyolc a golden set `mintan_tul`
@@ -260,6 +262,7 @@ def vegigjatszas(
         _sajat_probak(app)
         _foglalasi_menet(app)
         _foglalasi_menet_irasban(app)
+        _indito_ellenorzes_proba(app)
     if robusztus or csak_robusztus:
         kilepokod = _robusztus_halmaz(app)
 
@@ -435,6 +438,57 @@ def _foglalasi_menet(app) -> None:
     print(f"    eredmény:    {eredmeny}")
     if app.szo_uzenet.cget("text"):
         print(f"    hibasor:     {app.szo_uzenet.cget('text')}")
+
+
+def _indito_ellenorzes_proba(app) -> None:
+    """A MODÁLIS indítási ellenőrzés próbája — valódi Tk-ablakkal.
+
+    Ez az egyetlen felületi elem, amit egy egységteszt nem tud
+    megfogni (Toplevel + `wait_window` gombnyomást vár), és épp az a
+    dolga, hogy egy elrontott indítást megállítson. Ha némán elromlana,
+    visszakapnánk azt a hibát, ami miatt megépült: a kézi próba
+    észrevétlenül tartalékágon futna.
+
+    A helyzetet MI állítjuk elő (nincs letöltve a modell), és a
+    válaszgombot is mi nyomjuk meg — mindkettőt, mert a két gomb két
+    különböző dolgot ígér."""
+    print("=" * 72)
+    print("# indítási ellenőrzés (modális ablak, valódi Tk)")
+
+    from assistant.interpreter.llm_based import HIANY_NINCS_LETOLTVE, ModellAllapot
+
+    eredeti_ellenorzes = ui_vasarlo.indito_ellenorzes
+    eredeti_kapcsolo = os.environ.pop("APRAJAFALVA_INDITO_ELLENORZES", None)
+    ui_vasarlo.indito_ellenorzes = lambda: ModellAllapot(
+        modell="nincs-ilyen-modell:1b", hiany=HIANY_NINCS_LETOLTVE
+    )
+    try:
+        for felirat, varhato in (("Folytatom tartalékággal", True), ("Kilépek", False)):
+            latott: dict = {}
+
+            def nyomd(_felirat=felirat, _latott=latott) -> None:
+                for ablak in app.winfo_children():
+                    if not isinstance(ablak, tk.Toplevel):
+                        continue
+                    _latott["cim"] = ablak.title()
+                    for keret in ablak.winfo_children():
+                        for gomb in keret.winfo_children():
+                            if gomb.winfo_class() == "TButton" and gomb.cget("text") == _felirat:
+                                gomb.invoke()
+                                return
+
+            app.after(200, nyomd)
+            dontes = app._indito_ellenorzes()
+            jel = "OK" if dontes is varhato else "HIBA"
+            print(f"  {jel}  {felirat!r} -> folytatás={dontes} (várt: {varhato})")
+            if not latott:
+                print("  HIBA: nem jelent meg modális ablak")
+            else:
+                print(f"       ablak címe: {latott['cim']}")
+    finally:
+        ui_vasarlo.indito_ellenorzes = eredeti_ellenorzes
+        if eredeti_kapcsolo is not None:
+            os.environ["APRAJAFALVA_INDITO_ELLENORZES"] = eredeti_kapcsolo
 
 
 def _foglalasi_menet_irasban(app) -> None:

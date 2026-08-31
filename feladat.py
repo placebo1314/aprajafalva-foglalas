@@ -37,6 +37,11 @@ Három halmaz van (`--halmaz nyelvi|robusztus|beszedhelyzetek`):
 
 A `vegigjatszas` a vásárlói felületet hajtja végig Tkinter-eseményhurok
 nélkül (`tools/vegigjatszas.py`) — önellenőrzés, mielőtt kézzel leülnél elé.
+Négy menetet jár be: a saját próbákat, a foglalást GOMBOKKAL, a
+foglalást VÉGIG ÍRÁSBAN (ez utóbbi fogta meg 2026-08-31-én, hogy az
+„igen, foglald le" mondatból új keresés lett), és a modális indítási
+ellenőrzést valódi Tk-ablakkal — azt egységteszt nem tudja megfogni,
+mert gombnyomást vár.
 A `--mod` a kimeneti módot választja: `szoveges` (mai viselkedés),
 `beszelheto` (felolvasásra) vagy `mindketto` (ugyanaz kétszer).
 
