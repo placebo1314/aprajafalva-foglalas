@@ -60,7 +60,7 @@ Utána futtasd le a tesztkészletet, hogy lásd, minden működik:
 python feladat.py teszt
 ```
 
-A végén ezt kell látnod: `182 passed, 1 xfailed`. Az `1 xfailed` nem
+A végén ezt kell látnod: `912 passed, 1 xfailed`. Az `1 xfailed` nem
 hiba — egy szándékosan bukó teszt, ami egy még meg nem írt ellenőrzést
 dokumentál (részletek: `docs/ALLAPOT.md`).
 

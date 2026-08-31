@@ -7,15 +7,15 @@ python feladat.py golden [--json UTVONAL]
 python feladat.py migracio "<leiras>"
 python feladat.py seed [--ujra]
 python feladat.py vegigjatszas [--db UTVONAL] [--robusztus] [--mod szoveges|beszelheto|mindketto]
-python feladat.py naplo [--utolso N] [--golden SOR]
-python feladat.py riport [--utolso N] [--ki UTVONAL] [--megnyit]
+python feladat.py naplo [--utolso N] [--golden SOR] [--fajl UTVONAL] [--archival]
+python feladat.py riport [--utolso N] [--ki UTVONAL] [--fajl UTVONAL] [--megnyit]
 python feladat.py lint
 
 A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
 — nem indít Ollamát, nem hív modellt. A modell-összehasonlítás ugyanennek a
 parancsnak a `--ertelmezo llm|kaszkad|forditott` kapcsolójával megy.
 
-Két halmaz van (`--halmaz nyelvi|robusztus`):
+Három halmaz van (`--halmaz nyelvi|robusztus|beszedhelyzetek`):
 
 - `nyelvi` (alapértelmezett) — nyelvi megértés, EGY helyes válasz esetenként.
 - `robusztus` — mi történik, amikor NEM az történik, amire számítunk: üres
@@ -26,6 +26,14 @@ Két halmaz van (`--halmaz nyelvi|robusztus`):
   bontásban). Itt nem pontosságot mérünk elsősorban, hanem NÉGY
   biztonsági számot (kivétel / hatókörön kívüli válasz / kitalált tény /
   instabil ismétlés), mindet 0-s kemény küszöbbel.
+- `beszedhelyzetek` — nem az számít, HOGYAN mondja, hanem MILYEN
+  HELYZETBEN: nem magának foglal („az anyámnak kellene"), feltételesen
+  tervez („ha esik, akkor szerdán"), összehasonlít („melyik boltban van
+  hamarabb hely?"), korábbi foglalásra hivatkozik azonosítás nélkül,
+  több időpontot kér egyszerre, elköszön, meggondolja magát,
+  közbekérdez foglalás közben, vagy szokatlan igét használ
+  („bejelentkeznék", „lestoppolnék"). A várt viselkedés itt sokszor a
+  VISSZAKÉRDEZÉS vagy az udvarias elhárítás, nem a tökéletes megoldás.
 
 A `vegigjatszas` a vásárlói felületet hajtja végig Tkinter-eseményhurok
 nélkül (`tools/vegigjatszas.py`) — önellenőrzés, mielőtt kézzel leülnél elé.
@@ -37,7 +45,12 @@ A `naplo` a próba-naplót (`naplo/probak.jsonl`) összesíti
 ELOSZLÁS (p50/p95/átlag/max) a kétpontos elváráshoz mérve PLUSZ a
 tendencia (ADR-022), bizonyosság-eloszlás, leggyakoribb hibaminták. A
 `--golden <sor>` egy naplósorból golden teszteset-vázat ír, a `varhato`
-mezőt ÜRESEN hagyva — a helyes választ embernek kell beírnia.
+mezőt ÜRESEN hagyva — a helyes választ embernek kell beírnia. Az
+`--archival` a jelenlegi naplót dátumozott néven félreteszi
+(`naplo/probak-20260831-195812.jsonl`) és üres naplóval indul újra: ez
+jelöli ki a mérési határt két próbasorozat közé, hogy az előző futás
+számai ne mosódjanak össze az újakkal. Az archivált naplót a `--fajl`
+kapcsoló olvassa vissza — a `naplo` és a `riport` egyaránt.
 
 A `riport` ugyanebből a naplóból EGY FORDULÓT mutat meg teljes
 mélységben (`tools/beszelgetes_riport.py`): egyetlen, offline
@@ -46,7 +59,8 @@ normalizált alak egymás mellett, a döntő réteg színkóddal, a teljes
 prompt, a nyers modellválasz, a dátumfeloldás (modell vs. parser), a
 lépésenkénti idő, és a kimenő válasz MINDKÉT módban. A `naplo`
 összesít, ez elmélyed: az egyik megmondja, hogy baj van, a másik azt,
-hogy mi.
+hogy mi. A `--fajl` itt is archív naplót nyit meg, és a riport fejléce
+kiírja, melyikből készült.
 """
 
 from __future__ import annotations

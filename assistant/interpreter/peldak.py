@@ -174,3 +174,76 @@ PELDAK: list[tuple[str, dict]] = [
         {"eszkoz": "legkozelebbi_idopont", "parameterek": {"bolt_id": "torpilla"}},
     ),
 ]
+
+
+# ---------------------------------------------------------------------
+# V2 PÉLDAKÉSZLET — a rendszerprompt v2 változatához (ADR-026).
+#
+# **Sokféleség > darabszám.** A v1 tizenöt példája rétegenként egy
+# mondatot mutat, de a példák nagy része UGYANAZT az alakzatot tanítja
+# (bolt + nap → keresés) más szavakkal. A v2 hatot tart meg, egymástól
+# a lehető legtávolabbi HELYZETEKKEL: hatókörön kívüli kérdés, hiányzó
+# adat, elengedett mező, mondattani csapda és tényválasz-kérés — a
+# legjellemzőbb eset (egyszerű keresés) pedig a LEGUTOLSÓ, mert a
+# sorozat végét súlyozza a legerősebben a modell.
+#
+# Ami kimaradt és MIÉRT: a tájszólás, a szleng és a töredékes stílus
+# külön példája. Nem azért, mert nem számítanak, hanem mert a
+# stílusréteg a mondat FELSZÍNE — a hat megtartott példa mind más
+# DÖNTÉST tanít, a stílust pedig a modell nyelvi tudása hozza. Hogy ez
+# a csere ténylegesen nem ront-e, azt a v1/v2 A/B mérés dönti el
+# (docs/PROMPT_AB.md), nem ez a megjegyzés.
+# ---------------------------------------------------------------------
+PELDAK_V2: list[tuple[str, dict]] = [
+    # 1. hatókörön kívül — a kapuőr-döntés a legolcsóbb helyes válasz
+    ("Hány fok van odakint?", {"eszkoz": "nincs", "parameterek": {}}),
+    # 2. hiányzó kritikus adat — a helyes válasz a kérdés, nem a
+    #    találgatás (a mondat udvariassági körrel és névvel jön)
+    (
+        "Jó napot. Én a Ferike vagyok. Szeretnék menni valamikor. Lehet?",
+        {
+            "eszkoz": "visszakerdez",
+            "parameterek": {"hianyzo_mezo": "bolt_id", "varhato_kerdes_tipusa": "zart"},
+        },
+    ),
+    # 3. ELENGEDETT mező — a MINDEGY szentinel, nem üres mező
+    (
+        "Mindegy, melyik petárda, csak legyen szerdán.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "ugyifogyi",
+                "szolgaltatas_id": "MINDEGY",
+                "datum_kifejezes": "szerdán",
+            },
+        },
+    ),
+    # 4. MONDATTANI CSAPDA — a mellékmondat napszaka a KIZÁRT, nem a
+    #    kért; két napszak-szó van a mondatban, a szerkezet dönt
+    (
+        "A Törpillához délután mennék csütörtökön, mert délelőtt dolgozom.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {
+                "bolt_id": "torpilla",
+                "datum_kifejezes": "csütörtökön",
+                "napszak": "delutan",
+            },
+        },
+    ),
+    # 5. TÉNYVÁLASZ és egyben ellenpróba a MINDEGY-re: a „mindegyik"
+    #    listát kér, nem enged el semmit
+    (
+        "Mindegyik petárda érdekel, mit árulnak?",
+        {"eszkoz": "bolt_info", "parameterek": {"bolt_id": "ugyifogyi", "mit": "termek"}},
+    ),
+    # 6. A LEGJELLEMZŐBB eset, szándékosan utolsóként: egyszerű keresés,
+    #    idézett dátummal
+    (
+        "Szeretnék időpontot foglalni szerdára az Ügyifogyiba.",
+        {
+            "eszkoz": "szabad_idopontok",
+            "parameterek": {"bolt_id": "ugyifogyi", "datum_kifejezes": "szerda"},
+        },
+    ),
+]

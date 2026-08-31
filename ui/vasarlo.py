@@ -104,6 +104,7 @@ Indítás:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 import tkinter as tk
@@ -121,6 +122,7 @@ from assistant.interpreter import (  # noqa: E402
     KI_VASARLO,
     aktiv_modell_neve,
     alapertelmezett_ertelmezo,
+    indito_ellenorzes,
 )
 from assistant.orchestrator import Orchestrator  # noqa: E402
 from assistant.tools import katalogus  # noqa: E402
@@ -137,17 +139,32 @@ _NAPSZAKOK = [
     ("barmikor", "bármikor"),
 ]
 
-_PROBA_NAPLO_UTVONAL = ROOT / "naplo" / "probak.jsonl"
+PROBA_NAPLO_UTVONAL = ROOT / "naplo" / "probak.jsonl"
+# Az ARCHIVÁLT naplók ugyanabban a könyvtárban, dátumozott néven élnek
+# (`probak-20260831-195812.jsonl`) — a minta az, ami alapján a
+# `proba_naplo_archivumok()` megtalálja őket. Nem külön könyvtár: a napló
+# egy fájl, az archívuma ugyanaz a fájl máskor, és egy `naplo/` listázás
+# így magától időrendben mutatja őket.
+_ARCHIVUM_MINTA = "probak-*.jsonl"
+_ARCHIVUM_IDOBELYEG = "%Y%m%d-%H%M%S"
 
 # A szöveges napló "Te:" előtagja — ebből tudja a `_naplo_ir`, hogy a
 # sor a vásárlóé-e vagy a rendszeré (a beszélgetés-előzményhez, ADR-019).
 _TE_CIMKE = "Te"
 
-# Hány NAPLÓSOR megy át előzményként az értelmezőnek. Négy forduló =
-# négy vásárlói sor + a rájuk adott rendszer-sorok; a rendszer egy
-# fordulóban több sort is írhat (nyugtázó + eredmény), ezért nem
-# fordulót, hanem sort számolunk, bőven a négy forduló fölé kerekítve.
-_ELOZMENY_SOROK = 12
+# Hány NAPLÓSOR megy át előzményként az értelmezőnek.
+#
+# **Ez már nem az ablak** (ADR-025): a vágást az értelmező oldalán a
+# csúszó előzmény-ablak végzi (`assistant/interpreter/ablak.py`) — az
+# utolsó néhány forduló szó szerint, a régebbiek egy összefoglaló
+# sorban. Ez a szám csak azt mondja meg, meddig ér vissza az a
+# nyersanyag, amiből az összefoglaló készülhet.
+#
+# Korábban 12 volt, és EGYBEN az ablak is: ami kicsúszott, az
+# nyomtalanul elveszett — a legelső mondatban kimondott bolttal együtt.
+# Most a régebbi fordulók összefoglalva élnek tovább, ezért érdemes
+# többet átadni, mint amennyi szó szerint elmegy.
+_ELOZMENY_SOROK = 60
 
 
 def _most_iso() -> str:
@@ -206,6 +223,8 @@ def _proba_naplo_ir(
     uzenet_kulcs: str | None = None,
     kapuor_ok: str | None = None,
     egyetertes: int | None = None,
+    modell: str | None = None,
+    prompt_verzio: str | None = None,
     nyomkovetes: dict | None = None,
 ) -> None:
     """Egy fordulót ír a `naplo/probak.jsonl`-be — l. modul docstring,
@@ -244,7 +263,7 @@ def _proba_naplo_ir(
     pontosan azt méri, mi történik, ha valaki KÉRETLENÜL bediktálja a
     telefonszámát — enélkül a szám nyersen kerülne a naplófájlba, és
     soha nem kértük."""
-    _PROBA_NAPLO_UTVONAL.parent.mkdir(parents=True, exist_ok=True)
+    PROBA_NAPLO_UTVONAL.parent.mkdir(parents=True, exist_ok=True)
     sor = {
         "idobelyeg": _most_iso(),
         "bemenet": redaktal(bemenet),
@@ -257,26 +276,42 @@ def _proba_naplo_ir(
         "uzenet_kulcs": uzenet_kulcs,
         "kapuor_ok": kapuor_ok,
         "egyetertes": egyetertes,
+        # MELYIK MODELL és MELYIK PROMPT — fordulónként, nem futásonként.
+        # A `reteg` mező csak azt mondja meg, KI oldotta meg a fordulót;
+        # abból nem derül ki, hogy a tartalék azért dolgozott-e, mert
+        # nem volt konfigurált modell, vagy mert a modell nem tudta
+        # megoldani. Ez a két eset egy hét múlva, a naplóból nézve
+        # megkülönböztethetetlen volt — pedig az egyik konfigurációs
+        # hiba, a másik mérési eredmény.
+        "modell": modell,
+        "prompt_verzio": prompt_verzio,
         "valaszido_masodperc": (
             None if valaszido_masodperc is None else round(valaszido_masodperc, 3)
         ),
         "nyomkovetes": redaktal_ertekek(nyomkovetes) if nyomkovetes else None,
     }
-    with _PROBA_NAPLO_UTVONAL.open("a", encoding="utf-8") as fajl:
+    with PROBA_NAPLO_UTVONAL.open("a", encoding="utf-8") as fajl:
         fajl.write(json.dumps(sor, ensure_ascii=False) + "\n")
 
 
-def proba_naplo_olvas(utolso: int | None = None) -> list[dict]:
+def proba_naplo_olvas(utolso: int | None = None, utvonal: Path | None = None) -> list[dict]:
     """A próba-napló sorai, legrégebbitől a legújabbig. `utolso`
     megadásakor csak az utolsó N sor. Hiányzó fájl esetén üres lista —
     ez nem hiba, csak azt jelenti, hogy még nem volt forduló.
 
+    `utvonal`: egy ARCHIVÁLT napló (`naplo/probak-20260831-195812.jsonl`)
+    olvasásához — enélkül a jelenlegi naplót olvassa. Az elemző és a
+    riport ezen keresztül kapja a `--fajl` kapcsolót: az archiválás
+    (`proba_naplo_archival`) különben elvágná a hozzáférést attól, amit
+    épp megőrizni akartunk.
+
     A sérült (nem JSON) sorokat átugorja: a napló megnyitása SOHA ne
     boruljon fel attól, hogy egy korábbi futás félbeszakadt."""
-    if not _PROBA_NAPLO_UTVONAL.exists():
+    fajl_utvonal = utvonal or PROBA_NAPLO_UTVONAL
+    if not fajl_utvonal.exists():
         return []
     sorok = []
-    for nyers in _PROBA_NAPLO_UTVONAL.read_text(encoding="utf-8").splitlines():
+    for nyers in fajl_utvonal.read_text(encoding="utf-8").splitlines():
         if not nyers.strip():
             continue
         try:
@@ -284,6 +319,47 @@ def proba_naplo_olvas(utolso: int | None = None) -> list[dict]:
         except json.JSONDecodeError:
             continue
     return sorok[-utolso:] if utolso else sorok
+
+
+def proba_naplo_archivumok() -> list[Path]:
+    """Az archivált naplók, LEGÚJABBTÓL a legrégebbi felé. A név
+    tartalmazza az időbélyeget, ezért a névsor fordítottja egyben
+    időrend is — nem a fájlrendszer módosítási idejére támaszkodunk,
+    ami egy másolás vagy egy git-művelet után hazudna."""
+    return sorted(PROBA_NAPLO_UTVONAL.parent.glob(_ARCHIVUM_MINTA), reverse=True)
+
+
+def proba_naplo_archival(most: datetime | None = None) -> Path | None:
+    """A jelenlegi naplót dátumozott néven félreteszi, és üres naplóval
+    indul újra. Az archív fájl útvonalát adja vissza, vagy `None`-t, ha
+    nem volt mit archiválni (nincs fájl, vagy üres).
+
+    **Átnevezés, nem másolás:** a napló egyetlen író folyamata a
+    felület, és az átnevezés után a következő forduló egyszerűen új
+    fájlt nyit (`_proba_naplo_ir` `"a"` módban) — nincs olyan pillanat,
+    amikor egy sor mindkét fájlban benne van, vagy egyikben sem.
+
+    Miért kell egyáltalán: a napló a próbák nyersanyaga (rejtett golden
+    halmaz, `tools/naplo_elemzo.py`), és egy hosszú próbasorozat számai
+    összemosódnak az előzőével, ha ugyanabba a fájlba folynak. Az
+    archiválás a mérési határ kijelölése — a régi számok megmaradnak,
+    csak nem keverednek az újakkal."""
+    if (
+        not PROBA_NAPLO_UTVONAL.exists()
+        or not PROBA_NAPLO_UTVONAL.read_text(encoding="utf-8").strip()
+    ):
+        return None
+    idobelyeg = (most or datetime.now(UTC)).strftime(_ARCHIVUM_IDOBELYEG)
+    cel = PROBA_NAPLO_UTVONAL.with_name(f"probak-{idobelyeg}.jsonl")
+    # Ütközés csak akkor lehet, ha egy másodpercen belül kétszer
+    # archiválunk — a betűs utótag ezt is elviseli, ahelyett hogy
+    # felülírná az előbbit.
+    utotag = 0
+    while cel.exists():
+        utotag += 1
+        cel = PROBA_NAPLO_UTVONAL.with_name(f"probak-{idobelyeg}-{utotag}.jsonl")
+    PROBA_NAPLO_UTVONAL.rename(cel)
+    return cel
 
 
 def proba_naplo_szoveg(sorok: list[dict]) -> str:
@@ -369,6 +445,74 @@ class VasarloApp(tk.Tk):
     # Felépítés
     # ------------------------------------------------------------------
 
+    def _indito_ellenorzes(self) -> bool:
+        """MODÁLIS ellenőrzés indításkor: konfigurálva van-e a modell, és
+        válaszol-e az Ollama. `True`, ha mehet tovább a felépítés.
+
+        **Miért nem elég a sárga sáv.** Háromszor futott végig kézi
+        próba a tartalék ágon úgy, hogy csak utólag derült ki — egy
+        figyelmeztető sávot el lehet olvasni és el lehet felejteni,
+        főleg ha a beszélgetés egyébként értelmes válaszokat ad. Itt
+        DÖNTENI kell: a „Folytatom tartalékággal" érvényes választás
+        (pl. amikor épp a determinisztikus réteget próbáljuk), csak nem
+        lehet véletlen.
+
+        **A szöveget nem ez a modul fogalmazza** (`assistant/valasz/
+        __init__.py::indito_ellenorzes_szoveg`), és a modell-állapotot
+        sem ez kérdezi le (`assistant/interpreter::indito_ellenorzes`) —
+        a felület csak megjeleníti a kettőt.
+
+        Az ellenőrzés KIHAGYHATÓ az `APRAJAFALVA_INDITO_ELLENORZES=ki`
+        környezeti változóval: a fej nélküli végigjátszás
+        (`tools/vegigjatszas.py`) és az automata tesztek nem tudnak
+        gombot nyomni, és nem is nekik szól a kérdés."""
+        if os.environ.get("APRAJAFALVA_INDITO_ELLENORZES") == "ki":
+            return True
+        allapot = indito_ellenorzes()
+        szovegek = valasz_szoveg.indito_ellenorzes_szoveg(
+            getattr(allapot, "hiany", None), getattr(allapot, "modell", None)
+        )
+        if szovegek is None:
+            return True
+        cim, uzenet, folytatas_cimke, kilepes_cimke = szovegek
+
+        ablak = tk.Toplevel(self)
+        ablak.title(cim)
+        ablak.transient(self)
+        ablak.resizable(False, False)
+        tk.Label(
+            ablak,
+            text=uzenet,
+            justify="left",
+            anchor="w",
+            wraplength=560,
+            padx=16,
+            pady=14,
+        ).pack(fill="x")
+        gombsor = ttk.Frame(ablak, padding=(16, 0, 16, 14))
+        gombsor.pack(fill="x")
+
+        dontes = {"folytat": False}
+
+        def folytat() -> None:
+            dontes["folytat"] = True
+            ablak.destroy()
+
+        # A KILÉPÉS az alapértelmezett (az ablak bezárása és az Escape is
+        # ide fut): ha valaki gondolkodás nélkül elüti a kérdést, ne az
+        # legyen az eredmény, hogy észrevétlenül tartalékágon mér.
+        ttk.Button(gombsor, text=folytatas_cimke, command=folytat).pack(side="left")
+        ttk.Button(gombsor, text=kilepes_cimke, command=ablak.destroy).pack(side="right")
+        ablak.bind("<Escape>", lambda _esemeny: ablak.destroy())
+        ablak.protocol("WM_DELETE_WINDOW", ablak.destroy)
+
+        ablak.grab_set()
+        self.wait_window(ablak)
+        if not dontes["folytat"]:
+            self.after(0, self._close)
+            return False
+        return True
+
     def _build(self) -> None:
         if self.org_id is None:
             ttk.Label(
@@ -383,6 +527,12 @@ class VasarloApp(tk.Tk):
         # "ma" ezen a felületen. Ez az ELSŐ dolog, amit a próbálgató lát —
         # enélkül a demóadat távoli hete néma kudarcnak látszana.
         modell_nev = aktiv_modell_neve()
+
+        # INDÍTÁSI ELLENŐRZÉS — a sárga sáv nem volt elég (l.
+        # `_indito_ellenorzes`). Ha a válasz „Kilépek", az ablak itt
+        # bezárul, és a szöveges fül el sem indul.
+        if not self._indito_ellenorzes():
+            return
 
         # NINCS MODELL — a legfeltűnőbb sor az ablakban, a többi FÖLÖTT.
         # A tartalék ág csendben átveszi a fordulót (helyes viselkedés),
@@ -752,7 +902,9 @@ class VasarloApp(tk.Tk):
         from tools.beszelgetes_riport import ALAP_KIMENET, riport
 
         ALAP_KIMENET.parent.mkdir(parents=True, exist_ok=True)
-        ALAP_KIMENET.write_text(riport(proba_naplo_olvas()), encoding="utf-8")
+        ALAP_KIMENET.write_text(
+            riport(proba_naplo_olvas(), PROBA_NAPLO_UTVONAL.name), encoding="utf-8"
+        )
         return ALAP_KIMENET
 
     def _naplo_ablak_szovegesen(self, elotag: str = "") -> None:
@@ -933,6 +1085,8 @@ class VasarloApp(tk.Tk):
             uzenet_kulcs=valasz.get("uzenet_kulcs"),
             kapuor_ok=valasz.get("kapuor_ok"),
             egyetertes=getattr(self.orchestrator.ertelmezo, "utolso_egyetertes", None),
+            modell=aktiv_modell_neve(),
+            prompt_verzio=getattr(self._llm_reteg(), "utolso_prompt_verzio", None),
             nyomkovetes=self._nyomkovetes(valasz, hivasok_elotte),
         )
         self._szoveges_valasz_kezel(valasz)
@@ -977,6 +1131,7 @@ class VasarloApp(tk.Tk):
             nyom = dict(getattr(ertelmezo, "utolso_nyomkovetes", {}) or {})
 
         nyom["modell"] = aktiv_modell_neve()
+        nyom["prompt_verzio"] = getattr(llm, "utolso_prompt_verzio", None)
         nyom["modellhivas_db"] = hivasok
         # A prompt és a nyers válasz UGYANEZ a csapda: a modell-hívó
         # réteg megőrzi az utolsó hívás adatait, tehát egy kapuőrös vagy
@@ -1106,6 +1261,23 @@ class VasarloApp(tk.Tk):
                         text=cimke,
                         command=lambda e=ertek: self._szo_kuldes(e),
                     ).pack(side="left", padx=(0, 6))
+            return
+
+        if tipus == "elvetve":
+            # ÍRÁSBELI NEM a megerősítés-kérdésre („mégse kell") — az
+            # orchestrator elengedte a választott időpontot
+            # (`assistant/megerosites.py`). A többi jelölt még áll, ezért
+            # ÚJRA felkínáljuk: a vásárló nemet mondott EGY időpontra,
+            # nem az egész keresésre.
+            self._rendszer_mondat(valasz_szoveg.elvetve_szoveg(mod=mod))
+            jeloltek = valasz.get("jeloltek") or []
+            if jeloltek:
+                self._rendszer_mondat(valasz_szoveg.ajanlat_mondat(jeloltek, mod=mod))
+                self._eredmeny_render(
+                    self.szo_jelolt_keret,
+                    {"tipus": "ajanlat", "jeloltek": jeloltek},
+                    self.szo_uzenet,
+                )
             return
 
         if tipus == "megerositest_ker":

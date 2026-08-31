@@ -84,8 +84,18 @@ from tools.naplo_elemzo import (  # noqa: E402
 
 GOLDEN_UTVONAL = GYOKER / "tests" / "golden" / "nyelvi_alap.yaml"
 ROBUSZTUS_UTVONAL = GYOKER / "tests" / "golden" / "robusztus.yaml"
+BESZEDHELYZETEK_UTVONAL = GYOKER / "tests" / "golden" / "beszedhelyzetek.yaml"
 
-HALMAZOK = {"nyelvi": GOLDEN_UTVONAL, "robusztus": ROBUSZTUS_UTVONAL}
+HALMAZOK = {
+    "nyelvi": GOLDEN_UTVONAL,
+    "robusztus": ROBUSZTUS_UTVONAL,
+    # BESZÉDHELYZETEK: nem az számít, HOGYAN mondja (az a nyelvi
+    # halmaz), hanem MILYEN HELYZETBEN — nem magának foglal, feltételesen
+    # tervez, összehasonlít, elköszön, meggondolja magát, közbekérdez. A
+    # várt viselkedés itt sokszor a visszakérdezés vagy az udvarias
+    # elhárítás, nem a tökéletes megoldás.
+    "beszedhelyzetek": BESZEDHELYZETEK_UTVONAL,
+}
 
 # HivoFuggveny: (bemenet, most) -> (kimenet | None, telt_masodperc,
 # tokenszam, hiba_uzenet | None). A `bemenet` egy mondat VAGY egy

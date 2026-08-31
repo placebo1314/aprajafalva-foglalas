@@ -141,7 +141,7 @@ def test_proba_naplo_redaktalva_ir(tmp_path, monkeypatch) -> None:
     a `_proba_naplo_ir` modulszintű függvény, fej nélkül is hívható."""
     ui_vasarlo = pytest.importorskip("ui.vasarlo")
     naplo = tmp_path / "probak.jsonl"
-    monkeypatch.setattr(ui_vasarlo, "_PROBA_NAPLO_UTVONAL", naplo)
+    monkeypatch.setattr(ui_vasarlo, "PROBA_NAPLO_UTVONAL", naplo)
 
     ui_vasarlo._proba_naplo_ir(
         "Jó napot, a számom 06301234567, időpontot kérnék.",

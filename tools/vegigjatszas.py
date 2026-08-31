@@ -52,6 +52,7 @@ kiírt `réteg` oszlopból látszik, melyik esetben mi történt.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -191,6 +192,7 @@ def vegigjatszas(
     mod: str = "szoveges",
 ) -> int:
     from assistant import valasz as valasz_szoveg
+    from assistant.interpreter import indito_ellenorzes
     from ui.vasarlo import VasarloApp
 
     if mod == "mindketto":
@@ -200,11 +202,23 @@ def vegigjatszas(
         ]
         return max(kodok)
 
+    # A modális indítási ellenőrzés (`ui/vasarlo.py::_indito_ellenorzes`)
+    # gombnyomást vár — fej nélkül nincs, aki megnyomja. Ezért itt
+    # kikapcsoljuk, de a HELYZETET kiírjuk: a végigjátszás ugyanúgy
+    # futhat tartalékágon, és ugyanúgy félrevezető, ha ez nem látszik.
+    os.environ.setdefault("APRAJAFALVA_INDITO_ELLENORZES", "ki")
     app = VasarloApp(db_path)
     # Nincs `mainloop()` — az ablakot el is rejtjük, hogy a végigjátszás
     # ne villantson fel semmit.
     app.withdraw()
     print(f"Adatbázis: {db_path}")
+    allapot = indito_ellenorzes()
+    if allapot.rendben:
+        print(f"Modell: {allapot.modell} (éles út)")
+    else:
+        print(
+            f"FIGYELEM: TARTALÉKÁGON fut ({allapot.hiany}) — ez a végigjátszás NEM a modellt méri."
+        )
 
     # ÜRES ADATBÁZIS: a felület ilyenkor egyetlen figyelmeztető
     # címkét épít fel, fülek és beviteli mező nélkül
@@ -245,6 +259,7 @@ def vegigjatszas(
     if not csak_robusztus:
         _sajat_probak(app)
         _foglalasi_menet(app)
+        _foglalasi_menet_irasban(app)
     if robusztus or csak_robusztus:
         kilepokod = _robusztus_halmaz(app)
 
@@ -420,6 +435,72 @@ def _foglalasi_menet(app) -> None:
     print(f"    eredmény:    {eredmeny}")
     if app.szo_uzenet.cget("text"):
         print(f"    hibasor:     {app.szo_uzenet.cget('text')}")
+
+
+def _foglalasi_menet_irasban(app) -> None:
+    """UGYANAZ az út, de VÉGIG ÍRÁSBAN — gombnyomás nélkül.
+
+    **Miért külön menet.** A `_foglalasi_menet` az időpontot GOMBBAL
+    választja ki; a kézi próbában viszont az derült ki, hogy írásban
+    nem megy végig a foglalás. Az a próba tartalékágon futott, tehát a
+    hibáról nem lehetett megmondani, kié: a szövegértésé vagy a
+    felületé. Ez a menet ezt választja szét — kiírja, MELYIK RÉTEG
+    döntött minden lépésben, és hogy hol áll meg az út.
+
+    Négy lépés, mindegyik egy külön állítás:
+
+    1. keresés írásban → jönnek-e jelöltek;
+    2. SORSZÁMOS választás („a másodikat kérem") → megerősítés-kérés
+       lesz-e belőle (ezt determinisztikusan az orchestrator dönti el,
+       `assistant/sorszam.py` — modell nélkül is mennie kell);
+    3. írásbeli IGEN („igen, foglald le") → ma NINCS ilyen út: az
+       azonosítót űrlap kéri be, és a mondat a szokásos értelmezőre fut.
+       Ez a lépés azt méri meg, MI TÖRTÉNIK helyette;
+    4. az azonosító megadása az űrlapon → létrejön-e a foglalás.
+    """
+    print("=" * 72)
+    print("# foglalási menet ÍRÁSBAN (gombnyomás nélkül, a 4. lépés kivételével)")
+    app._uj_beszelgetes()
+
+    def fordulo(mondat: str) -> None:
+        app._szo_kuldes(mondat)
+        ertelmezes = app.orchestrator.utolso_ertelmezes or {}
+        reteg = ertelmezes.get("reteg") or getattr(app.orchestrator.ertelmezo, "utolso_reteg", None)
+        print(f"\n  > {mondat}")
+        print(f"    réteg:       {reteg}")
+        print(f"    eszköz:      {ertelmezes.get('eszkoz')}")
+        print(f"    jelöltek:    {_jelolt_gombok(app)}")
+        for cimke in _widgetek(app.szo_jelolt_keret, "TLabel"):
+            if cimke.cget("text"):
+                print(f"    kérdés:      {cimke.cget('text')}")
+        if app.szo_uzenet.cget("text"):
+            print(f"    üzenetsor:   {app.szo_uzenet.cget('text')}")
+
+    fordulo(FOGLALASI_MENET_MONDAT)
+    if not app.szo_jelolt_keret.winfo_children():
+        print("    NINCS jelölt — a menet itt megáll (nézd meg a beosztás időszakát).")
+        return
+
+    fordulo("a másodikat kérem")
+    fordulo("igen, foglald le")
+    print("\n  (a megerősítés után az azonosítót a felület űrlapja kéri be —")
+    print("   a foglaláshoz vásárlói kulcs kell, azt egy mondat nem pótolja)")
+
+    mezok = _widgetek(app.szo_jelolt_keret, "TEntry")
+    if not mezok:
+        print("    Az azonosító-mező eltűnt — írásban itt szakad meg az út.")
+        return
+    mezok[0].delete(0, "end")
+    mezok[0].insert(0, "proba-azonosito-123")
+    igen = next(
+        (g for g in _widgetek(app.szo_jelolt_keret, "TButton") if "foglalom" in g.cget("text")),
+        None,
+    )
+    if igen is None:
+        print("    NINCS 'Igen, foglalom' gomb — a menet megáll.")
+        return
+    igen.invoke()
+    print(f"    eredmény:    {[w.cget('text') for w in _widgetek(app.szo_jelolt_keret, 'TLabel')]}")
 
 
 def main(argv: list[str] | None = None) -> int:

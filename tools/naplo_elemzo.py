@@ -240,8 +240,20 @@ def elemez(sorok: list[dict]) -> dict:
         f"{sor['egyetertes']}/3" for sor in sorok if sor.get("egyetertes") is not None
     )
 
+    # MELYIK MODELL és MELYIK PROMPT — fordulónként rögzítve
+    # (`ui/vasarlo.py::_proba_naplo_ir`). Enélkül a napló csak azt
+    # mondta meg, KI oldotta meg a fordulót; azt nem, hogy a tartalék
+    # azért dolgozott-e, mert nem volt konfigurált modell, vagy mert a
+    # modell nem tudta megoldani. Két különböző baj, két különböző
+    # teendő. A `nincs` kulcs a régi naplósorokat is beleszámolja: ott
+    # a mező nem hiányzik, csak akkor még nem létezett.
+    modellek = Counter(sor.get("modell") or "nincs" for sor in sorok)
+    prompt_verziok = Counter(sor.get("prompt_verzio") or "nincs" for sor in sorok)
+
     return {
         "fordulok": len(sorok),
+        "modellek": dict(modellek),
+        "prompt_verziok": dict(prompt_verziok),
         "elso": sorok[0].get("idobelyeg") if sorok else None,
         "utolso": sorok[-1].get("idobelyeg") if sorok else None,
         "retegek": dict(retegek),
@@ -274,6 +286,18 @@ def jelentes(osszesites: dict) -> str:
     ki("\n-- Réteg-megoszlás (ki oldotta meg) --")
     for reteg, darab in sorted(osszesites["retegek"].items(), key=lambda p: -p[1]):
         ki(f"  {reteg:14s} {darab:4d}  {_arany(darab, osszesites['fordulok'])}")
+
+    # MODELL ÉS PROMPT — közvetlenül a réteg-megoszlás alatt, mert
+    # együtt olvasandó: a „szabaly:tartalek 100%" sor mást jelent, ha
+    # volt konfigurált modell (elhalt szolgáltatás), és mást, ha nem
+    # (be sem volt kapcsolva).
+    ki("\n-- Modell és prompt (fordulónként rögzítve) --")
+    for modell, darab in sorted(osszesites.get("modellek", {}).items(), key=lambda p: -p[1]):
+        cimke = "nincs konfigurált modell" if modell == "nincs" else modell
+        ki(f"  modell: {cimke:24s} {darab:4d}  {_arany(darab, osszesites['fordulok'])}")
+    for verzio, darab in sorted(osszesites.get("prompt_verziok", {}).items(), key=lambda p: -p[1]):
+        cimke = "nem futott modellhívás" if verzio == "nincs" else verzio
+        ki(f"  prompt: {cimke:24s} {darab:4d}  {_arany(darab, osszesites['fordulok'])}")
 
     ki("\n-- Válasz-típusok --")
     for tipus, darab in sorted(osszesites["valasz_tipusok"].items(), key=lambda p: -p[1]):
@@ -395,11 +419,48 @@ def main(argv: list[str] | None = None) -> int:
         metavar="SOR",
         help="egy naplósorból golden teszteset-vázat ír (a `varhato` üresen hagyva)",
     )
+    parser.add_argument(
+        "--fajl",
+        type=Path,
+        default=None,
+        metavar="UTVONAL",
+        help=(
+            "egy ARCHIVÁLT naplót elemez (naplo/probak-20260831-195812.jsonl) "
+            "a jelenlegi napló helyett"
+        ),
+    )
+    parser.add_argument(
+        "--archival",
+        action="store_true",
+        help=(
+            "a jelenlegi naplót dátumozott néven félreteszi, és üres naplóval indul újra "
+            "— mérési határ két próbasorozat közé"
+        ),
+    )
     args = parser.parse_args(argv)
 
-    from ui.vasarlo import proba_naplo_olvas
+    from ui.vasarlo import proba_naplo_archival, proba_naplo_archivumok, proba_naplo_olvas
 
-    sorok = proba_naplo_olvas(args.utolso)
+    if args.archival:
+        cel = proba_naplo_archival()
+        if cel is None:
+            print("Nincs mit archiválni: a napló üres vagy nem létezik (naplo/probak.jsonl).")
+            return 0
+        nev = cel.relative_to(GYOKER).as_posix()
+        print(
+            f"Archiválva: {nev}  ({len(proba_naplo_olvas(utvonal=cel))} forduló). "
+            "A napló újraindult."
+        )
+        print(f"Az archívum elemzése:  python feladat.py naplo --fajl {nev}")
+        return 0
+
+    if args.fajl is not None and not args.fajl.exists():
+        print(f"Nincs ilyen naplófájl: {args.fajl}")
+        for utvonal in proba_naplo_archivumok():
+            print(f"  archívum: {utvonal.relative_to(GYOKER).as_posix()}")
+        return 1
+
+    sorok = proba_naplo_olvas(args.utolso, utvonal=args.fajl)
     if not sorok:
         print(
             "A próba-napló üres vagy nem létezik (naplo/probak.jsonl).\n"
@@ -411,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
         # A sorszám a TELJES naplóra vonatkozik, nem az `--utolso`
         # szeletre — különben ugyanaz a szám két futáson mást
         # jelentene.
-        teljes = proba_naplo_olvas()
+        teljes = proba_naplo_olvas(utvonal=args.fajl)
         if not 1 <= args.golden <= len(teljes):
             print(f"Nincs ilyen naplósor: {args.golden} (a napló {len(teljes)} sorból áll).")
             return 1

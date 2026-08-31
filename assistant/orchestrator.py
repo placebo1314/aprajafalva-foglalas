@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 
 from assistant.frusztracio import Frusztracio
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
+from assistant.megerosites import NEM, megerosito_valasz
 from assistant.sorszam import sorszam_hivatkozas
 from assistant.tools import (
     bolt_info,
@@ -103,6 +104,10 @@ _KIUT_DIMENZIOK = ("nap", "napszak", "legkorabbi")
 # értelmező rétege — az orchestrator dönt, mert egyedül ő ismeri a
 # felajánlott jelölteket (`assistant/sorszam.py`).
 RETEG_SORSZAM = "orchestrator:sorszam"
+# Írásbeli igen/nem a megerősítés-kérdésre (`assistant/megerosites.py`).
+# Külön réteg-név, mert a naplóban meg kell tudni különböztetni attól,
+# amikor a modell értelmezett — ez determinisztikus rövidzár.
+RETEG_MEGEROSITES = "orchestrator:megerosites"
 
 # A kapuőr `ok`-kulcsa (`assistant/kapuor/`) → melyik magyar mondat
 # menjen ki (`assistant/valasz/sablonok.py`). Ami nincs benne, arra az
@@ -321,6 +326,61 @@ class Orchestrator:
                 valasz = self.valaszt(session_id, jelolt["slot_id"])
                 valasz["reteg"] = RETEG_SORSZAM
                 valasz["valasztott_jelolt"] = jelolt
+                return valasz
+
+        # ÍRÁSBELI IGEN / NEM a megerősítés-kérdésre — „igen, foglald le",
+        # „mégse kell".
+        #
+        # MÉRT HIBA javítása (2026-08-31, `vegigjatszas` MODELLEL): a
+        # szöveges úton a foglalás itt szakadt meg. A modell a
+        # megerősítést új keresésnek értette (`szabad_idopontok`), a
+        # felület kirajzolta az új jelölteket, és a folyamatban lévő
+        # megerősítés — a kiválasztott időponttal együtt — eltűnt. A
+        # tartalék ágon ugyanez történt, tehát nem modellhiba: az
+        # állapotgép nem KÉRDEZTE meg, hogy éppen megerősítésre vár-e.
+        #
+        # Ugyanaz a rövidzár-elv, mint a sorszámnál: ha MI tettünk fel egy
+        # zárt kérdést, a válasz zárt halmaz, és nincs mit értelmeztetni
+        # rajta. Csak `megerositesre_var` állapotban szólal meg — máshol
+        # az „igen" önmagában semmit nem jelent.
+        if allapot.allapot == "megerositesre_var" and allapot.valasztott_slot_id:
+            dontes = megerosito_valasz(mondat)
+            if dontes is not None:
+                self.utolso_ertelmezes = {
+                    "eszkoz": "megerosites_valasz",
+                    "parameterek": {"dontes": dontes},
+                    "bizonyossag": {"eszkoz": 1.0},
+                    "reteg": RETEG_MEGEROSITES,
+                }
+                if dontes == NEM:
+                    valasz = self.elvet(session_id)
+                    valasz["reteg"] = RETEG_MEGEROSITES
+                    # A vásárló EGY időpontra mondott nemet, nem az
+                    # egész keresésre: a többi jelölt még áll (a holdjuk
+                    # is), ezért újra felkínáljuk. Enélkül a szöveges
+                    # úton egy „mégse" után nulláról kellene keresnie.
+                    valasz["jeloltek"] = list(allapot.aktualis_jeloltek)
+                    return valasz
+                # IGEN: a foglaláshoz vásárlói kulcs kell (CLAUDE.md 2.
+                # invariáns) — azt a felület kéri be. Az igenlő válasz
+                # tehát a megerősítés-kérdés MEGISMÉTLÉSE, nem foglalás:
+                # ettől marad a képernyőn az azonosító-mező, és nem
+                # veszik el a kiválasztott időpont.
+                valasz = {
+                    "tipus": "megerositest_ker",
+                    "slot_id": allapot.valasztott_slot_id,
+                    "reteg": RETEG_MEGEROSITES,
+                }
+                jelolt = next(
+                    (
+                        j
+                        for j in allapot.aktualis_jeloltek
+                        if j["slot_id"] == allapot.valasztott_slot_id
+                    ),
+                    None,
+                )
+                if jelolt is not None:
+                    valasz["valasztott_jelolt"] = jelolt
                 return valasz
 
         kontextus = ErtelmezesKontextus(

@@ -329,3 +329,42 @@ def test_jelentes_minden_szakaszt_kiir() -> None:
     szoveg = jelentes(elemez([_sor(), _sor(reteg="kapuor", valasz_tipus="elutasitas")]))
     for szakasz in ("Réteg-megoszlás", "Válasz-típusok", "Válaszidő", "Bizonyosság-eloszlás"):
         assert szakasz in szoveg, szakasz
+
+
+# -- MODELL ÉS PROMPT-VERZIÓ fordulónként ------------------------------
+#
+# A `reteg` mező csak azt mondja meg, KI oldotta meg a fordulót. Abból
+# nem derül ki, hogy a tartalék azért dolgozott-e, mert nem volt
+# konfigurált modell, vagy mert a modell nem tudta megoldani — két
+# különböző baj, két különböző teendő.
+
+
+def test_modell_es_prompt_verzio_megoszlas():
+    osszesites = elemez(
+        [
+            _sor(modell="qwen3.5:9b", prompt_verzio="v1"),
+            _sor(modell="qwen3.5:9b", prompt_verzio="v2"),
+            _sor(modell="qwen3.5:9b", prompt_verzio="v2"),
+        ]
+    )
+
+    assert osszesites["modellek"] == {"qwen3.5:9b": 3}
+    assert osszesites["prompt_verziok"] == {"v1": 1, "v2": 2}
+
+
+def test_regi_naplosorok_a_nincs_kulcs_ala_kerulnek():
+    """A mezők 2026-08-31-én kerültek be — a korábbi naplók
+    olvashatók maradnak, és a hiányzó érték nem tűnik el, hanem
+    látszik."""
+    osszesites = elemez([_sor()])
+
+    assert osszesites["modellek"] == {"nincs": 1}
+    assert osszesites["prompt_verziok"] == {"nincs": 1}
+
+
+def test_a_jelentes_kiirja_a_modellt_es_a_promptot():
+    szoveg = jelentes(elemez([_sor(modell="qwen3.5:9b", prompt_verzio="v2")]))
+
+    assert "Modell és prompt" in szoveg
+    assert "qwen3.5:9b" in szoveg
+    assert "v2" in szoveg

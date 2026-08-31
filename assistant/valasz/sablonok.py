@@ -208,6 +208,11 @@ SABLONOK: dict[str, dict[str, object]] = {
             "ismeretlen_ertek": "ezt még nem adtuk meg",
             "megjelenes_ures": "Erről még nincs leírásunk.",
             "szolgaltatasok_ures": "Erről nincs adatunk.",
+            # PULTOSOK — a vásárló 2. igénye ("tudjam, kihez megyek").
+            # Csak NEVEK: hogy melyikük mikor dolgozik, az munkavállalói
+            # adat, és nem is a kérdés.
+            "pultosok": "A pultnál ők fogadnak: {nevek}.",
+            "pultosok_ures": "Erről nincs adatunk.",
         },
         # ------------------------------------------------------------
         # nyugtazo — a hangcsatorna töltelékmondatai (blueprint 7.
@@ -250,6 +255,37 @@ SABLONOK: dict[str, dict[str, object]] = {
             # beszélgetést, és a szabály-alapú réteget hiszi a
             # modellnek. A mondat ezért megmondja, MI FUT, és azt is,
             # hogy MIT KELL BEÍRNI a bekapcsoláshoz.
+            # INDÍTÁSI ELLENŐRZÉS — modális ablak, három ok, három
+            # teendő (`ui/vasarlo.py::_indito_ellenorzes`). A sárga sáv
+            # (`nincs_modell_figyelmeztetes`) MEGMARAD, de bizonyítottan
+            # nem elég: háromszor futott végig kézi próba a tartalék
+            # ágon úgy, hogy csak utólag derült ki. Amit át lehet
+            # siklani, azt át is siklik az ember — ezért itt már
+            # DÖNTENI kell, mielőtt a szöveges fül elindul.
+            "indito_cim": "Nem az éles úton indulnál",
+            "indito_nincs_modell": (
+                "Nincs beállítva nyelvi modell, ezért a beszélgetés a TARTALÉK "
+                "(szabály-alapú) ágon futna — az eredmények NEM a modellt mérnék.\n\n"
+                "Teendő: állítsd be a modellt, és indítsd újra ezt az ablakot:\n"
+                '    PowerShell:  $env:APRAJAFALVA_LLM_MODELL="qwen3.5:9b"\n'
+                "    cmd:         set APRAJAFALVA_LLM_MODELL=qwen3.5:9b\n"
+                "    bash:        export APRAJAFALVA_LLM_MODELL=qwen3.5:9b"
+            ),
+            "indito_nincs_szolgaltatas": (
+                "A modell be van állítva ({modell}), de az Ollama nem válaszol — "
+                "a beszélgetés a TARTALÉK (szabály-alapú) ágon futna, és az "
+                "eredmények NEM a modellt mérnék.\n\n"
+                "Teendő: indítsd el a szolgáltatást (ollama serve), majd indítsd "
+                "újra ezt az ablakot."
+            ),
+            "indito_nincs_letoltve": (
+                "Az Ollama fut, de a beállított modell ({modell}) nincs letöltve — "
+                "a beszélgetés a TARTALÉK (szabály-alapú) ágon futna.\n\n"
+                "Teendő: ollama pull {modell}   (vagy állíts be egy már meglévő "
+                "modellt), majd indítsd újra ezt az ablakot."
+            ),
+            "indito_folytatom": "Folytatom tartalékággal",
+            "indito_kilepek": "Kilépek",
             "nincs_modell_figyelmeztetes": (
                 "FIGYELEM: nincs beállítva nyelvi modell — a beszélgetés a TARTALÉK "
                 "(szabály-alapú) ágon fut, nem az éles úton.\n"

@@ -35,6 +35,13 @@ nem tölti ki a mezőt. Korábban ehelyett a megőrzött paraméterek mentek
 be adatként, és egy KÜLÖN, zárt modellhívás ("melyik mező esik ki?")
 próbálta utólag korrigálni — az a gépezet megszűnt.
 
+**A beszélgetés ABLAKOLVA megy** (ADR-025, `ablak.py`): az utolsó néhány
+forduló szó szerint, a régebbiek helyett egyetlen összefoglaló sor
+(bolt, szolgáltatás, elengedett mezők, eddig keresett napok, sikertelen
+keresések száma). Húsz forduló után ez a különbség nem finomhangolás:
+a prompt nem nő tovább a beszélgetéssel, viszont a legelső mondatban
+kimondott bolt sem vész el — a puszta vágás mindkettőt nem tudta.
+
 **Ha az Ollama nem elérhető, ez a réteg nem dob kivételt** — `{"eszkoz":
 "nincs", "parameterek": {}}`-et ad vissza (a legártalmatlanabb kimenet:
 az orchestrator ezt egyszerű elutasításként kezeli, nem foglal és nem
@@ -52,8 +59,8 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
-from assistant.interpreter.peldak import PELDAK
+from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus, ablak
+from assistant.interpreter.peldak import PELDAK, PELDAK_V2
 from assistant.tools import semak
 
 _LOG = logging.getLogger(__name__)
@@ -179,7 +186,7 @@ FORMAT_SEMA = {
 # ugyanolyan súllyal a modellhez, mint a rendszerprompt prózája. A
 # dátumformátum-sor emiatt itt maradt, nem a sémában — ez nem "ritka",
 # ez minden keresésnél/tényválasznál kell.
-_RENDSZER_PROMPT = """Aprajafalva foglalási asszisztens vagy. A vásárló egy \
+_RENDSZER_PROMPT_V1 = """Aprajafalva foglalási asszisztens vagy. A vásárló egy \
 mondatát EGY eszközhívássá alakítod, kizárólag a séma szerint.
 
 Eszközök:
@@ -226,18 +233,145 @@ FIGYELEM, ez NEM mindegy-válasz: "mindegyik érdekel", "mindet kérem",
   NE vidd tovább, és ne is vond össze az újjal — ha az utolsó mondat nem
   mond időpontot, hagyd üresen ezeket a mezőket. Az utolsó mondat
   felülírja a korábbit, nem kiegészíti.
-
+{osszefoglalo_utmutato}
 Példák:
 {peldak}"""
+
+# CSAK AKKOR megy el, ha ténylegesen van összefoglaló sor a bemenetben
+# (ADR-025). A rendszerprompt minden szava minden híváshoz latencia — egy
+# négy fordulónál rövidebb beszélgetésben ez a bekezdés tiszta veszteség
+# lenne, és a modellnek egy olyan sorról beszélne, amit nem is lát.
+_OSSZEFOGLALO_UTMUTATO = """
+ÖSSZEFOGLALÓ: a bemenet első sora („Összefoglaló (N korábbi forduló): …") a
+régebbi fordulók tömör kivonata — nem elhangzott mondat. A boltot és a
+szolgáltatást onnan is átveheted. Az „ELENGEDVE" azt jelenti, hogy a vásárló
+azt a mezőt elengedte: oda MINDEGY kerüljön, ne üres mező. Az ott felsorolt
+napok MÁR LEFUTOTT keresések, nem mostani kérés — időpontot továbbra is
+kizárólag a vásárló utolsó mondatából vehetsz.
+"""
+
+# =====================================================================
+# RENDSZERPROMPT v2 (ADR-026) — a mért prompt-gyakorlatok szerint
+# átépítve. Három változás, mindhárom állítás, amit az A/B mérés
+# (`docs/PROMPT_AB.md`) el tud dönteni:
+#
+# 1. **A kritikus megkötések elöl.** A v1-ben a "ne találj ki adatot",
+#    a zárt halmazok és a dátumszabály a prompt KÖZEPÉN és VÉGÉN álltak,
+#    az eszközlista és a példák közé ékelve. Itt számozott listaként
+#    nyitnak — a hosszú prompt eleje és vége kap a legtöbb figyelmet, és
+#    a végét a példák foglalják.
+# 2. **Kevesebb, de távolabbi példa** (`PELDAK_V2`): hat, egymástól
+#    eltérő HELYZET, a legjellemzőbb esettel a végén.
+# 3. **Tömörítés.** Ami nem hordoz döntést, az kimarad — a v1 prózai
+#    magyarázatai ("az üres mező azt jelenti, hogy NEM TUDJUK, és a
+#    rendszer újra rákérdez") a KÓD dokumentációjában maradnak, ahol
+#    olvassuk is; a modellnek a szabály kell, nem az indoklás.
+#
+# Amit NEM változtat: a séma, a zárt halmazok, a kemény/puha aszimmetria
+# és a MINDEGY szentinel jelentése. Ez prompt-átfogalmazás, nem új
+# viselkedés — különben az A/B nem a promptot mérné.
+# =====================================================================
+_RENDSZER_PROMPT_V2 = """Aprajafalva foglalási asszisztens vagy. A vásárló \
+UTOLSÓ mondatát alakítod EGY eszközhívássá, kizárólag a séma szerint.
+
+KÖTELEZŐ:
+1. NE TALÁLJ KI ADATOT. Amit a mondat és a beszélgetés nem mond ki, azt hagyd
+   üresen. Ha a bolt hiányzik: visszakerdez (hianyzo_mezo: bolt_id).
+2. ZÁRT HALMAZ: bolt = szundi (altató) | ugyifogyi (petárda) | torpilla
+   (boldogság). Más értéket nem adhatsz.
+3. DÁTUM: a "datum_kifejezes" mezőbe SZÓ SZERINT másold a mondatból ("jövő hét
+   péntek", "holnap", "kedden"). NE számold ki, ISO-dátumot ne adj — a feloldás
+   a rendszeré. Vagylagos/feltételes második időpont: "datum_kifejezes_2".
+4. IDŐPONT CSAK AZ UTOLSÓ MONDATBÓL (datum_kifejezes, napszak). Korábbi
+   forduló napját vagy napszakát NE vidd tovább, és ne is vond össze. BOLT és
+   SZOLGÁLTATÁS viszont végig érvényes marad — kivéve, ha a vásárló mást kér.
+5. MINDEGY: ha a vásárló elenged egy mezőt ("mindegy melyik", "bármelyik jó",
+   "nem számít", "ami van"), az érték MINDEGY, nem üres mező. De a "mindegyik
+   érdekel", "mit lehet kapni?" LISTÁT kér — az nem elengedés.
+6. Lemondáshoz foglalási kód kell; ha nincs a mondatban: visszakerdez
+   (hianyzo_mezo: foglalasi_kod).
+
+Eszközök: szabad_idopontok (időszakban keres) | legkozelebbi_idopont (CSAK a
+"mikor tudok legkorábban/leghamarabb?" kérdésre) | bolt_info (nyitvatartás,
+cím, termék, időtartam, megjelenés) | foglalas_lemondas | visszakerdez | nincs
+(nem foglalási kérés).
+
+A bemenet a beszélgetés utolsó fordulói; a VÁSÁRLÓ UTOLSÓ mondata a kérés.
+"most" (ehhez képest értendő a holnap, a jövő hét): {most}
+{osszefoglalo_utmutato}
+Példák:
+{peldak}"""
+
+# A prompt VERZIÓJA a naplóban is megjelenik (`ui/vasarlo.py`
+# próba-napló, `prompt_verzio` mező): egy hét múlva a naplósorból nem
+# lehetne megmondani, melyik prompttal futott a forduló, és két mérés
+# összehasonlítása vakon menne.
+# v3 = a v2 TÖMÖR, megkötés-előre szerkezete + a v1 TELJES példakészlete.
+#
+# Ez nem harmadik ötlet, hanem a v1/v2 mérés KÜLÖNBSÉGÉNEK szétszedése:
+# a v2 két dolgot változtatott egyszerre (szerkezet ÉS példaszám), és
+# 14,7 ponttal rosszabb lett — abból nem derül ki, melyik változtatás
+# ártott. A v3 az egyiket visszaveszi. Ha a v3 visszahozza a v1
+# pontosságát, akkor a példák hiánya ártott, nem a szerkezet — és akkor
+# a rövidebb szerkezet ingyen van (l. docs/PROMPT_AB.md).
+PROMPTOK = {
+    "v1": _RENDSZER_PROMPT_V1,
+    "v2": _RENDSZER_PROMPT_V2,
+    "v3": _RENDSZER_PROMPT_V2,
+}
+PELDAKESZLETEK = {"v1": PELDAK, "v2": PELDAK_V2, "v3": PELDAK}
+
+# Az ÉLES verzió. A `v1` marad az alapértelmezett mindaddig, amíg az A/B
+# mérés nem mutat javulást — "ha nem javít, ne vezesd be".
+ALAP_PROMPT_VERZIO = "v1"
+
+_PROMPT_KORNYEZETI_VALTOZO = "APRAJAFALVA_PROMPT_VERZIO"
+
+
+def prompt_verzio() -> str:
+    """A használandó rendszerprompt verziója — környezetből
+    felülírható (`APRAJAFALVA_PROMPT_VERZIO=v2`), hogy az A/B mérés
+    UGYANAZT a kódot futtathassa kétszer.
+
+    Ismeretlen verziónév esetén az alapértelmezett: egy elgépelt
+    környezeti változótól ne álljon meg a felület, de ne is fusson
+    olyan prompttal, ami nem létezik."""
+    nev = os.environ.get(_PROMPT_KORNYEZETI_VALTOZO, ALAP_PROMPT_VERZIO)
+    return nev if nev in PROMPTOK else ALAP_PROMPT_VERZIO
+
+
+def rendszerprompt(verzio: str, *, most: str, van_osszefoglalo: bool) -> str:
+    """A kész rendszerprompt — a verzióhoz tartozó szöveg ÉS a hozzá
+    tartozó példakészlet együtt mozog (a v2 példái a v1 promptjában
+    értelmetlenek lennének, és fordítva)."""
+    peldak = "\n".join(
+        f"{mondat}\n-> {json.dumps(kimenet, ensure_ascii=False)}"
+        for mondat, kimenet in PELDAKESZLETEK[verzio]
+    )
+    return PROMPTOK[verzio].format(
+        most=most,
+        peldak=peldak,
+        osszefoglalo_utmutato=(_OSSZEFOGLALO_UTMUTATO if van_osszefoglalo else ""),
+    )
+
 
 # Ki mondta -> ahogy a promptban megjelenik. A modell párbeszédet lát,
 # nem adatszerkezetet (ADR-019).
 _BESZELO_CIMKE = {KI_VASARLO: "Vásárló", KI_RENDSZER: "Rendszer"}
 
 
-def beszelgetes_szovege(elozmenyek: list[tuple[str, str]], mondat: str) -> str:
+def beszelgetes_szovege(
+    kontextus: ErtelmezesKontextus, mondat: str, *, most: str
+) -> tuple[str, bool]:
     """A modellnek átadott bemenet: a beszélgetés utolsó fordulói
-    párbeszédként, a végén az AKTUÁLIS vásárlói mondattal.
+    párbeszédként, a végén az AKTUÁLIS vásárlói mondattal — a régebbi
+    fordulók helyett egyetlen összefoglaló sorral (ADR-025, csúszó
+    előzmény-ablak, `assistant/interpreter/ablak.py`).
+
+    `(szöveg, van_összefoglaló)` — a második tag azt mondja meg, kell-e
+    a rendszerpromptba az összefoglaló-magyarázat: rövid beszélgetésnél
+    nem kell, és amire nincs szükség, azt nem is küldjük el (a prompt
+    hossza latencia).
 
     Előzmények nélkül csak maga a mondat megy — így az egyfordulós
     esetek pontosan úgy futnak, mint korábban, és a mérésük
@@ -245,19 +379,14 @@ def beszelgetes_szovege(elozmenyek: list[tuple[str, str]], mondat: str) -> str:
 
     Ismeretlen `ki` értéket kihagyunk: a prompt alakja nem múlhat azon,
     hogy egy hívó elgépelt-e egy címkét."""
+    osszefoglalo, elozmenyek = ablak.kontextusbol(kontextus, most)
     sorok = [f"{_BESZELO_CIMKE[ki]}: {szoveg}" for ki, szoveg in elozmenyek if ki in _BESZELO_CIMKE]
+    if osszefoglalo:
+        sorok.insert(0, osszefoglalo)
     if not sorok:
-        return mondat
+        return mondat, False
     sorok.append(f"{_BESZELO_CIMKE[KI_VASARLO]}: {mondat}")
-    return "\n".join(sorok)
-
-
-def _peldak_szovege() -> str:
-    """A few-shot példák (`peldak.py`) promptba illesztett alakja —
-    `mondat -> JSON` párok, soronként."""
-    return "\n".join(
-        f"{mondat}\n-> {json.dumps(kimenet, ensure_ascii=False)}" for mondat, kimenet in PELDAK
-    )
+    return "\n".join(sorok), bool(osszefoglalo)
 
 
 # Az a JSON-mezőkészlet, amire bizonyosságot számolunk. A kulcs a
@@ -400,6 +529,82 @@ class LLMSzolgaltato:
             object.__setattr__(self, "modell", nev)
 
 
+# =====================================================================
+# INDÍTÁSI ELLENŐRZÉS — „fut-e egyáltalán a modell?"
+#
+# Ez a rendszer legdrágább félreértése: a tartalék ág CSENDBEN átveszi a
+# fordulót (helyes viselkedés — a vásárló nem eshet ki attól, hogy egy
+# háttérszolgáltatás nem fut), és a próbálgató végigcsinál egy egész
+# beszélgetést abban a hitben, hogy a modellt méri. Háromszor fordult
+# elő, és mindháromszor csak utólag derült ki.
+#
+# Az `aktiv_modell_neve()` erre kevés: az csak a KONFIGURÁCIÓT nézi. Itt
+# egy tényleges kérdés megy az Ollamának — a `/api/tags` végpontra, ami
+# nem generál semmit, tehát olcsó, és egyben azt is megmondja, hogy a
+# konfigurált modell le van-e töltve.
+# =====================================================================
+
+HIANY_NINCS_MODELL = "nincs_modell"
+HIANY_NINCS_SZOLGALTATAS = "nincs_szolgaltatas"
+HIANY_NINCS_LETOLTVE = "nincs_letoltve"
+
+
+@dataclass(frozen=True)
+class ModellAllapot:
+    """Mi hiányzik ahhoz, hogy az éles út fusson.
+
+    `hiany` a HÁROM különböző ok egyike (vagy `None`) — a
+    megkülönböztetés nem pedantéria: mindhárom máshogy javítható (állíts
+    környezeti változót / indítsd el az Ollamát / töltsd le a modellt),
+    és egy összevont „nem működik" üzenetből a próbálgató nem tudja,
+    melyiket kell tennie."""
+
+    modell: str | None = None
+    hiany: str | None = None
+    reszlet: str | None = None
+
+    @property
+    def rendben(self) -> bool:
+        return self.hiany is None
+
+
+def _tags_url(chat_url: str) -> str:
+    return chat_url.replace("/api/chat", "/api/tags")
+
+
+def modell_allapot(url: str | None = None, timeout_masodperc: float = 3.0) -> ModellAllapot:
+    """Az éles út indítási ellenőrzése — konfigurált-e a modell, és
+    válaszol-e az Ollama.
+
+    Rövid időkorláttal fut: az indítás nem állhat meg fél percre azért,
+    mert egy háttérszolgáltatás nem válaszol — az ELLENŐRZÉS nem lehet
+    drágább, mint a hiba, amit megelőz."""
+    try:
+        szolgaltato = LLMSzolgaltato()
+    except ValueError as exc:
+        return ModellAllapot(modell=None, hiany=HIANY_NINCS_MODELL, reszlet=str(exc))
+
+    modell = szolgaltato.modell
+    try:
+        with urllib.request.urlopen(
+            _tags_url(url or szolgaltato.url), timeout=timeout_masodperc
+        ) as resp:
+            valasz = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        return ModellAllapot(modell=modell, hiany=HIANY_NINCS_SZOLGALTATAS, reszlet=str(exc))
+
+    nevek = {(m.get("name") or "") for m in valasz.get("models") or []}
+    # Az Ollama a „:latest" utótagot elhagyhatja vagy hozzáteheti — a
+    # két alak ugyanaz a modell, és egy indítást nem szabad elbuktatni
+    # egy névkonvención.
+    valtozatok = {modell, f"{modell}:latest", modell.removesuffix(":latest")}
+    if nevek and not (valtozatok & nevek):
+        return ModellAllapot(
+            modell=modell, hiany=HIANY_NINCS_LETOLTVE, reszlet=", ".join(sorted(nevek)) or None
+        )
+    return ModellAllapot(modell=modell)
+
+
 @dataclass(frozen=True)
 class Mintavetel:
     """Egy MINTAVÉTELES futás paraméterei — az önkonzisztencia-
@@ -447,6 +652,11 @@ class LLMErtelmezo:
         self.utolso_prompt: dict[str, str] | None = None
         self.utolso_nyers_valasz: str | None = None
         self.utolso_sema_ok: bool | None = None
+        # MELYIK PROMPTTAL futott a hívás (ADR-026). A naplóba is
+        # kikerül: két mérés összehasonlítása enélkül vakon menne —
+        # a naplósorból egy hét múlva nem lehetne megmondani, melyik
+        # prompt adta azt a választ.
+        self.utolso_prompt_verzio: str | None = None
         # KUMULATÍV hívásszám. Fordulónkénti bontást a hívó számol
         # belőle (különbség a forduló előtt és után) — így az
         # önkonzisztencia három hívása is helyesen látszik, anélkül
@@ -465,17 +675,17 @@ class LLMErtelmezo:
         self.utolso_nyers_valasz = None
         self.utolso_sema_ok = None
         self.hivasok_szama += 1
+        beszelgetes, van_osszefoglalo = beszelgetes_szovege(kontextus, mondat, most=most)
+        verzio = prompt_verzio()
+        self.utolso_prompt_verzio = verzio
         payload = {
             "model": self.szolgaltato.modell,
             "messages": [
                 {
                     "role": "system",
-                    "content": _RENDSZER_PROMPT.format(most=most, peldak=_peldak_szovege()),
+                    "content": rendszerprompt(verzio, most=most, van_osszefoglalo=van_osszefoglalo),
                 },
-                {
-                    "role": "user",
-                    "content": beszelgetes_szovege(kontextus.elozmenyek, mondat),
-                },
+                {"role": "user", "content": beszelgetes},
             ],
             "format": FORMAT_SEMA,
             "stream": False,
@@ -494,6 +704,7 @@ class LLMErtelmezo:
             "rendszer": payload["messages"][0]["content"],
             "vasarlo": payload["messages"][1]["content"],
             "modell": self.szolgaltato.modell,
+            "prompt_verzio": verzio,
             "opciok": payload["options"],
         }
         req = urllib.request.Request(

@@ -163,8 +163,20 @@ eset, nem 150-200.
 mindegyik LISTÁT kér, nem elengedés"). A robusztussági halmaz
 változatlanul 68 eset. Együtt **119 eset**.
 
-**Kilépési feltétel:** 150-200 eset, futtatható értékelő, két modell
-összehasonlítható.
+**2026-08-31:** HARMADIK halmaz — `beszedhelyzetek` (23 eset, 9 réteg,
+`--halmaz beszedhelyzetek`). Nem a mondat felszínét méri, hanem a
+beszédhelyzetet: nem magának foglal, feltételesen tervez,
+összehasonlít, korábbi foglalásra hivatkozik azonosítás nélkül, két
+időpontot kér, elköszön, meggondolja magát, közbekérdez, szokatlan igét
+használ. Együtt **142 eset** (51 + 68 + 23). A kilépési feltétel MÁSIK
+fele viszont ezzel teljesült: **két modell össze van hasonlítva**
+(`qwen3.5:9b` vs. `qwen3:8b`, `docs/MODELL_OSSZEHASONLITAS.md`), és a
+mérés a prompt-verziókra is kiterjedt (`docs/PROMPT_AB.md`).
+
+**Kilépési feltétel:** 150-200 eset (ma 142, ebből NYELVI 51 — a
+feltétel a nyelvi halmazra vonatkozik, tehát nem teljesült),
+futtatható értékelő (**kész**), két modell összehasonlítható
+(**kész, 2026-08-31**).
 
 ---
 

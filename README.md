@@ -43,6 +43,9 @@ python feladat.py teszt         # tesztkészlet
 python -m ui.vasarlo            # vásárlói felület (koppintós + szöveges út)
 python feladat.py vegigjatszas  # ugyanaz fej nélkül, végigjátszva
 python feladat.py vegigjatszas --mod beszelheto   # …felolvasásra szánt kimenettel
+python feladat.py golden --halmaz beszedhelyzetek  # a harmadik golden halmaz
+python feladat.py naplo --archival                 # a próba-napló lezárása, új naplóval
+python -m tools.ablak_meres                        # az előzmény-ablak hosszmérése
 ```
 
 A szöveges fülön **kimeneti mód-kapcsoló** van (M6, hang-előkészítés): a
@@ -52,10 +55,24 @@ legfeljebb két mondattal és egy kérdéssel. Hang még nincs; a mód épp
 azért van, hogy hang nélkül is látni lehessen, mit HALLANA a vásárló.
 
 A szöveges úthoz nem kötelező nyelvi modell: ha nincs beállítva
-`APRAJAFALVA_LLM_MODELL`, vagy nem fut az Ollama, a felület csendben a
-determinisztikus értelmezőre esik vissza. Hogy éppen melyik dolgozik, az
-ablak tetején és a próba-naplóban is látszik — l. `docs/TESZTELES.md`,
+`APRAJAFALVA_LLM_MODELL`, vagy nem fut az Ollama, a felület a
+determinisztikus értelmezőre esik vissza. **Csendben viszont már nem**:
+indításkor egy modális ablak megmondja, mi hiányzik és mit kell beírni,
+és két gombot ad — „Folytatom tartalékággal" vagy „Kilépek". A napló
+fordulónként rögzíti, volt-e konfigurált modell és melyik prompt-verzió
+futott; a beszélgetés-riport fejlécében piros sáv jelzi, ha egyetlen
+modellhívás sem történt. Részletek: `docs/TESZTELES.md`,
 "Beszélgetés-próba".
+
+Környezeti kapcsolók (mind a MÉRÉSÉRT vannak, nem üzemmódként):
+
+| Változó | Mit állít | Alap |
+|---|---|---|
+| `APRAJAFALVA_LLM_MODELL` | Ollama modellnév | nincs (tartalék ág) |
+| `APRAJAFALVA_ABLAK_FORDULO` | hány forduló megy át szó szerint (`0` = nincs ablak, ADR-025) | 4 |
+| `APRAJAFALVA_PROMPT_VERZIO` | `v1` / `v2` rendszerprompt (ADR-026) | `v1` |
+| `APRAJAFALVA_ONKONZISZTENCIA` | három futás, szavazás (ADR-021) | ki |
+| `APRAJAFALVA_INDITO_ELLENORZES` | `ki` = nincs modális indítási ellenőrzés | be |
 
 ## Fejlesztői környezet
 

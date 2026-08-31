@@ -142,6 +142,53 @@ tesz valamit, hanem attól, hogy hasznosat tesz. A helyére a bolton
 BELÜLI sorrend lépett (napszak → nap → később → variáns), és minden
 válasz kimondja, melyik dimenzióban engedett.
 
+### 1.8 A régi fordulók összefoglalva élnek tovább (2026-08-31, ADR-025)
+
+**A bukás:** az előzményt a felület egyszerűen VÁGTA (utolsó 12 sor).
+Ami kicsúszott, az nyomtalanul eltűnt — a legelső mondatban kimondott
+bolttal együtt, pedig annak az ADR-019 szerint végig érvényben kellene
+maradnia. Húsz forduló után a rendszer újra megkérdezte, melyik boltról
+van szó.
+
+**A tanulság általánosítható:** a vágás nem tömörítés. Ha egy
+kontextusból ki kell dobni, akkor azt kell eldönteni, MI MARAD BELŐLE —
+és a maradéknak megkülönböztethetőnek kell lennie a hiánytól (az
+elengedett mező `ELENGEDVE`-ként megy át, nem konkrét értékként, nem is
+üresen). Ugyanaz a három állapot, mint a MINDEGY-nél (1.6): nem tudjuk /
+elengedve / tudjuk.
+
+### 1.9 A zárt kérdésre adott választ nem a modell értelmezi (2026-08-31)
+
+**A bukás:** a rendszer feltette a saját, zárt kérdését („biztosan
+lefoglaljam ezt az időpontot?"), az „igen, foglald le" választ viszont a
+szokásos értelmezési úton engedte — a modell új keresésnek olvasta, és a
+folyamatban lévő megerősítés a kiválasztott időponttal együtt eltűnt. A
+foglalás írásban emiatt nem volt befejezhető.
+
+**A tanulság általánosítható, és már másodszor jön elő** (első: a
+sorszámos hivatkozás, `assistant/sorszam.py`): **ha MI tettünk fel egy
+zárt kérdést, a válasz zárt halmaz — azt nem értelmeztetjük.** Nem a
+modell képességén múlik, hanem a szerkezeten: a rossz válasz itt nem
+visszakérdezés, hanem rossz foglalás vagy elveszett állapot. Amiből
+következik egy visszatérő ellenőrzési pont: **minden új, zárt kérdésnél
+meg kell nézni, hogy az ÍRÁSBELI válaszát ki dolgozza fel.**
+
+### 1.10 A prompt-változtatás mérés nélkül feltevés (2026-08-31, ADR-026)
+
+**A bukás:** a „mért prompt-gyakorlatok" szerint átépített
+rendszerprompt (megkötések elöl, kevesebb de sokfélébb példa) 14,7
+ponttal ROSSZABB lett — és pontosan azokon a rétegeken, amiknek a
+példáját kivettük.
+
+**A tanulság általánosítható:** a few-shot példák nem stilisztikai
+díszek, hanem az egyetlen hely, ahol egy RITKA nyelvi alak egyáltalán
+megjelenik a modell előtt. Egy tájszólásos példa nem levezethető egy
+köznyelviből — ezért a „kevesebb, de sokfélébb példa" elv csak ott
+működik, ahol a példák TÉNYLEG ugyanazt tanítják. Ehhez tartozik egy
+módszertani tanulság is: a v2 két dolgot változtatott egyszerre, és
+csak egy harmadik verzió (v3 = új szerkezet + régi példák) tudta
+szétválasztani, melyik ártott.
+
 ---
 
 ## 2. Ismert korlátok

@@ -1,0 +1,514 @@
+# BESZÉDHELYZETEK — a golden set harmadik halmaza.
+#
+# A `nyelvi_alap.yaml` azt méri, HOGYAN mondja a vásárló (köznyelv,
+# tájszólás, szleng, töredék). Ez a halmaz azt méri, MILYEN HELYZETBEN
+# beszél: nem magának foglal, feltételesen tervez, összehasonlít,
+# elköszön, meggondolja magát, közbekérdez. A mondat felszíne itt
+# köznyelvi — a nehézség a beszédhelyzetben van, nem a szavakban.
+#
+# **A várt viselkedés sokszor a VISSZAKÉRDEZÉS vagy az udvarias
+# elhárítás, nem a tökéletes megoldás.** Ez a halmaz szándékosan tele
+# van olyan kérésekkel, amiket a v1 rendszer nem tud teljesíteni (két
+# időpont egyszerre, boltok összehasonlítása, korábbi foglalásra
+# hivatkozás azonosítás nélkül). A helyes válasz ilyenkor NEM az, hogy
+# valamit mégis csinálunk — hanem hogy kérdezünk, vagy megmondjuk, hogy
+# ez nem megy. A rossz válasz a kitalált foglalás.
+#
+# **Kétféle pontozás, szándékosan** (mindkettő a `futtato.py`-ban él
+# már):
+#
+# - `varhato.parameterek` — EGY helyes válasz, pontos egyezéssel. Ott
+#   használjuk, ahol a helyzet zajos, de a kérés egyértelmű.
+# - `varhato.elfogadhato_eszkozok` — a NEM ÁRTÓ viselkedések listája.
+#   Ott használjuk, ahol két válasz is védhető (keresés vagy kérdés), és
+#   a mérésnek nem szabad úgy tennie, mintha egy önkényesen kiválasztott
+#   lenne az egyetlen jó. Az „ártó" itt nem elvont: kitalált foglalás,
+#   kitalált tény, vagy egy olyan keresés, amit a vásárló épp visszavont.
+#
+# A `most` = 2026-08-17 (hétfő), ugyanaz, mint a nyelvi halmazban —
+# a két halmaz dátumai így összevethetők.
+#
+# `igenyel_llm: true` szinte mindenhol: ezek a helyzetek mondattani és
+# pragmatikai megértést kívánnak (ki beszél kiről, mi a feltétel, mi a
+# kérdés a kérdésen belül), amit egy szólistás réteg elvileg nem tud.
+# A determinisztikus regressziós védőháló ezért kihagyja őket
+# (`tests/egyseg/test_rule_based_golden_set.py`), a mérés nem.
+
+meta:
+  verzio: 1
+  fajta: beszedhelyzetek
+  most_alapertelmezett: "2026-08-17T09:00:00Z"   # hétfő
+  kuszobok:
+    # A küszöb CÉL, nem a mai szint — ugyanaz a konvenció, mint a nyelvi
+    # halmazban (ott a `koznyelvi` 0,98-as küszöbe is teljesületlen). A
+    # 2026-08-31-i első mérés (`qwen3.5:9b`, `forditott`, v1 prompt)
+    # kilenc rétegből nyolcon 100%-ot adott; egyetlen réteg marad a
+    # küszöb alatt, a `kozbevetes` (66,7%) — a számok és a bukott eset
+    # elemzése: `docs/BESZEDHELYZETEK_MERES.md`.
+    #
+    # A DETERMINISZTIKUS futás (`--ertelmezo szabaly`) ezeket a
+    # küszöböket nem tartja, és nem is kell tartania: a halmaz minden
+    # esete `igenyel_llm: true`. A szabály-alapú alapvonal 69,6% —
+    # összehasonlítási pont, nem elvárás.
+    masnak: 0.90
+    felteteles: 0.90
+    osszehasonlitas: 0.90
+    korabbi_foglalas: 0.90
+    tobb_idopont: 0.90
+    udvariassag: 0.90
+    meggondolas: 0.90
+    kozbevetes: 0.90
+    szohasznalat: 0.90
+
+esetek:
+
+  # ---------------------------------------------------------------------
+  # 1. réteg — nem magának foglal (3 eset)
+  #
+  # A foglalásnak NINCS „kinek" mezője: a rendszer időpontot foglal, nem
+  # személyt azonosít (a vásárlói kulcs csak a megerősítésnél kerül elő,
+  # hash-elve — `privacy/`). A helyes viselkedés tehát az, hogy a „kinek"
+  # információ NEM zavarja meg a keresést: se visszakérdezés nem lesz
+  # belőle, se kitalált mező. Ez a réteg azt méri, hogy a rendszer
+  # átlát-e egy nyelvtani alanyváltáson.
+  # ---------------------------------------------------------------------
+
+  - id: masnak-01-anyamnak
+    bemenet: "Az anyámnak kellene időpont a Szundiba holnapra."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A „kinek" nem paraméter. A kérés minden érdemi eleme megvan (bolt,
+      nap), tehát keresni kell — a hibás viselkedés az lenne, ha az
+      alanyváltásból („anyámnak") a rendszer hiányzó adatot olvasna ki, és
+      visszakérdezne valamire, amit nem is kérdezhetünk meg.
+    cimkek: [masnak, alanyvaltas]
+
+  - id: masnak-02-szomszed-nevében
+    bemenet: "A szomszéd néni helyett hívok, ő a Törpillához menne pénteken."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-21T00:00:00Z"
+        datum_ig: "2026-08-21T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Két szereplő egy mondatban („hívok" — én, „menne" — ő), és a kérés a
+      MÁSODIKRA vonatkozik. A mondat nyelvtanilag nehéz, a foglalás
+      szempontjából viszont teljesen szokásos.
+    cimkek: [masnak, ket_szereplo]
+
+  - id: masnak-03-jogosultsag-kerdes
+    bemenet: "Foglalhatok egyáltalán más nevében időpontot?"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [nincs, visszakerdez]
+    megjegyzes: >
+      Ez nem foglalási kérés, hanem SZABÁLY-kérdés — és a rendszernek
+      nincs olyan tényválasza, ami erre felelne (`bolt_info` „mit"
+      enumja: nyitvatartás, cím, termék, időtartam, megjelenés). A helyes
+      válasz az udvarias elhárítás vagy a kérdés visszaadása; a rossz az,
+      ha a rendszer KITALÁL egy szabályt („igen, természetesen"), amit
+      soha senki nem mondott ki. Keresés indítása is hiba lenne: a
+      vásárló nem kért időpontot.
+    cimkek: [masnak, szabaly_kerdes, hatokoron_kivul]
+
+  # ---------------------------------------------------------------------
+  # 2. réteg — feltételes tervezés (2 eset)
+  #
+  # A feltétel (eső, munka, gyerek) a rendszer számára ISMERETLEN és
+  # ISMERHETETLEN. Két helyes út van: ha a feltétel mindkét ága konkrét
+  # napot ad, az ablak MINDKETTŐT fedje le (a pontozó úgyis a ténylegesen
+  # szabad slotokból választ — `mintan_tul-03` doktrínája); ha a feltétel
+  # a foglalás TÉNYÉRE vonatkozik („akkor nem megyek"), akkor nincs mit
+  # keresni.
+  # ---------------------------------------------------------------------
+
+  - id: felteteles-01-ha-esik-akkor-szerdan
+    bemenet: "Ha esik, akkor inkább szerdán mennék a Törpillához, ha nem, akkor kedden."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-19T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Két nap, egy időjárási feltétellel elválasztva. A rendszer nem tudja,
+      esni fog-e — de nem is kell tudnia: az ablak lefedi mindkét napot, és
+      a vásárló a felajánlott időpontok közül választ. A hibás válasz az
+      lenne, ha a rendszer ELDÖNTENÉ a feltételt (kiválasztja a szerdát),
+      vagy ha visszakérdezne az időjárásra.
+    cimkek: [felteteles, ket_nap]
+
+  - id: felteteles-02-akkor-nem-megyek
+    bemenet: "Ha esik az eső, akkor inkább nem megyek sehova."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [nincs, visszakerdez]
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      Ugyanaz a nyelvtani szerkezet, ellentétes tartalommal: itt a feltétel
+      a foglalás ELMARADÁSÁRÓL szól. Nincs kért nap, nincs bolt, nincs
+      kérés — keresést indítani a leggyakoribb hiba lenne, mert a mondat
+      tele van „foglalásszagú" szavakkal.
+    cimkek: [felteteles, nincs_keres]
+
+  # ---------------------------------------------------------------------
+  # 3. réteg — összehasonlítás (2 eset)
+  #
+  # „Melyik boltban van hamarabb hely?" — a rendszer EGY fordulóban egy
+  # eszközt hív, és a boltok NEM alternatívái egymásnak (ADR-024: három
+  # különböző termék, nem egy szolgáltatás három telephelye). Az
+  # összehasonlítás tehát nem „még nem építettük meg", hanem
+  # ÉRTELMETLEN kérdés a domainben — a helyes válasz a kérdés
+  # visszaadása: melyikről beszélünk?
+  # ---------------------------------------------------------------------
+
+  - id: osszehasonlitas-01-melyik-boltban-hamarabb
+    bemenet: "Melyik boltban van hamarabb hely?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    reszleges_elfogadas:
+      eszkoz: legkozelebbi_idopont
+      pontszam: 0.5
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      A három bolt három termék (ADR-024) — „hamarabb" csak azon belül
+      értelmezhető, amit a vásárló venni akar. A zárt kérdés ezért nem
+      kitérés, hanem a kérdés helyretétele. Az EGY boltra adott
+      legkorábbi-válasz fél pont: nem árt, de önkényesen választ a
+      vásárló helyett.
+    cimkek: [osszehasonlitas, bolt_nem_alternativa]
+
+  - id: osszehasonlitas-02-szundi-vagy-torpilla
+    bemenet: "A Szundiban vagy a Törpillában van előbb szabad időpont holnap?"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, legkozelebbi_idopont, szabad_idopontok]
+    megjegyzes: >
+      Itt a vásárló MEGNEVEZI a két boltot — az összehasonlítás ettől még
+      nem megy egy hívásban, de a kérdés nem is üres. Mindhárom viselkedés
+      elfogadható (kérdezz vissza, vagy nézd meg az egyiket), egy nem: a
+      kitalált összehasonlító válasz. Ezért mér ez az eset ESZKÖZ-szinten:
+      a mérésnek nem szabad úgy tennie, mintha az egyik önkényes választás
+      lenne az egyetlen helyes.
+    cimkek: [osszehasonlitas, ket_bolt_megnevezve]
+
+  # ---------------------------------------------------------------------
+  # 4. réteg — hivatkozás korábbi foglalásra, azonosítás nélkül (2 eset)
+  #
+  # „Ugyanoda, mint múltkor" — a rendszer NEM tudja, ki beszél. A korábbi
+  # foglalás lekérdezése hitelesítést kíván (`foglalas_lekerdezes`:
+  # hash-elt vásárlói kulcs, enumeráció-védelem — `adatvedelem` skill),
+  # amit egy mondatból nem lehet előállítani. A helyes válasz a kérdés,
+  # NEM a találgatás — és semmiképp sem egy „emlékszem rá" válasz, ami a
+  # rendszer részéről hazugság lenne.
+  # ---------------------------------------------------------------------
+
+  - id: korabbi_foglalas-01-ugyanoda-mint-multkor
+    bemenet: "Ugyanoda, mint múltkor."
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      A „múltkor" MÚLT IDEJŰ, tehát nem is dátumkérés — a dátum-kapu
+      (`rule_based._mult_ido_kifejezesek_nelkul`) ezt már ma is kiszűri.
+      Ami itt új: a „ugyanoda" egy olyan boltra mutat, amit a rendszer nem
+      ismer. Zárt kérdés a válasz, három lehetőséggel.
+    cimkek: [korabbi_foglalas, azonositas_nelkul]
+
+  - id: korabbi_foglalas-02-multkori-megismetlese
+    bemenet: "A múltkori időpontomat szeretném megismételni jövő héten."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez]
+    megjegyzes: >
+      Van benne használható időablak („jövő héten"), de nincs bolt — és a
+      „múltkori időpontom" nem tölti ki, mert a rendszer nem tudja, ki
+      beszél. A visszakérdezés az EGYETLEN nem ártó viselkedés: bármelyik
+      bolt kiválasztása találgatás lenne, egy olyan vásárló nevében, akit
+      nem is azonosítottunk.
+    cimkek: [korabbi_foglalas, hianyzo_bolt]
+
+  # ---------------------------------------------------------------------
+  # 5. réteg — több időpont egy kérésben (2 eset)
+  #
+  # A v1 egy fordulóban EGY foglalást visz végig (`assistant/
+  # orchestrator.py` állapotgép: keresés → jelölt → megerősítés). A „két
+  # időpont egymás után" tehát nem teljesíthető egy lépésben — de a
+  # keresés elindítása nem is árt: a vásárló látja, mi van, és a második
+  # időpont külön fordulóban kérhető. A tiltott viselkedés a két slot
+  # egyidejű lefoglalása vagy egy kitalált „páros" ajánlat.
+  # ---------------------------------------------------------------------
+
+  - id: tobb_idopont-01-kettot-egymas-utan
+    bemenet: "Kellene kettő, egymás után, csütörtökön a petárdáshoz."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    megjegyzes: >
+      A „kettő, egymás után" olyan kérés, amire a séma nem ad mezőt —
+      és ez rendben van: a keresés elindul csütörtökre, a második
+      időpontról a következő forduló szól. Mindkét viselkedés
+      elfogadható; az lenne a hiba, ha a rendszer úgy tenne, mintha
+      tudna páros időpontot foglalni.
+    cimkek: [tobb_idopont, nem_tamogatott_keres]
+
+  - id: tobb_idopont-02-nekem-es-a-felesegemnek
+    bemenet: "Nekem és a feleségemnek is kellene egy-egy időpont a Szundiba pénteken."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, visszakerdez]
+    megjegyzes: >
+      Ugyanaz a helyzet, más nyelvtani alakban („egy-egy"). Az `masnak`
+      réteggel is rokon: itt KÉT emberről van szó, akik közül az egyik
+      nincs jelen. A foglalás szempontjából ez két külön keresés, nem egy
+      különleges kérés.
+    cimkek: [tobb_idopont, ket_szereplo]
+
+  # ---------------------------------------------------------------------
+  # 6. réteg — udvariassági kör (2 eset)
+  #
+  # A beszélgetés VÉGE. Nem kérés, nem panasz, nem kérdés — a rendszernek
+  # nincs mit foglalnia. A hiba, amit ez a réteg mér: a „köszönöm" szóból
+  # a rendszer keresést csinál, vagy visszakérdez valamire, ami már
+  # lezárult (a vásárló elköszönt).
+  # ---------------------------------------------------------------------
+
+  - id: udvariassag-01-koszonom-viszlat
+    bemenet: "Köszönöm szépen, viszlát!"
+    igenyel_llm: true
+    varhato:
+      eszkoz: nincs
+    megjegyzes: >
+      Ez nem foglalási kérés, tehát `nincs` — a válaszréteg dolga, hogy a
+      mondat udvarias legyen. A rendszer NEM ígérhet visszahívást és nem
+      kezdhet új keresést; a beszélgetést a vásárló zárta le.
+    cimkek: [udvariassag, zaras]
+
+  - id: udvariassag-02-koszonom-a-segitseget
+    bemenet: "Nagyon köszönöm a segítséget, jó munkát!"
+    igenyel_llm: true
+    varhato:
+      eszkoz: nincs
+    megjegyzes: >
+      A „segítség" és a „munka" szó könnyen húz a foglalási irányba (a
+      bolt dolgozóiról szól), de a mondat egésze köszönet. Ellenpróba az
+      01-re: ugyanaz a helyzet, más szókészlettel.
+    cimkek: [udvariassag, zaras]
+
+  # ---------------------------------------------------------------------
+  # 7. réteg — meggondolás (2 eset)
+  #
+  # A vásárló VISSZAVONJA a kérést — nem módosítja (arra van az
+  # `alkudozas` réteg), hanem eláll tőle. A helyes viselkedés: nem
+  # keresünk tovább, és nem is kérdezünk vissza. A visszakérdezés itt nem
+  # udvariasság, hanem nyaggatás — a vásárló épp azt mondta, hogy nem kér
+  # semmit.
+  # ---------------------------------------------------------------------
+
+  - id: meggondolas-01-megsem-kell
+    bemenet:
+      - "Szundihoz mennék holnap."
+      - "Mégsem kell, elnézést."
+    igenyel_llm: true
+    varhato:
+      eszkoz: nincs
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      A második forduló TELJES visszavonás, nem módosítás — ebben tér el
+      az `alkudozas-03-visszalepes` és a `mintan_tul-06-visszavonas`
+      esetektől, ahol a vásárló egy KORÁBBI kéréshez tér vissza. Itt nincs
+      hova visszatérni: a helyes válasz a keresés abbahagyása.
+    cimkek: [meggondolas, visszavonas, tobbfordulos]
+
+  - id: meggondolas-02-megse-akarok-foglalni
+    bemenet:
+      - "Törpilla, péntek délelőtt."
+      - "Ja nem, várj, mégse akarok most foglalni."
+    igenyel_llm: true
+    varhato:
+      eszkoz: nincs
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      Ugyanaz, beszélt nyelvi alakban („Ja nem, várj"). A hibás válasz itt
+      a bolt megőrzése és egy újabb keresés indítása: a kemény rész
+      továbbvitele (ADR-019) helyes szabály, de a visszavonás felülírja —
+      a vásárló nem másik napot kér, hanem semmit.
+    cimkek: [meggondolas, visszavonas, tobbfordulos]
+
+  # ---------------------------------------------------------------------
+  # 8. réteg — közbevetett kérdés foglalás közben (3 eset)
+  #
+  # A vásárló a foglalás közepén MÁSRA kérdez rá. A kérdés eldöntése két
+  # dolgot kíván: (1) ez most tényválasz-kérés, nem keresés; (2) a bolt a
+  # BESZÉLGETÉSBŐL jön, mert a kérdés nem ismétli meg (ADR-019: a kemény
+  # rész továbbvihető). A harmadik eset ellenpróba: van olyan közbevetett
+  # kérdés, amire NEM válaszolhatunk.
+  # ---------------------------------------------------------------------
+
+  - id: kozbevetes-01-meddig-tart
+    bemenet:
+      - "Petárdázni szeretnék csütörtökön."
+      - "És meddig tart ez egyáltalán?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: ugyifogyi
+        mit: idotartam
+    megjegyzes: >
+      Engedélyezett tényválasz, a bolt a beszélgetésből. A hibás válasz
+      egy újabb keresés lenne csütörtökre: a vásárló nem időpontot kért,
+      hanem egy adatot — és a keresés megismétlése azt a látszatot keltené,
+      hogy meg sem hallottuk a kérdést.
+    cimkek: [kozbevetes, tenyvalasz, tobbfordulos]
+
+  - id: kozbevetes-02-hol-van-a-bolt
+    bemenet:
+      - "Szundihoz mennék holnap."
+      - "Amúgy hol van pontosan a bolt?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: szundi
+        mit: cim
+    megjegyzes: >
+      Ugyanaz a szerkezet, másik tényadattal. A „bolt" szó itt névmásként
+      viselkedik: az előző fordulóban megnevezett boltra mutat.
+    cimkek: [kozbevetes, tenyvalasz, tobbfordulos]
+
+  - id: kozbevetes-03-mennyibe-kerul
+    bemenet:
+      - "Törpillához mennék pénteken."
+      - "és ez mennyibe kerül?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: nincs
+    tilos:
+      - kitalalt_ar
+    megjegyzes: >
+      ELLENPRÓBA: az ár NEM engedélyezett tényválasz ezen a csatornán
+      (blueprint 10., `kapuor-02`) — a `bolt_info` „mit" enumjából a
+      kötött dekódolás szintjén ki van zárva. A helyes viselkedés az
+      elhárítás („ezt a boltban mondják meg"), nem egy kitalált szám és
+      nem is egy másik tényadat helyette.
+    cimkek: [kozbevetes, hatokoron_kivul, hallucinacio_csapda, tobbfordulos]
+
+  # ---------------------------------------------------------------------
+  # 9. réteg — egyedi szóhasználat (5 eset)
+  #
+  # Ugyanaz a kérés, öt olyan igével, ami a mai mintakészletben nincs
+  # benne („bejelentkezik", „sorszámot kér", „beugrik", „lestoppol",
+  # „föliratkozik"). Ez a réteg NEM a stílust méri (arra való a szleng és
+  # a tájszólás), hanem azt, hogy a szándék felismerése a MONDATON
+  # múlik-e vagy egy szólistán. Ha a rendszer csak a „foglal", „időpont",
+  # „mennék" szavakat ismeri, ez a réteg leleplezi.
+  # ---------------------------------------------------------------------
+
+  - id: szohasznalat-01-bejelentkeznek
+    bemenet: "Bejelentkeznék a Szundihoz holnapra."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    cimkek: [szohasznalat, idegen_ige]
+
+  - id: szohasznalat-02-sorszamot-kernek
+    bemenet: "Sorszámot kérnék a petárdáshoz csütörtökre."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-20T00:00:00Z"
+        datum_ig: "2026-08-20T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A „sorszám" a hivatali ügyintézés szava — a rendszerben nincs ilyen
+      fogalom (nincs sorszám-kiadás, csak időpont). A kérés attól még
+      pontosan az, ami: időpont a petárdáshoz csütörtökre. A szolgáltatás
+      NEM tölthető ki (az Ügyifogyihoz két slug tartozik).
+    cimkek: [szohasznalat, idegen_ige]
+
+  - id: szohasznalat-03-beugranek
+    bemenet: "Beugranék a Törpillához pénteken délután."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-21T00:00:00Z"
+        datum_ig: "2026-08-21T17:59:59Z"
+        napszak: delutan
+    megjegyzes: >
+      A „beugranék" a spontán, bejelentkezés nélküli látogatás szava —
+      épp az ELLENTÉTE annak, amit kér. A mondatot mégis foglalásként kell
+      érteni, mert az időpont meg van adva.
+    cimkek: [szohasznalat, idegen_ige, napszak]
+
+  - id: szohasznalat-04-lestoppolnek
+    bemenet: "Lestoppolnék egy időpontot a Szundinál jövő hétre."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-24T00:00:00Z"
+        datum_ig: "2026-08-30T23:59:59Z"
+        napszak: barmikor
+    cimkek: [szohasznalat, szleng_ige]
+
+  - id: szohasznalat-05-foliratkoznek
+    bemenet: "Föliratkoznék valamikorra az altatóshoz."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Nincs konkrét nap („valamikorra"), de van bolt — a keresésnek
+      MINDENKÉPP kell ablak, és erre a rendszernek dokumentált, átlátszó
+      tartaléka van (most → +7 nap, `rule_based.altalanos_ablak`). Ez nem
+      kitalált dátum, hanem a hiány bevallott pótlása; a bizonyosság
+      ilyenkor szándékosan `None`. A várt érték ezért PONTOSAN a tartalék
+      ablak.
+    cimkek: [szohasznalat, idegen_ige, tartalek_ablak]

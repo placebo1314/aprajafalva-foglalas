@@ -14,10 +14,14 @@ import pytest
 
 from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
 from assistant.interpreter.llm_based import (
+    ALAP_PROMPT_VERZIO,
+    PROMPTOK,
     LLMErtelmezo,
     LLMSzolgaltato,
     _mezo_bizonyossag,
     bizonyossag_szamol,
+    prompt_verzio,
+    rendszerprompt,
 )
 
 _MOST = "2026-08-17T09:00:00Z"
@@ -351,3 +355,81 @@ def test_a_mit_enumbol_hianyzik_az_ar():
     assert "ar" not in mit
     assert "nyitvatartas" in mit
     assert "megjelenes" in mit
+
+
+# --- PROMPT-VERZIÓ (ADR-026) -----------------------------------------
+#
+# Két prompt él egymás mellett, hogy az A/B mérés UGYANAZT a kódot
+# futtathassa kétszer. Amit itt bizonyítunk: a verzió tényleg vált, a
+# példakészlet VELE mozog, és a naplóba is kikerül, melyikkel futott a
+# forduló — enélkül egy hét múlva a naplósorból nem lehetne megmondani,
+# melyik prompt adta azt a választ.
+
+
+def test_alapertelmezetten_a_v1_fut(monkeypatch):
+    monkeypatch.delenv("APRAJAFALVA_PROMPT_VERZIO", raising=False)
+    assert prompt_verzio() == ALAP_PROMPT_VERZIO
+
+
+def test_a_kornyezeti_valtozo_valt_promptot(monkeypatch):
+    monkeypatch.setenv("APRAJAFALVA_PROMPT_VERZIO", "v2")
+    assert prompt_verzio() == "v2"
+
+
+def test_ismeretlen_verzio_az_alapertelmezesre_esik_vissza(monkeypatch):
+    """Egy elgépelt környezeti változótól ne álljon meg a felület — de
+    ne is fusson olyan prompttal, ami nem létezik."""
+    monkeypatch.setenv("APRAJAFALVA_PROMPT_VERZIO", "v42")
+    assert prompt_verzio() == ALAP_PROMPT_VERZIO
+
+
+def test_a_peldakeszlet_a_prompttal_egyutt_mozog():
+    """A v2 példái a v1 promptjában értelmetlenek lennének, és fordítva
+    — a kettő egy egység."""
+    v1 = rendszerprompt("v1", most=_MOST, van_osszefoglalo=False)
+    v2 = rendszerprompt("v2", most=_MOST, van_osszefoglalo=False)
+
+    assert "Az altatósho szeretnék bemenni" in v1, "v1 példa (tájszólás)"
+    assert "Az altatósho szeretnék bemenni" not in v2
+    assert v2.rstrip().endswith(
+        '-> {"eszkoz": "szabad_idopontok", "parameterek": '
+        '{"bolt_id": "ugyifogyi", "datum_kifejezes": "szerda"}}'
+    ), "a v2-ben a LEGJELLEMZŐBB eset áll utolsóként"
+
+
+def test_a_v2_rovidebb_es_a_megkotesekkel_kezd():
+    """A v2 két állítása, amit mérés nélkül is ellenőrizni lehet: rövidebb,
+    és a kritikus megkötések ELÖL vannak (a v1-ben a prompt közepén
+    álltak)."""
+    v1 = rendszerprompt("v1", most=_MOST, van_osszefoglalo=False)
+    v2 = rendszerprompt("v2", most=_MOST, van_osszefoglalo=False)
+
+    assert len(v2) < len(v1)
+    assert PROMPTOK["v2"].index("NE TALÁLJ KI ADATOT") < PROMPTOK["v2"].index("Eszközök:")
+
+
+def test_a_prompt_verzio_lekerdezheto_a_hivas_utan(monkeypatch):
+    """A naplózáshoz: a felület `utolso_prompt_verzio`-ból olvassa ki,
+    melyik prompttal futott a forduló."""
+    monkeypatch.setenv("APRAJAFALVA_PROMPT_VERZIO", "v2")
+    ertelmezo = LLMErtelmezo(LLMSzolgaltato(modell="teszt-modell"))
+
+    with patch(
+        "urllib.request.urlopen",
+        return_value=_ollama_valasz({"eszkoz": "nincs", "parameterek": {}}),
+    ):
+        ertelmezo.ertelmez("szia", most=_MOST, kontextus=ErtelmezesKontextus())
+
+    assert ertelmezo.utolso_prompt_verzio == "v2"
+    assert ertelmezo.utolso_prompt["prompt_verzio"] == "v2"
+
+
+def test_az_osszefoglalo_utmutato_csak_akkor_megy_el_ha_van_osszefoglalo():
+    """A rendszerprompt minden szava minden híváshoz latencia: egy rövid
+    beszélgetésben az összefoglaló-magyarázat tiszta veszteség lenne, és
+    a modellnek egy olyan sorról beszélne, amit nem is lát."""
+    nelkule = rendszerprompt("v1", most=_MOST, van_osszefoglalo=False)
+    vele = rendszerprompt("v1", most=_MOST, van_osszefoglalo=True)
+
+    assert "ÖSSZEFOGLALÓ:" not in nelkule
+    assert "ÖSSZEFOGLALÓ:" in vele

@@ -217,8 +217,12 @@ def _master_data_load(conn) -> dict:
         conn,
         shop_id=szundi_id,
         megjelenes=(
-            "Kék, csillagos homlokzat, az ajtó fölött álmos hold formájú tábla. "
-            "Esténként halk zene szűrődik ki az ablakokon."
+            "A Pihenő utca legvégén, a patak melletti utolsó ház — kék, csillagos "
+            "homlokzat, az ajtó fölött álmos hold formájú tábla. Kívülről alacsonynak "
+            "látszik, mert félig a domboldalba épült. Belül félhomály van, a pult mögött "
+            "polcokon sorakoznak a cimkézett üvegcsék, a sarokban mindig ég egy mécses. "
+            "Esténként halk zene szűrődik ki az ablakokon. Aki belép, előbb leül egy "
+            "fonott székre — az altatót ülve mérik ki."
         ),
     )
     szundi_service_id = torzsadat_repo.service_create(
@@ -233,8 +237,11 @@ def _master_data_load(conn) -> dict:
         conn,
         service_id=szundi_service_id,
         termekleiras=(
-            "Gyógynövényes altatófőzet, egyénre szabott recept szerint — egy csésze, "
-            "és garantáltan mély álom reggelig."
+            "Gyógynövényes altatófőzet, egyénre szabott recept szerint: citromfű, "
+            "macskagyökér és egy kanál akácméz, langyosan kimérve. A pultos végigkérdezi, "
+            "mi tartja ébren a vásárlót, és aszerint állítja össze — egy csésze, és mély "
+            "álom reggelig. Nem altatópor és nem orvosság: aki gyógyszert szed, annak a "
+            "gyengébb, koffeinmentes változat jár. Elvitelre lezárt üvegcsében is kérhető."
         ),
         ar="40 arany",
     )
@@ -246,8 +253,11 @@ def _master_data_load(conn) -> dict:
         conn,
         shop_id=ugyifogyi_id,
         megjelenes=(
-            "Élénkpiros-sárga cégér, az ablakok mögül időnként pattogó hangok "
-            "hallatszanak — ne ijedj meg, ez itt megszokott."
+            "A Durranó tér közepén, a kúttal szemben — élénkpiros-sárga cégér, rajta egy "
+            "szikrázó petárda. Az ablakok mögül időnként pattogó hangok hallatszanak; ne "
+            "ijedj meg, ez itt megszokott. A bejárat előtt homokláda áll (ez a próbahely), "
+            "belül egyetlen hosszú pult, mögötte fémdobozokban a készáru. A falon tábla "
+            "sorolja, mit tilos: a boltban gyújtani szigorúan tilos."
         ),
     )
     ugyifogyi_service_id = torzsadat_repo.service_create(
@@ -262,8 +272,12 @@ def _master_data_load(conn) -> dict:
         conn,
         service_id=ugyifogyi_service_id,
         termekleiras=(
-            "Kézzel készített ünnepi petárda, biztonságos gyújtózsinórral — "
-            "kis és nagy méretben egyaránt kapható."
+            "Kézzel készített ünnepi petárda, biztonságos, lassan égő gyújtózsinórral. "
+            "A kis petárda tenyérnyi, halk pukkanás, gyerekeknek is odaadható felnőtt "
+            "mellett; a nagy petárda kétmaréknyi, hangos, és csak nyílt téren gyújtható. "
+            "Mindkettő nedvességálló papírban jön, gyújtózsinór-hosszal a dobozon. "
+            "A pultos minden vásárlásnál elmondja a három szabályt, ez benne van az "
+            "időpont hosszában."
         ),
         ar="kis petárda 20 arany, nagy petárda 55 arany",
     )
@@ -275,7 +289,12 @@ def _master_data_load(conn) -> dict:
         conn,
         shop_id=torpilla_id,
         megjelenes=(
-            "Barátságos, virágos kirakat — az ajtóban mindig várja valaki mosollyal a betérőket."
+            "A Fő utca 7., a pékség és a kút között — barátságos, virágos kirakat, az "
+            "ajtóban mindig várja valaki mosollyal a betérőket. Nincs cégér, csak egy "
+            "kézzel festett szív az ajtóüvegen. Belül három kis asztal áll egymástól "
+            "távol (ez a három pult), mindegyiken kancsó víz és egy doboz zsebkendő. "
+            "A várakozóban könyvek és egy alvó macska. Aki csak beülni jön, azt is "
+            "beengedik — de időpont nélkül nem biztos, hogy sorra kerül."
         ),
     )
     torpilla_service_id = torzsadat_repo.service_create(
@@ -290,8 +309,11 @@ def _master_data_load(conn) -> dict:
         conn,
         service_id=torpilla_service_id,
         termekleiras=(
-            "Egy őszinte beszélgetés, egy forró tea és annyi figyelem, "
-            "amennyi aznap éppen elfér a szívben."
+            "Egy őszinte beszélgetés, egy forró tea és annyi figyelem, amennyi aznap "
+            "éppen elfér a szívben. Nem terápia és nem tanácsadás: a pultos nem mond meg "
+            "semmit, csak végighallgat, és a végén kérdez egyet. Aki nem akar beszélni, "
+            "ülhet csendben is — az is boldogság-időpont. Ha valakinek orvosi segítség "
+            "kell, a Törpilla ezt kimondja, és nem tartja bent."
         ),
         ar="adomány alapú",
     )

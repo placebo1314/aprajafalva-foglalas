@@ -54,6 +54,19 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
             ]
         )
 
+    if mit == "pultosok":
+        # A vásárló 2. igénye ("tudjam, kihez megyek", blueprint 1.
+        # szakasz): a NEVEK szerkesztett törzsadatból jönnek, nem a
+        # modelltől. Beosztást szándékosan NEM adunk vissza — az, hogy
+        # egy adott napon ki dolgozik, munkavállalói adat, és a
+        # vásárlónak nem is a kérdése; a kérdés az, hogy kik vannak.
+        return hiba.sikeres_eredmeny(
+            pultosok=[
+                alkalmazott["nev"]
+                for alkalmazott in torzsadat_repo.employees_list(conn, shop_id=bolt_id)
+            ]
+        )
+
     if mit == "megjelenes":
         bolt = torzsadat_repo.shop_load(conn, bolt_id)
         return hiba.sikeres_eredmeny(megjelenes=bolt["megjelenes"] if bolt else "")

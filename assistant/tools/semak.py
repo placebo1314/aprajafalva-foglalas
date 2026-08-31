@@ -28,6 +28,13 @@ _BOLT_INFO_MEZOK_V1 = ["nyitvatartas", "cim", "idotartam"]
 # kapuőrnél MA is tiltott (golden set kapuor-02) — a séma csak a
 # lekérdezési KÉPESSÉGET rögzíti, nem a kapuőr-döntést.
 _BOLT_INFO_MEZOK_V2 = [*_BOLT_INFO_MEZOK_V1, "megjelenes", "termek", "ar"]
+# v3: "pultosok" — kik dolgoznak a boltban. A vásárló 2. igénye szerint
+# ("tudjam, kihez megyek") ez ugyanolyan engedélyezett tényadat, mint a
+# nyitvatartás: szerkesztett törzsadatból jön (`alkalmazott` tábla,
+# `torzsadat_repo.employees_list`), nem a modelltől. A PULT önmagában
+# NEM keresési dimenzió (ADR-024) — de a kérdés, hogy „ki fogad?",
+# válaszolható, és nem is jár azonosítással.
+_BOLT_INFO_MEZOK_V3 = [*_BOLT_INFO_MEZOK_V2, "pultosok"]
 
 # A KERESŐ eszközök enumjai a MINDEGY szentinellel bővülnek
 # (`katalogus.MINDEGY`): a vásárló elengedheti a boltot, a szolgáltatást
@@ -156,6 +163,19 @@ SEMAK: dict[str, dict[str, dict]] = {
             "properties": {
                 "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
                 "mit": {"type": "string", "enum": _BOLT_INFO_MEZOK_V2},
+                "datum": {"type": "string"},
+                "session_id": {"type": "string"},
+            },
+            "required": ["bolt_id", "mit", "session_id"],
+            "additionalProperties": False,
+        },
+        # v3: a "pultosok" mezővel — a v1 és a v2 VÁLTOZATLAN marad
+        # mellette (eszkoz-szerzodes skill, "Verziózás").
+        "v3": {
+            "type": "object",
+            "properties": {
+                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
+                "mit": {"type": "string", "enum": _BOLT_INFO_MEZOK_V3},
                 "datum": {"type": "string"},
                 "session_id": {"type": "string"},
             },

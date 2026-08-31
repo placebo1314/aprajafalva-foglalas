@@ -8,7 +8,7 @@ a projekt egészéhez `docs/ALLAPOT.md`.
 
 | Parancs | Mit futtat | Kb. mennyi ideig tart | Ha elbukik |
 |---|---|---|---|
-| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `806 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
+| `python feladat.py teszt` | A teljes `tests/` alatti tesztkészletet SQLite-on. | ~20 másodperc | A pytest kiírja, melyik teszt és melyik `assert` bukott, oszlopszámmal. `912 passed, 1 xfailed` a várt kimenet — az `1 xfailed` szándékos (lásd `docs/ALLAPOT.md`, "Ismert korlátok"). Ha ennél kevesebb `passed` vagy bármi `failed` van, az valódi hiba. |
 | `python feladat.py teszt-mindketto` | Ugyanaz a tesztkészlet, előbb `sqlite`, utána `postgres` "motorral". | ~26 másodperc | **Figyelem:** a `postgres` ág ma ténylegesen ugyanazt a SQLite-ot futtatja újra (nincs Postgres-adapter, ADR-004) — ez a parancs ma nem bizonyít semmit Postgresen, csak kétszer futtatja le ugyanazt. |
 | `python feladat.py lint` | `ruff format --check .`, utána `ruff check .`. | néhány másodperc | Kiírja a formázási/lint hibás fájlokat és sorokat. `ruff format .` (a `--check` nélküli) automatikusan javítja a formázást; a `ruff check .` hibáit kézzel kell megnézni. |
 | `python feladat.py golden` | A NYELVI golden set (`tests/golden/nyelvi_alap.yaml`, 45 eset) kiértékelése a **determinisztikus** értelmezővel — nem indít Ollamát. Rétegenkénti bontást ír. | néhány másodperc | Kilépőkód 1, ha egy réteg a küszöbe alatt van; a kimenet megnevezi, melyik. Ma három réteg van küszöb alatt (`elengedes`, `valtozatossag`, `mintan_tul`) — ezek `igenyel_llm` esetek, a determinisztikus úton szándékosan buknak, nem hiba. A `--halmaz robusztus` ágon ehhez jön még egy determinisztikus őrszem a tesztkészletben is (`tests/egyseg/test_robusztus_halmaz.py`): a négy biztonsági szám minden `python feladat.py teszt` futásnál ellenőrződik. |
@@ -217,8 +217,21 @@ $env:APRAJAFALVA_LLM_MODELL="qwen3.5:9b"  # Windows, PowerShell
 ```
 
 és fusson az Ollama (`ollama serve`). Ha bármelyik hiányzik, a felület
-**nem hibázik**, csak csendben a determinisztikus értelmezőre esik
-vissza — az ablak tetején álló sor megmondja, melyik eset áll fenn.
+**nem hibázik**, de **nem is indul el csendben**: 2026-08-31 óta
+indításkor ellenőrzi, hogy a modell konfigurálva van-e, válaszol-e az
+Ollama, és le van-e töltve a kért modell. Ha bármelyik hiányzik, modális
+ablak jön fel — megmondja, melyik a három ok közül, mit kell beírni, és
+két gombot ad: **„Folytatom tartalékággal"** vagy **„Kilépek"**.
+
+Miért lett ez modális: háromszor futott végig kézi próba tartalékágon
+úgy, hogy csak utólag derült ki. Amit át lehet siklani, azt át is
+siklik az ember. A tartalékággal folytatás továbbra is érvényes
+választás (a determinisztikus réteg próbájához épp az kell) — csak nem
+lehet véletlen.
+
+Az ellenőrzés kikapcsolható (`APRAJAFALVA_INDITO_ELLENORZES=ki`) — a fej
+nélküli végigjátszás ezt teszi, mert ott nincs, aki gombot nyomjon; de
+kiírja a helyzetet a kimenet elejére.
 
 #### Dátumot NEM kell fejben tartanod
 
@@ -323,6 +336,27 @@ Amit ebből leolvashatsz:
   `visszakerdezes` lesz, pedig a mondat egyértelműnek tűnt.
 - **`válasz`** — `ajanlat`, `visszakerdezes`, `elutasitas`, `kiut`,
   `eszkoz_hiba` vagy `sikeres`.
+- **`modell` és `prompt_verzio`** — fordulónként rögzítve (2026-08-31
+  óta). A `réteg` csak azt mondja meg, KI oldotta meg a fordulót; ez
+  azt, hogy a tartalék azért dolgozott-e, mert nem volt konfigurált
+  modell, vagy mert a modell nem tudta megoldani. Két különböző baj,
+  két különböző teendő. A `python feladat.py naplo` külön blokkban
+  összesíti.
+
+#### A napló lezárása és az archívum
+
+Egy hosszú próbasorozat számai összemosódnak az előzőével, ha ugyanabba
+a fájlba folynak. A mérési határt az archiválás jelöli ki:
+
+```
+python feladat.py naplo --archival        # félreteszi, és üres naplóval indul újra
+python feladat.py naplo --fajl naplo/probak-20260831-195812.jsonl
+python feladat.py riport --fajl naplo/probak-20260831-195812.jsonl --megnyit
+```
+
+A riport fejléce kiírja, melyik naplóból készült — és **piros sávot tesz
+a tetejére, ha a beszélgetésben egyetlen modellhívás sem volt**: „ez a
+beszélgetés modell nélkül futott, az eredmények nem a modellt mérik".
 
 #### Ugyanez fej nélkül, egyben
 

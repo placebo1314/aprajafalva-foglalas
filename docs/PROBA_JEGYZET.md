@@ -12,15 +12,24 @@ set APRAJAFALVA_LLM_MODELL=qwen3.5:9b       # Windows cmd; PowerShell: $env:...
 python -m ui.vasarlo
 ```
 
-Modell nélkül is elindul — akkor csendben a szabály-alapú értelmező
-dolgozik. **Ilyenkor sárga figyelmeztetés áll az ablak tetején**, és
-megmondja, mit kell beírni a bekapcsoláshoz; a fej nélküli végigjátszás
-ugyanezt kiírja. A figyelmeztetés alatti sor mondja meg, mit jelent itt
-a „ma" (a demóadat egy távoli hétre szól, a felület ahhoz horgonyoz).
+**Indításkor a felület ELLENŐRZI, hogy fut-e a modell** (2026-08-31
+óta): konfigurálva van-e, válaszol-e az Ollama, és le van-e töltve a
+kért modell. Ha bármelyik hiányzik, MODÁLIS ablak jön fel — megmondja,
+melyik a három ok közül, mit kell beírni, és két gombot ad:
+**„Folytatom tartalékággal"** vagy **„Kilépek"**. A tartalékág érvényes
+választás (pl. ha épp a determinisztikus réteget próbálod), csak nem
+lehet véletlen.
 
-**A figyelmeztetés a konfiguráció hiányát jelzi, nem azt, hogy fut-e az
-Ollama.** Ha be van állítva a modell, de a szolgáltatás nem fut, azt a
-napló `szabaly:tartalek` rétegéből látod (l. lent, 5. pont).
+Miért lett ez modális: háromszor futott végig kézi próba tartalékágon
+úgy, hogy csak utólag derült ki — a sárga sávot el lehet olvasni és el
+lehet felejteni, főleg ha a beszélgetés egyébként értelmes válaszokat
+ad. A sárga sáv MEGMARADT az ablak tetején, a naplóban pedig
+fordulónként ott áll, volt-e konfigurált modell és melyik prompt-verzió
+futott. A beszélgetés-riport fejlécében piros sáv jelenik meg, ha a
+beszélgetésben egyetlen modellhívás sem volt.
+
+A figyelmeztetés alatti sor mondja meg, mit jelent itt a „ma" (a
+demóadat egy távoli hétre szól, a felület ahhoz horgonyoz).
 
 Két fül van: **Koppintós út** (gombok) és **Írjon nekünk** (szöveg). A
 próba a másodikon zajlik.

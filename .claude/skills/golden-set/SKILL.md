@@ -117,12 +117,33 @@ Az utolsó sor nem teljesítménymutató, hanem becsületbeli kérdés. Ha a ren
 akkor is siettet, amikor nincs miért, a figyelmeztetés két hét alatt elveszti
 az értékét.
 
+### Beszédhelyzetek: MILYEN HELYZETBEN beszél a vásárló
+
+`tests/golden/beszedhelyzetek.yaml` — a harmadik halmaz
+(`python feladat.py golden --halmaz beszedhelyzetek`). Nem a mondat
+felszínét méri (azt a nyelvi halmaz), hanem a beszédhelyzetet: nem
+magának foglal („az anyámnak kellene"), feltételesen tervez („ha esik,
+akkor szerdán"), összehasonlít („melyik boltban van hamarabb hely?"),
+korábbi foglalásra hivatkozik azonosítás nélkül, két időpontot kér
+egyszerre, elköszön, meggondolja magát, közbekérdez foglalás közben,
+vagy szokatlan igét használ („bejelentkeznék", „lestoppolnék").
+
+**A halmaz KEVERI a két pontozásfajtát**, esetenként eldöntve, melyik a
+becsületes: `varhato.parameterek` ott, ahol egy helyes válasz van, és
+`elfogadhato_eszkozok` ott, ahol két viselkedés is védhető (keresés vagy
+kérdés). Az öt teljesíthetetlen kérésnél (boltok összevetése, két
+időpont, azonosítás nélküli hivatkozás) a helyes válasz sosem az, hogy
+valamit mégis csinálunk.
+
+Első mérés (2026-08-31): `docs/BESZEDHELYZETEK_MERES.md`.
+
 ## A kiértékelő
 
 ```
 python feladat.py golden                                    # determinisztikus alapvonal
 python feladat.py golden --ertelmezo forditott              # az ÉLES út (ADR-018+020)
 python feladat.py golden --halmaz robusztus --ertelmezo forditott
+python feladat.py golden --halmaz beszedhelyzetek --ertelmezo forditott
 python feladat.py golden --ertelmezo forditott --onkonzisztencia   # 3 futás (ADR-021)
 python feladat.py golden --modell qwen3.5:4b --json eredmeny.json
 ```

@@ -13,7 +13,7 @@ böngésző nélkül tesztelhető. Amit itt mérünk:
 
 from __future__ import annotations
 
-from tools.beszelgetes_riport import fordulo_blokk, riport
+from tools.beszelgetes_riport import fordulo_blokk, modell_nelkul_futott, riport
 
 
 def _sor(**mezok) -> dict:
@@ -164,3 +164,60 @@ def test_a_teljes_html_onallo_es_offline():
     assert "<style>" in szoveg
     assert "http://" not in szoveg and "https://" not in szoveg
     assert "<script" not in szoveg
+
+
+# -- MODELL NÉLKÜL FUTOTT beszélgetés (piros sáv a fejlécben) ----------
+#
+# Ez a jelentés legfontosabb egy bitje. A tartalék ág csendben átveszi a
+# fordulót, a válaszok értelmesek maradnak, és a számok mégis mást
+# mérnek, mint amit az olvasó hisz.
+
+
+def test_modell_nelkuli_beszelgetesre_piros_figyelmeztetes():
+    html = riport([_sor(reteg="szabaly:tartalek", nyomkovetes=None)])
+
+    assert "MODELL NÉLKÜL futott" in html
+    assert "modell-riaszt" in html
+
+
+def test_modell_reteg_eseten_nincs_figyelmeztetes():
+    html = riport([_sor(reteg="llm")])
+
+    assert "MODELL NÉLKÜL futott" not in html
+
+
+def test_egyetlen_modellhivas_is_elegendo():
+    """A réteg nem az egyetlen forrás: van olyan út (kapuőr, sorszámos
+    hivatkozás), ahol a `reteg` nem `llm`, de a fordulóban MÉGIS volt
+    modellhívás. Az ilyen beszélgetés nem „modell nélküli"."""
+    sorok = [
+        _sor(reteg="kapuor", nyomkovetes={"modellhivas_db": 1}),
+        _sor(reteg="szabaly:tartalek", nyomkovetes={"modellhivas_db": 0}),
+    ]
+
+    assert modell_nelkul_futott(sorok) is False
+
+
+def test_ures_naplo_nem_riaszt():
+    """Nulla forduló nem állítás a modellről — arra nincs mit mondani."""
+    assert modell_nelkul_futott([]) is False
+    assert "MODELL NÉLKÜL futott" not in riport([])
+
+
+def test_a_riasztas_kiirja_a_konfiguralt_modellt():
+    """A leggyanúsabb eset: VAN beállított modell, mégsem futott
+    egyetlen hívás sem (nem indult el az Ollama). Ezt külön ki kell
+    mondani, mert a próbálgató épp azt hiszi, hogy be van kapcsolva."""
+    html = riport([_sor(reteg="szabaly:tartalek", modell="qwen3.5:9b", nyomkovetes=None)])
+
+    assert "qwen3.5:9b" in html
+    assert "egyetlen fordulóban sem futott modellhívás" in html
+
+
+def test_a_riport_kiirja_a_forras_naplot():
+    """Archivált naplóból készült riport (`--fajl`): két riport ugyanúgy
+    néz ki, és ha nem írja ki, melyik próbasorozatot mutatja, a másikra
+    hivatkozó következtetés némán rossz lesz."""
+    html = riport([_sor()], "probak-20260831-195812.jsonl")
+
+    assert "probak-20260831-195812.jsonl" in html

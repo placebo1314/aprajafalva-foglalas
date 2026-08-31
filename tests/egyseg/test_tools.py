@@ -723,6 +723,36 @@ def test_bolt_info_idotartam_valodi_szolgaltatas_adatbol(tmp_path):
     assert eredmeny["szolgaltatasok"] == [{"nev": "petárda", "idotartam_perc": 5}]
 
 
+def test_bolt_info_pultosok_a_torzsadatbol(tmp_path):
+    """A vásárló 2. igénye: „tudjam, kihez megyek". A NEVEK szerkesztett
+    törzsadatból jönnek (`alkalmazott` tábla), nem a modelltől — ez az
+    eszköz kikeresi, nem kitalálja."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    torzsadat_repo.employee_create(conn, org_id=ctx["org_id"], shop_id=ctx["shop_id"], name="Ügyi")
+
+    eredmeny = bolt_info.hivas(
+        conn, {"bolt_id": "ugyifogyi", "mit": "pultosok", "session_id": "s"}, org_id=ctx["org_id"]
+    )
+
+    assert eredmeny["sikeres"] is True
+    assert eredmeny["pultosok"] == ["Durranó", "Ügyi"]
+
+
+def test_bolt_info_pultosok_nem_ad_beosztast(tmp_path):
+    """CSAK nevek mennek ki: hogy melyikük mikor dolgozik, az
+    munkavállalói adat, és nem is a vásárló kérdése."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+
+    eredmeny = bolt_info.hivas(
+        conn, {"bolt_id": "ugyifogyi", "mit": "pultosok", "session_id": "s"}, org_id=ctx["org_id"]
+    )
+
+    assert set(eredmeny) == {"sikeres", "pultosok"}
+    assert all(isinstance(nev, str) for nev in eredmeny["pultosok"])
+
+
 def test_bolt_info_megjelenes_ures_alapertelmezetten(tmp_path):
     conn = _conn(tmp_path)
     ctx = _seed(conn)

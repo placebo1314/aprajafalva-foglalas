@@ -86,6 +86,10 @@ body { font-family: system-ui, "Segoe UI", sans-serif; margin: 0; padding: 24px;
 h1 { font-size: 22px; margin: 0 0 4px; }
 .alcim { color: #666; margin-bottom: 20px; font-size: 14px; }
 .osszegzes { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+.modell-riaszt { background: #fdecea; border: 2px solid #c0392b; color: #7b241c;
+                 border-radius: 8px; padding: 12px 16px; margin-bottom: 20px;
+                 font-weight: 600; }
+.modell-riaszt .halk { font-weight: 400; font-size: 13px; }
 .kartya { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
           padding: 10px 14px; min-width: 150px; }
 .kartya .cimke { font-size: 12px; color: #666; text-transform: uppercase;
@@ -161,6 +165,46 @@ def _kartya(cimke: str, ertek: str, megjegyzes: str = "") -> str:
         f'<div class="kartya"><div class="cimke">{_e(cimke)}</div>'
         f'<div class="ertek">{ertek}</div>'
         f'<div class="megjegyzes">{_e(megjegyzes)}</div></div>'
+    )
+
+
+# A modell-rétegek neve a naplóban. A `szabaly:*` és az
+# `orchestrator:*` réteg NEM modell — ha egy beszélgetésben egyetlen
+# ilyen sem szerepel, akkor a jelentés nem a modellről szól.
+_MODELL_RETEGEK = ("llm", "kaszkad", "forditott")
+
+
+def modell_nelkul_futott(sorok: list[dict]) -> bool:
+    """Volt-e EGYETLEN modell-réteg is a beszélgetésben.
+
+    Ez a jelentés legfontosabb egy bitje: a tartalék ág csendben átveszi
+    a fordulót, a válaszok értelmesek maradnak, és a számok mégis mást
+    mérnek, mint amit az olvasó hisz. Háromszor fordult elő, hogy egy
+    kézi próba végig tartalékágon futott, és csak utólag derült ki."""
+    if not sorok:
+        return False
+    return not any(
+        (sor.get("reteg") or "").startswith(_MODELL_RETEGEK)
+        or (sor.get("nyomkovetes") or {}).get("modellhivas_db")
+        for sor in sorok
+    )
+
+
+def modell_riasztas(sorok: list[dict]) -> str:
+    """A PIROS sáv a fejlécben, ha a beszélgetés modell nélkül futott."""
+    if not modell_nelkul_futott(sorok):
+        return ""
+    modellek = {sor.get("modell") for sor in sorok if sor.get("modell")}
+    reszlet = (
+        f"Konfigurált modell a naplóban: {_e(', '.join(sorted(modellek)))} — "
+        "de egyetlen fordulóban sem futott modellhívás."
+        if modellek
+        else "A naplóban egyetlen fordulóhoz sem tartozik konfigurált modell."
+    )
+    return (
+        '<div class="modell-riaszt">Ez a beszélgetés MODELL NÉLKÜL futott — '
+        "az eredmények nem a modellt mérik, hanem a determinisztikus tartalék ágat."
+        f'<div class="halk">{reszlet}</div></div>'
     )
 
 
@@ -375,16 +419,21 @@ def _normalizalas_jelzo(sor: dict) -> str:
     return ""
 
 
-def riport(sorok: list[dict]) -> str:
+def riport(sorok: list[dict], forras: str | None = None) -> str:
     """A teljes HTML — ez a függvény tiszta (napló-sorok listája →
-    szöveg), tehát fájl nélkül tesztelhető."""
+    szöveg), tehát fájl nélkül tesztelhető.
+
+    `forras`: melyik naplófájlból készült. Archivált naplónál
+    (`--fajl`) ez a különbség nem díszítés: két riport ugyanúgy néz ki,
+    és ha nem írja ki, melyik próbasorozatot mutatja, a másikra hivatkozó
+    következtetés némán rossz lesz."""
     if not sorok:
         torzs = (
             "<p>A próba-napló üres. Futtasd: <code>python feladat.py vegigjatszas</code>, "
             "vagy nyisd meg a vásárlói felületet.</p>"
         )
     else:
-        torzs = fejlec_osszegzes(sorok) + "".join(
+        torzs = (modell_riasztas(sorok) + fejlec_osszegzes(sorok)) + "".join(
             fordulo_blokk(sor, i) for i, sor in enumerate(sorok, start=1)
         )
     return (
@@ -394,7 +443,9 @@ def riport(sorok: list[dict]) -> str:
         f"<style>{_STILUS}</style></head><body>"
         "<h1>Beszélgetés-elemző</h1>"
         "<div class='alcim'>A próba-napló fordulói, kinyitható részletekkel. "
-        "A napló redaktált — nyers személyes adat nincs benne.</div>"
+        "A napló redaktált — nyers személyes adat nincs benne."
+        + (f" Forrás: <code>{_e(forras)}</code>." if forras else "")
+        + "</div>"
         f"{torzs}"
         "<footer>Készítette: <code>python feladat.py riport</code> "
         "(<code>tools/beszelgetes_riport.py</code>). "
@@ -411,13 +462,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--megnyit", action="store_true", help="megnyitja az alapértelmezett böngészőben"
     )
+    parser.add_argument(
+        "--fajl",
+        type=Path,
+        default=None,
+        metavar="UTVONAL",
+        help=(
+            "egy ARCHIVÁLT naplóból dolgozik (naplo/probak-20260831-195812.jsonl) "
+            "a jelenlegi napló helyett — az archiválás (python feladat.py naplo "
+            "--archival) különben elvágná a hozzáférést a régi fordulókhoz"
+        ),
+    )
     args = parser.parse_args(argv)
 
-    from ui.vasarlo import proba_naplo_olvas
+    from ui.vasarlo import PROBA_NAPLO_UTVONAL, proba_naplo_archivumok, proba_naplo_olvas
 
-    sorok = proba_naplo_olvas(args.utolso)
+    if args.fajl is not None and not args.fajl.exists():
+        print(f"Nincs ilyen naplófájl: {args.fajl}")
+        for utvonal in proba_naplo_archivumok():
+            print(f"  archívum: {utvonal.relative_to(GYOKER).as_posix()}")
+        return 1
+
+    sorok = proba_naplo_olvas(args.utolso, utvonal=args.fajl)
+    forras = (args.fajl or PROBA_NAPLO_UTVONAL).name
     args.ki.parent.mkdir(parents=True, exist_ok=True)
-    args.ki.write_text(riport(sorok), encoding="utf-8")
+    args.ki.write_text(riport(sorok, forras), encoding="utf-8")
     print(f"Riport kész: {args.ki}  ({len(sorok)} forduló)")
     if args.megnyit:
         webbrowser.open(args.ki.resolve().as_uri())

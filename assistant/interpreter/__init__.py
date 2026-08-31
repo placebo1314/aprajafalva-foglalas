@@ -107,6 +107,22 @@ def aktiv_modell_neve() -> str | None:
         return None
 
 
+def indito_ellenorzes():
+    """Az éles út INDÍTÁSI ellenőrzése — `ModellAllapot`
+    (`llm_based.modell_allapot`): konfigurálva van-e a modell, válaszol-e
+    az Ollama, és le van-e töltve a kért modell.
+
+    Ez a függvény azért van itt, a csomag `__init__`-jében, mert a
+    felület hívja (`ui/vasarlo.py`), a felület pedig nem importálhat
+    modell-specifikus modult (CLAUDE.md, „Modulhatárok"). Ugyanaz a
+    minta, mint az `aktiv_modell_neve()`-nél — annyi különbséggel, hogy
+    ez TÉNYLEGESEN megkérdezi a szolgáltatást, nem csak a konfigurációt
+    nézi."""
+    from assistant.interpreter.llm_based import modell_allapot
+
+    return modell_allapot()
+
+
 # Az önkonzisztencia-ellenőrzés ALAPÉRTELMEZETT állapota (ADR-021,
 # `assistant/interpreter/onkonzisztencia.py`). A `False` MÉRÉSBŐL
 # következik, nem óvatosságból — a számok az ADR-021-ben vannak. A

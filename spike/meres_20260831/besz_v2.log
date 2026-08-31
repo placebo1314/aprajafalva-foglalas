@@ -1,0 +1,87 @@
+Betöltve: 23 eset (beszedhelyzetek halmaz), meta.most = 2026-08-17T09:00:00Z
+Értelmező: forditott (modell=qwen3.5:9b)
+
+  masnak-01-anyamnak               1.0  OK
+  masnak-02-szomszed-nevében       1.0  OK
+  masnak-03-jogosultsag-kerdes     1.0  OK (elfogadható viselkedés)
+  felteteles-01-ha-esik-akkor-szerdan 1.0  OK
+  felteteles-02-akkor-nem-megyek   1.0  OK (elfogadható viselkedés)
+  osszehasonlitas-01-melyik-boltban-hamarabb 1.0  OK
+  osszehasonlitas-02-szundi-vagy-torpilla 1.0  OK (elfogadható viselkedés)
+  korabbi_foglalas-01-ugyanoda-mint-multkor 1.0  OK
+  korabbi_foglalas-02-multkori-megismetlese 0.0  nem elfogadható: 'szabad_idopontok', várt egyike: ['visszake
+  tobb_idopont-01-kettot-egymas-utan 1.0  OK (elfogadható viselkedés)
+  tobb_idopont-02-nekem-es-a-felesegemnek 1.0  OK (elfogadható viselkedés)
+  udvariassag-01-koszonom-viszlat  1.0  OK
+  udvariassag-02-koszonom-a-segitseget 1.0  OK
+  meggondolas-01-megsem-kell       0.0  várt 'nincs', kapott 'visszakerdez'
+  meggondolas-02-megse-akarok-foglalni 0.0  várt 'nincs', kapott 'visszakerdez'
+  kozbevetes-01-meddig-tart        1.0  OK
+  kozbevetes-02-hol-van-a-bolt     1.0  OK
+  kozbevetes-03-mennyibe-kerul     1.0  OK
+  szohasznalat-01-bejelentkeznek   1.0  OK
+  szohasznalat-02-sorszamot-kernek 1.0  OK
+  szohasznalat-03-beugranek        1.0  OK
+  szohasznalat-04-lestoppolnek     1.0  OK
+  szohasznalat-05-foliratkoznek    1.0  OK
+
+=== forditott — összesítés ===
+
+Címkénkénti pontosság:
+  alanyvaltas                  100.0%  (n=1)
+  azonositas_nelkul            100.0%  (n=1)
+  bolt_nem_alternativa         100.0%  (n=1)
+  felteteles                   100.0%  (n=2)
+  hallucinacio_csapda          100.0%  (n=1)
+  hatokoron_kivul              100.0%  (n=2)
+  hianyzo_bolt                   0.0%  (n=1)
+  idegen_ige                   100.0%  (n=4)
+  ket_bolt_megnevezve          100.0%  (n=1)
+  ket_nap                      100.0%  (n=1)
+  ket_szereplo                 100.0%  (n=2)
+  korabbi_foglalas              50.0%  (n=2)
+  kozbevetes                   100.0%  (n=3)
+  masnak                       100.0%  (n=3)
+  meggondolas                    0.0%  (n=2)
+  napszak                      100.0%  (n=1)
+  nem_tamogatott_keres         100.0%  (n=1)
+  nincs_keres                  100.0%  (n=1)
+  osszehasonlitas              100.0%  (n=2)
+  szabaly_kerdes               100.0%  (n=1)
+  szleng_ige                   100.0%  (n=1)
+  szohasznalat                 100.0%  (n=5)
+  tartalek_ablak               100.0%  (n=1)
+  tenyvalasz                   100.0%  (n=2)
+  tobb_idopont                 100.0%  (n=2)
+  tobbfordulos                  60.0%  (n=5)
+  udvariassag                  100.0%  (n=2)
+  visszavonas                    0.0%  (n=2)
+  zaras                        100.0%  (n=2)
+
+Réteg-küszöbök:
+  felteteles           100.0%  (n= 2)  küszöb 50%  [TARTJA]
+  korabbi_foglalas      50.0%  (n= 2)  küszöb 50%  [TARTJA]
+  kozbevetes           100.0%  (n= 3)  küszöb 50%  [TARTJA]
+  masnak               100.0%  (n= 3)  küszöb 80%  [TARTJA]
+  meggondolas            0.0%  (n= 2)  küszöb 50%  [NEM TARTJA]
+  osszehasonlitas      100.0%  (n= 2)  küszöb 50%  [TARTJA]
+  szohasznalat         100.0%  (n= 5)  küszöb 80%  [TARTJA]
+  tobb_idopont         100.0%  (n= 2)  küszöb 80%  [TARTJA]
+  udvariassag          100.0%  (n= 2)  küszöb 90%  [TARTJA]
+
+Összesített pontosság: 87.0%  (n=23)
+Leggyengébb réteg (ez a mérőszám, nem az átlag): meggondolas = 0.0%
+
+Válaszidő-eloszlás fordulónként (ezen a futáson, szekvenciálisan, n=28):
+  p50     3.63 s   (elvárás < 10 s)  [TARTJA]
+  p95     3.99 s   (elvárás < 25 s)  [TARTJA]
+  átlag   3.51 s   max   4.59 s
+  tendencia: első fél p50 3.72 s → második fél p50 3.60 s   [stabil, -3%]
+
+Réteg-megoszlás (melyik oldotta meg, utolsó forduló): kapuor=1, llm=22
+
+JSON mentve: spike\meres_20260831\besz_v2.json
+
+Réteg-küszöb alatt: meggondolas: 0% < küszöb 50%
+$ C:\Program Files\Python314\python.exe -m tests.golden.futtato --ertelmezo forditott --halmaz beszedhelyzetek --json spike/meres_20260831/besz_v2.json
+qwen3.5:9b vram=5368MB total=5368MB

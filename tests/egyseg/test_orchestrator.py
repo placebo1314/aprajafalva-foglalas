@@ -1268,6 +1268,91 @@ def test_sorszamos_hivatkozas_utan_a_megerosites_ugyanoda_vezet(tmp_path):
     assert vegleges["foglalasi_kod"]
 
 
+# --- ÍRÁSBELI IGEN / NEM a megerősítés-kérdésre ----------------------
+#
+# MÉRT HIBA javítása (2026-08-31, `vegigjatszas` modellel ÉS
+# tartalékágon): az „igen, foglald le" mondatból ÚJ KERESÉS lett, és a
+# folyamatban lévő megerősítés — a kiválasztott időponttal együtt —
+# eltűnt. A foglalás írásban emiatt nem volt befejezhető.
+
+
+def test_irasbeli_igen_megtartja_a_megerositest(tmp_path):
+    """Az „igen" nem foglal (ahhoz vásárlói kulcs kell, CLAUDE.md 2.
+    invariáns) — a megerősítés-kérdést ISMÉTLI meg, ugyanarra a
+    slotra. Ettől marad a képernyőn az azonosító-mező."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([])
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    valasztott = orch.fordulo("s1", "az elsőt kérem", _MOST)["slot_id"]
+
+    valasz = orch.fordulo("s1", "igen, foglald le", _MOST)
+
+    assert valasz["tipus"] == "megerositest_ker"
+    assert valasz["slot_id"] == valasztott
+    assert valasz["reteg"] == "orchestrator:megerosites"
+    assert ertelmezo.hivasok == [], "az értelmezőt meg sem kellett hívni"
+    assert valasz["valasztott_jelolt"]["slot_id"] == ajanlat["jeloltek"][0]["slot_id"]
+
+
+def test_irasbeli_igen_utan_a_foglalas_befejezheto(tmp_path):
+    """A teljes írásbeli út: keresés → sorszám → igen → azonosító →
+    foglalási kód."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx)
+
+    orch.fordulo("s1", "a másodikat kérem", _MOST)
+    orch.fordulo("s1", "igen, foglald le", _MOST)
+    vegleges = orch.megerosit("s1", "a" * 64)
+
+    assert vegleges["tipus"] == "visszaigazolas"
+    assert vegleges["foglalasi_kod"]
+
+
+def test_irasbeli_nem_elveti_de_a_tobbi_jelolt_marad(tmp_path):
+    """A vásárló EGY időpontra mondott nemet, nem az egész keresésre —
+    a többi jelölt még áll, és újra felkínálható."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx)
+    orch.fordulo("s1", "az elsőt kérem", _MOST)
+
+    valasz = orch.fordulo("s1", "mégse kell", _MOST)
+
+    assert valasz["tipus"] == "elvetve"
+    assert valasz["reteg"] == "orchestrator:megerosites"
+    assert len(valasz["jeloltek"]) == len(ajanlat["jeloltek"])
+
+
+def test_a_megerosites_rovidzar_csak_megerositesre_varva_szolal_meg(tmp_path):
+    """Megerősítés nélkül az „igen" önmagában semmit nem jelent — a
+    mondat a szokásos úton megy tovább, az értelmezőhöz."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    valasz = orch.fordulo("s1", "igen", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
+    assert len(ertelmezo.hivasok) == 1
+
+
+def test_uj_keres_a_megerosites_kozben_atmegy_az_ertelmezore(tmp_path):
+    """A rövidzár SZŰK: ami nem igen és nem nem, az a szokásos úton megy
+    — különben egy „és mennyibe kerül?" közbevetett kérdés elnyelődne."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    orch.fordulo("s1", "az elsőt kérem", _MOST)
+
+    orch.fordulo("s1", "igen, de inkább szerdán", _MOST)
+
+    assert len(ertelmezo.hivasok) == 1
+
+
 def test_boltvaltaskor_a_masik_bolt_szolgaltatasa_nem_marad_ra(tmp_path):
     """KÉZI PRÓBA találata: a „nézzük a másik boltban" gomb után üres
     lett a találat.

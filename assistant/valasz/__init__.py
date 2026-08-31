@@ -274,13 +274,18 @@ def kiut_szoveg(
     return kimenet(mondat, mod), gombok
 
 
-def _felsorolas(elemek: list[str]) -> str:
+def _felsorolas(elemek: list[str], kotoszo: str = "vagy") -> str:
     """Kimondható felsorolás: `„a, b vagy c"`. Ez NEM az a felsorolás,
     amit a beszélhető mód tilt — a tiltás a felsorolás-JELÖLÉSRE
-    (pontok, sortörések) vonatkozik, nem a magyar mondatra."""
+    (pontok, sortörések) vonatkozik, nem a magyar mondatra.
+
+    A kötőszó azért állítható, mert nem mindegy: a VÁLASZTÁSNÁL („melyik
+    boltba?") a „vagy" a helyes, egy EGYÜTT létező halmaznál (a bolt
+    pultosai) az „és" — a „Kati vagy Jani fogad" azt ígérné, hogy csak
+    az egyikük van ott."""
     if len(elemek) == 1:
         return elemek[0]
-    return f"{', '.join(elemek[:-1])} vagy {elemek[-1]}"
+    return f"{', '.join(elemek[:-1])} {kotoszo} {elemek[-1]}"
 
 
 def alternativa_szoveg(
@@ -359,6 +364,11 @@ def tenyvalasz_szoveg(
     if "cim" in mezok:
         sablon = _beszelheto_sablon(nyelv, "tenyvalasz", "cim") if beszelt else sablonok["cim"]
         return kimenet(sablon.format(ertek=mezok["cim"] or sablonok["ismeretlen_ertek"]), mod)
+    if "pultosok" in mezok:
+        nevek = mezok["pultosok"]
+        if not nevek:
+            return kimenet(sablonok["pultosok_ures"], mod)
+        return kimenet(sablonok["pultosok"].format(nevek=_felsorolas(nevek, "és")), mod)
     if "megjelenes" in mezok:
         return kimenet(mezok["megjelenes"] or sablonok["megjelenes_ures"], mod)
     if "szolgaltatasok" in mezok:
@@ -488,6 +498,40 @@ def modell_figyelmeztetes_szoveg(
     if modell_nev:
         return None
     return SABLONOK[nyelv]["rendszersor"]["nincs_modell_figyelmeztetes"]
+
+
+def indito_ellenorzes_szoveg(
+    hiany: str | None, modell_nev: str | None = None, *, nyelv: str = _NYELV_ALAPERTELMEZETT
+) -> tuple[str, str, str, str] | None:
+    """A modális indítási figyelmeztetés: `(cím, üzenet, folytatás-gomb,
+    kilépés-gomb)` — vagy `None`, ha minden rendben, és nincs mit
+    mondani.
+
+    A HÁROM ok három külön mondat, mert három külön teendő tartozik
+    hozzájuk (nincs beállítva a modell / nem válaszol az Ollama / nincs
+    letöltve a modell). Egy összevont „nem működik" üzenet abban a
+    pillanatban lenne udvarias, amikor haszontalan.
+
+    A szöveg ITT van és nem a felületen (`ui/vasarlo.py` docstring: „a
+    felület sosem fogalmaz"), a döntés pedig a próbálgatóé: a
+    tartalékággal FOLYTATNI érvényes választás (pl. amikor épp a
+    determinisztikus réteget próbálja) — csak nem lehet véletlen."""
+    if hiany is None:
+        return None
+    sablonok = SABLONOK[nyelv]["rendszersor"]
+    kulcs = {
+        "nincs_modell": "indito_nincs_modell",
+        "nincs_szolgaltatas": "indito_nincs_szolgaltatas",
+        "nincs_letoltve": "indito_nincs_letoltve",
+    }.get(hiany)
+    if kulcs is None:
+        return None
+    return (
+        sablonok["indito_cim"],
+        sablonok[kulcs].format(modell=modell_nev or "?"),
+        sablonok["indito_folytatom"],
+        sablonok["indito_kilepek"],
+    )
 
 
 def nyugtazo_szoveg(

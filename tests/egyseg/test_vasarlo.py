@@ -11,12 +11,15 @@ koppintós gombokhoz) és a próba-napló, nem magyar mondat."""
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import ui.vasarlo as vasarlo_modul
 from ui.vasarlo import (
     _idopont_cimke,
     _proba_naplo_ir,
     horgony_most,
+    proba_naplo_archival,
+    proba_naplo_archivumok,
     proba_naplo_olvas,
     proba_naplo_szoveg,
 )
@@ -60,7 +63,7 @@ def test_horgony_a_nap_elejere_all_nem_a_valodi_orara():
 
 def test_proba_naplo_ir_egy_sort_ir_a_varazott_mezokkel(tmp_path, monkeypatch):
     naplo_utvonal = tmp_path / "naplo" / "probak.jsonl"
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo_utvonal)
 
     _proba_naplo_ir(
         "petárdázni szeretnék kedden",
@@ -80,7 +83,7 @@ def test_proba_naplo_ir_egy_sort_ir_a_varazott_mezokkel(tmp_path, monkeypatch):
 
 def test_proba_naplo_ir_konyvtart_letrehozza_ha_hianyzik(tmp_path, monkeypatch):
     naplo_utvonal = tmp_path / "meg-nem-letezo" / "probak.jsonl"
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo_utvonal)
     assert not naplo_utvonal.parent.exists()
 
     _proba_naplo_ir("bármi", {"eszkoz": "nincs", "parameterek": {}}, "szabaly")
@@ -90,7 +93,7 @@ def test_proba_naplo_ir_konyvtart_letrehozza_ha_hianyzik(tmp_path, monkeypatch):
 
 def test_proba_naplo_ir_tobbszori_hivas_fuzi_nem_felulirja(tmp_path, monkeypatch):
     naplo_utvonal = tmp_path / "naplo" / "probak.jsonl"
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo_utvonal)
 
     _proba_naplo_ir("első", {"eszkoz": "nincs", "parameterek": {}}, "szabaly")
     _proba_naplo_ir("második", {"eszkoz": "nincs", "parameterek": {}}, "szabaly")
@@ -106,7 +109,7 @@ def test_proba_naplo_ir_hianyzo_ertelmezesnel_ures_mezoket_ir(tmp_path, monkeypa
     értelmezőt) nem dobhat kivételt — a napló ilyenkor is íródjon,
     üres eszköz/paraméterek mezővel."""
     naplo_utvonal = tmp_path / "probak.jsonl"
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo_utvonal)
 
     _proba_naplo_ir("bármi", None, None)
 
@@ -120,7 +123,7 @@ def test_proba_naplo_ir_a_teljes_fordulot_rogziti(tmp_path, monkeypatch):
     """Mind a nyolc mező — tesztelés közben mindegyikre külön kérdés
     merül fel (l. `_proba_naplo_ir` docstring)."""
     naplo_utvonal = tmp_path / "probak.jsonl"
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo_utvonal)
 
     _proba_naplo_ir(
         "Möggyek-ë hónap a petárdáshó?",
@@ -145,7 +148,7 @@ def test_proba_naplo_ir_a_teljes_fordulot_rogziti(tmp_path, monkeypatch):
 
 
 def test_proba_naplo_olvas_hianyzo_fajlnal_ures(tmp_path, monkeypatch):
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", tmp_path / "nincs.jsonl")
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", tmp_path / "nincs.jsonl")
     assert proba_naplo_olvas() == []
 
 
@@ -154,7 +157,7 @@ def test_proba_naplo_olvas_serult_sort_atugrik(tmp_path, monkeypatch):
     megnyitását."""
     naplo_utvonal = tmp_path / "probak.jsonl"
     naplo_utvonal.write_text('{"bemenet": "jó"}\nnem-json\n\n', encoding="utf-8")
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo_utvonal)
 
     sorok = proba_naplo_olvas()
 
@@ -164,7 +167,7 @@ def test_proba_naplo_olvas_serult_sort_atugrik(tmp_path, monkeypatch):
 
 def test_proba_naplo_olvas_utolso_n_sort_ad(tmp_path, monkeypatch):
     naplo_utvonal = tmp_path / "probak.jsonl"
-    monkeypatch.setattr(vasarlo_modul, "_PROBA_NAPLO_UTVONAL", naplo_utvonal)
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo_utvonal)
     for i in range(5):
         _proba_naplo_ir(f"{i}", {"eszkoz": "nincs", "parameterek": {}}, "szabaly")
 
@@ -227,13 +230,19 @@ def test_elozmeny_gyujti_a_ket_oldalt():
 
 
 def test_elozmeny_a_legutobbi_sorokra_vagodik():
-    """A prompt hossza latencia — a régi fordulók kiesnek."""
+    """A puffer nem nő korlátlanul — de ez MÁR NEM az ablak (ADR-025):
+    a vágást az értelmező oldalán a csúszó előzmény-ablak végzi
+    (`assistant/interpreter/ablak.py`), ez a szám csak azt mondja meg,
+    meddig ér vissza az összefoglaló nyersanyaga."""
     gazda = _ElozmenyGazda()
-    for i in range(30):
+    for i in range(vasarlo_modul._ELOZMENY_SOROK + 10):
         gazda._elozmenyhez_ad("vasarlo", f"{i}")
 
     assert len(gazda.szo_elozmenyek) == vasarlo_modul._ELOZMENY_SOROK
-    assert gazda.szo_elozmenyek[-1] == ("vasarlo", "29")
+    assert gazda.szo_elozmenyek[-1] == (
+        "vasarlo",
+        str(vasarlo_modul._ELOZMENY_SOROK + 9),
+    )
 
 
 # --- kimeneti mód: a rendszer-mondatok pufferelése (M6) --------------
@@ -405,3 +414,88 @@ def test_a_megerositest_ker_valasztipust_a_szoveges_ag_is_ismeri():
     assert "December huszonkettedikén kilenc órakor" in mondat
     assert mondat.endswith("?")
     assert "Nem értettem" not in mondat
+
+
+# -- NAPLÓ-ARCHIVÁLÁS (`python feladat.py naplo --archival`) ------------
+#
+# A napló a próbák nyersanyaga: egy hosszú sorozat számai összemosódnak
+# az előzőével, ha ugyanabba a fájlba folynak. Az archiválás a mérési
+# határ — ezért az a fontos, hogy a régi sorok MEGMARADJANAK, és az új
+# napló ténylegesen üresen induljon.
+
+
+def _naplot_ir(bemenet: str) -> None:
+    """Egy valódi naplósor a valódi íróval — így a teszt nem a JSONL
+    alakját utánozza, hanem azt használja, ami éles is fut."""
+    _proba_naplo_ir(bemenet, {"eszkoz": "szabad_idopontok", "parameterek": {}}, "szabaly")
+
+
+def test_archival_datumozott_nevre_teszi_felre_es_uritti_a_naplot(tmp_path, monkeypatch):
+    naplo = tmp_path / "probak.jsonl"
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo)
+    _naplot_ir("egy")
+    _naplot_ir("ketto")
+
+    cel = proba_naplo_archival(datetime(2026, 8, 31, 19, 58, 12, tzinfo=UTC))
+
+    assert cel is not None
+    assert cel.name == "probak-20260831-195812.jsonl"
+    assert not naplo.exists(), "a jelenlegi napló átnevezéssel indul újra"
+    assert [sor["bemenet"] for sor in proba_naplo_olvas(utvonal=cel)] == ["egy", "ketto"]
+
+
+def test_archival_ures_naplonal_nem_csinal_semmit(tmp_path, monkeypatch):
+    """Üres (vagy nem létező) naplóból nem keletkezik üres archívum: az
+    csak zajt tenne a `naplo/` könyvtárba, és a `--fajl` listája
+    használhatatlanná hízna tőle."""
+    naplo = tmp_path / "probak.jsonl"
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo)
+    assert proba_naplo_archival() is None
+
+    naplo.write_text("   ", encoding="utf-8")
+    assert proba_naplo_archival() is None
+    assert naplo.exists()
+
+
+def test_archival_ugyanabban_a_masodpercben_nem_ir_felul(tmp_path, monkeypatch):
+    naplo = tmp_path / "probak.jsonl"
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo)
+    most = datetime(2026, 8, 31, 19, 58, 12, tzinfo=UTC)
+
+    _naplot_ir("elso")
+    elso = proba_naplo_archival(most)
+    _naplot_ir("masodik")
+    masodik = proba_naplo_archival(most)
+
+    assert elso != masodik
+    assert proba_naplo_olvas(utvonal=elso)[0]["bemenet"] == "elso"
+    assert proba_naplo_olvas(utvonal=masodik)[0]["bemenet"] == "masodik"
+
+
+def test_archivumok_legujabbtol_a_legregebbi_fele(tmp_path, monkeypatch):
+    naplo = tmp_path / "probak.jsonl"
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo)
+    for perc in (1, 5, 3):
+        _naplot_ir("x")
+        proba_naplo_archival(datetime(2026, 8, 31, 19, perc, 0, tzinfo=UTC))
+
+    nevek = [utvonal.name for utvonal in proba_naplo_archivumok()]
+
+    assert nevek == [
+        "probak-20260831-190500.jsonl",
+        "probak-20260831-190300.jsonl",
+        "probak-20260831-190100.jsonl",
+    ]
+
+
+def test_naplo_olvas_archivumbol_olvas_ha_utvonalat_kap(tmp_path, monkeypatch):
+    """A `--fajl` lényege: az archiválás UTÁN is elérhető maradjon, amit
+    épp megőrizni akartunk."""
+    naplo = tmp_path / "probak.jsonl"
+    monkeypatch.setattr(vasarlo_modul, "PROBA_NAPLO_UTVONAL", naplo)
+    _naplot_ir("regi")
+    cel = proba_naplo_archival()
+    _naplot_ir("uj")
+
+    assert [sor["bemenet"] for sor in proba_naplo_olvas()] == ["uj"]
+    assert [sor["bemenet"] for sor in proba_naplo_olvas(utvonal=cel)] == ["regi"]
