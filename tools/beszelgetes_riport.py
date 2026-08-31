@@ -391,6 +391,13 @@ def fordulo_blokk(sor: dict, sorszam: int) -> str:
         ("üzenetkulcs", _e(sor.get("uzenet_kulcs"))),
         ("kapuőr", _e((nyom.get("kapuor") or {}).get("ok") or sor.get("kapuor_ok"))),
         ("rövidzár", _e(nyom.get("rovidzar"))),
+        # ÁLLAPOT ÉS ÁTMENET (ADR-028) — a beszélgetés hol tartott a
+        # forduló után, és hogyan jutott oda. Ez a két adat mondja meg,
+        # hogy egy furcsa válasz rossz értelmezés volt-e, vagy egy jó
+        # értelmezés rossz állapotban.
+        ("állapot", _e(sor.get("allapot"))),
+        ("átmenet", _e(sor.get("atmenet"))),
+        ("prompt-verzió", _e(sor.get("prompt_verzio"))),
     ]
 
     return (

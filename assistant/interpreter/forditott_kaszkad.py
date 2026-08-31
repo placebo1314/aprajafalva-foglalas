@@ -324,6 +324,21 @@ class ForditottKaszkadErtelmezo:
         if eszkoz == "nincs":
             return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
 
+        if eszkoz == "jelolt_valasztas":
+            # A SORSZÁM az egyetlen érdemi mező, és egész számnak kell
+            # lennie. A TARTOMÁNYT nem itt ellenőrizzük: az értelmező nem
+            # tudja, hány jelöltet ajánlottunk fel — azt az orchestrator
+            # tudja, és ő is utasítja vissza a tartományon kívülit
+            # (ugyanaz az elv, mint a sorszámos rövidzárnál).
+            sorszam = parameterek.get("sorszam")
+            if not isinstance(sorszam, int) or sorszam < 1:
+                return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
+            return {
+                "eszkoz": "jelolt_valasztas",
+                "parameterek": {"sorszam": sorszam},
+                "bizonyossag": bizonyossag,
+            }
+
         if eszkoz == "bolt_info":
             return self._bolt_info_kapu(parameterek, nyers, mondat, most, bizonyossag)
 

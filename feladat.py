@@ -9,6 +9,7 @@ python feladat.py seed [--ujra]
 python feladat.py vegigjatszas [--db UTVONAL] [--robusztus] [--mod szoveges|beszelheto|mindketto]
 python feladat.py naplo [--utolso N] [--golden SOR] [--fajl UTVONAL] [--archival]
 python feladat.py riport [--utolso N] [--ki UTVONAL] [--fajl UTVONAL] [--megnyit]
+python feladat.py hangproba [--mondat "..."] [--csak-diagnozis]
 python feladat.py lint
 
 A `golden` a determinisztikus értelmezőt futtatja (`tests/golden/futtato.py`)
@@ -66,6 +67,13 @@ lépésenkénti idő, és a kimenő válasz MINDKÉT módban. A `naplo`
 összesít, ez elmélyed: az egyik megmondja, hogy baj van, a másik azt,
 hogy mi. A `--fajl` itt is archív naplót nyit meg, és a riport fejléce
 kiírja, melyikből készült.
+
+A `hangproba` egyetlen mondatot szintetizál és lejátszik
+(`tools/hangproba.py`) — és ha nem megy, MEGMONDJA, miért: nincs Piper,
+nincs magyar hangmodell, vagy nincs lejátszó program. Három hiány,
+három teendő. Eddig a felolvasás csendben maradt el, mert TTS soha nem
+volt bekötve (a beszélhető mód a SZÖVEGET formázza felolvasásra,
+ADR-023); a csend és a „nincs telepítve" ugyanúgy nézett ki.
 """
 
 from __future__ import annotations
@@ -132,6 +140,10 @@ def riport(argv: list[str]) -> int:
     return fut([sys.executable, "-m", "tools.beszelgetes_riport", *argv])
 
 
+def hangproba(argv: list[str]) -> int:
+    return fut([sys.executable, "-m", "tools.hangproba", *argv])
+
+
 def lint(_: list[str]) -> int:
     for parancs in (
         [sys.executable, "-m", "ruff", "format", "--check", "."],
@@ -151,6 +163,7 @@ FELADATOK = {
     "vegigjatszas": vegigjatszas,
     "naplo": naplo,
     "riport": riport,
+    "hangproba": hangproba,
     "lint": lint,
 }
 

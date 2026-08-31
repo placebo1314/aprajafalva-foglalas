@@ -249,6 +249,12 @@ def test_elozmeny_a_legutobbi_sorokra_vagodik():
 
 
 class _ModGazda:
+    # A felolvasás (ADR-029) a flush végén szólal meg; ez a duplum a
+    # PUFFERELÉST méri, nem a hangot — ezért itt nem csinál semmit.
+    def _felolvas(self, szoveg: str) -> None:
+        self.felolvasva = getattr(self, "felolvasva", [])
+        self.felolvasva.append(szoveg)
+
     """A `VasarloApp` mód-kezelő metódusai Tkinter nélkül — ugyanaz a
     minta, mint az `_ElozmenyGazda`-nál: a metódusokat az osztályról
     kölcsönözzük, a widgeteket nem építjük fel."""

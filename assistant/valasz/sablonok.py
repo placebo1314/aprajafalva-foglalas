@@ -284,6 +284,18 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "Teendő: ollama pull {modell}   (vagy állíts be egy már meglévő "
                 "modellt), majd indítsd újra ezt az ablakot."
             ),
+            # HANGKIMENET (ADR-029). A beszélhető mód eddig CSENDBEN nem
+            # szólalt meg — nem volt bekötve TTS, és ez a felületen nem
+            # látszott. A sor megmondja, mi hiányzik, és hol lehet
+            # megnézni részletesen.
+            "hang_hianyzik": (
+                "A beszélhető mód most csak a képernyőn olvasható — hang nincs: {hianyok}. "
+                "Részletek és teendő: python feladat.py hangproba"
+            ),
+            "hang_kesz": "Felolvasás: {hang}",
+            "hang_hiany_piper": "nincs telepítve a Piper",
+            "hang_hiany_hang": "nincs magyar hangmodell",
+            "hang_hiany_lejatszo": "nincs lejátszó program",
             "indito_folytatom": "Folytatom tartalékággal",
             "indito_kilepek": "Kilépek",
             "nincs_modell_figyelmeztetes": (

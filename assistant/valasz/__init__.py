@@ -534,6 +534,26 @@ def indito_ellenorzes_szoveg(
     )
 
 
+def hang_allapot_szoveg(
+    hianyok, hang_neve: str | None = None, *, nyelv: str = _NYELV_ALAPERTELMEZETT
+) -> str:
+    """A felületen álló egy sor a hangkimenetről (ADR-029).
+
+    Ha minden megvan, azt is kimondja („Felolvasás: hu_HU-anna-medium")
+    — a csendnek ilyenkor MÁS oka van, és ezt tudni kell. Ha hiányzik
+    valami, felsorolja, MI: a „nincs hang" önmagában nem teendő."""
+    sablonok = SABLONOK[nyelv]["rendszersor"]
+    if not hianyok:
+        return sablonok["hang_kesz"].format(hang=hang_neve or "kész")
+    nevek = {
+        "nincs_piper": sablonok["hang_hiany_piper"],
+        "nincs_hang": sablonok["hang_hiany_hang"],
+        "nincs_lejatszo": sablonok["hang_hiany_lejatszo"],
+    }
+    felsorolas = ", ".join(nevek.get(h, h) for h in hianyok)
+    return sablonok["hang_hianyzik"].format(hianyok=felsorolas)
+
+
 def nyugtazo_szoveg(
     felismert_ablak: dict,
     *,

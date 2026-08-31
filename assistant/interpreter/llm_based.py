@@ -76,6 +76,17 @@ ESZKOZOK = [
     "szabad_idopontok",
     "legkozelebbi_idopont",
     "bolt_info",
+    # JELÖLT VÁLASZTÁSA a felajánlott listából (ADR-028). Nem
+    # `assistant/tools/` eszköz, hanem az Ertelmezo protokoll saját
+    # irányítási értéke — ugyanaz a fajta, mint a `visszakerdez`.
+    #
+    # Miért kell: a determinisztikus rövidzár (`assistant/sorszam.py`)
+    # csak a ZÁRT alakokat fogja meg („a másodikat", „az utolsó jó
+    # lesz"). Az „az a fél kilences jó lesz" vagy „a középső legyen"
+    # ugyanúgy a listára hivatkozik, de mintára nem illeszkedik — és
+    # eddig a modellnek NEM VOLT MIVEL kifejeznie, hogy a vásárló
+    # választott: a legjobb, amit tehetett, egy újabb keresés volt.
+    "jelolt_valasztas",
     "foglalas_lemondas",
     "visszakerdez",
     "nincs",
@@ -166,6 +177,11 @@ FORMAT_SEMA = {
                 # adott ("datum_kifejezes", "termek"), amit a vásárlónak
                 # feltéve értelmetlen kérdés lenne — a kötött dekódolás
                 # ezt strukturálisan zárja ki.
+                # A `jelolt_valasztas` mezője: HÁNYADIK a felajánlott
+                # listából. A tartomány-ellenőrzés az orchestratoré (ő
+                # ismeri a jelölteket) — a séma csak azt mondja ki, hogy
+                # egész szám, nem időpont és nem szöveg.
+                "sorszam": {"type": "integer"},
                 "hianyzo_mezo": {
                     "type": "string",
                     "enum": ["bolt_id", "szolgaltatas_id", "foglalasi_kod"],
@@ -198,6 +214,9 @@ Eszközök:
 - foglalas_lemondas: meglévő foglalás lemondása (kell a foglalási kód)
 - visszakerdez: ha egy kritikus adat (jellemzően a bolt) hiányzik a mondatból —
   ekkor NE találj ki boltot vagy dátumot, inkább kérdezz
+- jelolt_valasztas: CSAK akkor, ha a beszélgetésben felajánlottunk időpontokat,
+  és a vásárló ezek KÖZÜL választ („a fél kilences jó lesz", „a középső") —
+  add meg a sorszámot (1-től), ne az időpontot
 - nincs: ha a kérés nem foglalással/bolttal kapcsolatos
 
 Boltok: szundi (altató), ugyifogyi (petárda), torpilla (boldogság).
@@ -293,8 +312,9 @@ KÖTELEZŐ:
 
 Eszközök: szabad_idopontok (időszakban keres) | legkozelebbi_idopont (CSAK a
 "mikor tudok legkorábban/leghamarabb?" kérdésre) | bolt_info (nyitvatartás,
-cím, termék, időtartam, megjelenés) | foglalas_lemondas | visszakerdez | nincs
-(nem foglalási kérés).
+cím, termék, időtartam, megjelenés) | jelolt_valasztas (a felajánlott időpontok
+KÖZÜL választ — sorszámmal) | foglalas_lemondas | visszakerdez | nincs (nem
+foglalási kérés).
 
 A bemenet a beszélgetés utolsó fordulói; a VÁSÁRLÓ UTOLSÓ mondata a kérés.
 "most" (ehhez képest értendő a holnap, a jövő hét): {most}
@@ -324,6 +344,37 @@ PELDAKESZLETEK = {"v1": PELDAK, "v2": PELDAK_V2, "v3": PELDAK}
 # Az ÉLES verzió. A `v1` marad az alapértelmezett mindaddig, amíg az A/B
 # mérés nem mutat javulást — "ha nem javít, ne vezesd be".
 ALAP_PROMPT_VERZIO = "v1"
+
+# KONTEXTUSMÉRET — l. a `num_ctx` melletti megjegyzést a hívásban.
+#
+# A 8192 nem hasraütés: a mai leghosszabb tényleges promptunk (v1
+# rendszerprompt + összefoglaló + négy forduló) 1600 token körül van
+# (`python -m tools.ablak_meres --modell …`), tehát a 8192 négyszeres
+# ráhagyással is elfér — és a `qwen3.5:9b` ezzel a mérés szerint 100%-ban
+# a GPU-n marad (5,6 GB a 8 GB-ból).
+ALAP_NUM_CTX = 8192
+
+_NUM_CTX_KORNYEZETI_VALTOZO = "APRAJAFALVA_NUM_CTX"
+
+
+def kontextus_meret() -> int:
+    """A kért `num_ctx`, környezetből felülírva
+    (`APRAJAFALVA_NUM_CTX`) — a MÉRÉSÉRT: csak így lehet A/B-zni, mi
+    történik, ha a kontextus nem fér a VRAM-ba.
+
+    Értelmetlen érték esetén az alapérték: egy elgépelt környezeti
+    változó ne állítson be némán 0-t (az Ollamánál az „amennyit a modell
+    tud" jelentene, tehát 262144-et — ez a kártyát azonnal kiszorítaná
+    CPU-ra)."""
+    nyers = os.environ.get(_NUM_CTX_KORNYEZETI_VALTOZO)
+    if nyers is None:
+        return ALAP_NUM_CTX
+    try:
+        ertek = int(nyers)
+    except ValueError:
+        return ALAP_NUM_CTX
+    return ertek if ertek > 0 else ALAP_NUM_CTX
+
 
 _PROMPT_KORNYEZETI_VALTOZO = "APRAJAFALVA_PROMPT_VERZIO"
 
@@ -383,6 +434,11 @@ def beszelgetes_szovege(
     sorok = [f"{_BESZELO_CIMKE[ki]}: {szoveg}" for ki, szoveg in elozmenyek if ki in _BESZELO_CIMKE]
     if osszefoglalo:
         sorok.insert(0, osszefoglalo)
+    # AZ ÁLLAPOTSOR LEGELÖL (ADR-028): előbb a helyzet, aztán a
+    # párbeszéd. Fordítva a modell már úgy olvasná a mondatokat, hogy
+    # nem tudja, mire válaszolnak.
+    if kontextus.allapot_sor:
+        sorok.insert(0, kontextus.allapot_sor)
     if not sorok:
         return mondat, False
     sorok.append(f"{_BESZELO_CIMKE[KI_VASARLO]}: {mondat}")
@@ -690,11 +746,24 @@ class LLMErtelmezo:
             "format": FORMAT_SEMA,
             "stream": False,
             "think": False,  # explicit — l. modul docstring
-            "options": (
-                {"temperature": 0}
-                if mintavetel is None
-                else {"temperature": mintavetel.temperature, "seed": mintavetel.seed}
-            ),
+            "options": {
+                # KONTEXTUSMÉRET EXPLICIT (ADR-027). Enélkül a
+                # szolgáltató alapértelmezése dönt, ami VERZIÓFÜGGŐ: az
+                # Ollama 0.33 ma 8192-t ad, korábbi verziók 2048-at vagy
+                # 4096-ot, és az `OLLAMA_CONTEXT_LENGTH` környezeti
+                # változó bármikor felülírja. Egy néma
+                # kontextusméret-változás két bajt okoz: a hosszú
+                # beszélgetés eleje csendben kicsúszik az ablakból, és a
+                # nagyobb KV-cache VRAM-ból is kiszoríthatja a modellt —
+                # a CPU-ra kicsorgó rétegek pedig a strukturált kimenetet
+                # is rontják, nem csak a sebességet.
+                "num_ctx": kontextus_meret(),
+                **(
+                    {"temperature": 0}
+                    if mintavetel is None
+                    else {"temperature": mintavetel.temperature, "seed": mintavetel.seed}
+                ),
+            },
             # A bizonyosság a TÉNYLEGES dekódolási valószínűségekből jön,
             # nem a modell önbevallásából (`bizonyossag_szamol`).
             "logprobs": True,

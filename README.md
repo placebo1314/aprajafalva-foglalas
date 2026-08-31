@@ -46,7 +46,15 @@ python feladat.py vegigjatszas --mod beszelheto   # …felolvasásra szánt kime
 python feladat.py golden --halmaz beszedhelyzetek  # a harmadik golden halmaz
 python feladat.py naplo --archival                 # a próba-napló lezárása, új naplóval
 python -m tools.ablak_meres                        # az előzmény-ablak hosszmérése
+python -m tools.vram_meres --modell qwen3.5:9b     # belefér-e a modell a VRAM-ba
+python feladat.py hangproba                        # felolvasás: megvan-e a Piper és a hang
 ```
+
+**Hangkimenet** (ADR-029): a beszélhető mód 2026-09-01 óta meg is
+szólal, ha van Piper és magyar hangmodell — `python feladat.py
+hangproba` megmondja, van-e, és ha nincs, mit kell telepíteni. Addig a
+mód a képernyőn olvasható marad, és a felület ezt ki is írja: a csend és
+a „nincs telepítve" korábban ugyanúgy nézett ki.
 
 A szöveges fülön **kimeneti mód-kapcsoló** van (M6, hang-előkészítés): a
 `szöveges` a képernyőé, a `beszélhető` az, amit egy felolvasó kapna —
@@ -73,6 +81,9 @@ Környezeti kapcsolók (mind a MÉRÉSÉRT vannak, nem üzemmódként):
 | `APRAJAFALVA_PROMPT_VERZIO` | `v1` / `v2` rendszerprompt (ADR-026) | `v1` |
 | `APRAJAFALVA_ONKONZISZTENCIA` | három futás, szavazás (ADR-021) | ki |
 | `APRAJAFALVA_INDITO_ELLENORZES` | `ki` = nincs modális indítási ellenőrzés | be |
+| `APRAJAFALVA_NUM_CTX` | modell-kontextusméret (ADR-027) | 8192 |
+| `APRAJAFALVA_ALLAPOT_SOR` | állapotsor a promptban (ADR-028) | be |
+| `APRAJAFALVA_PIPER` / `APRAJAFALVA_PIPER_HANG` | Piper és a magyar hang útvonala (ADR-029) | automatikus keresés |
 
 ## Fejlesztői környezet
 

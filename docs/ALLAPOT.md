@@ -1,55 +1,46 @@
-# Állapot — 2026-08-31 (frissítve: CSÚSZÓ ELŐZMÉNY-ABLAK — ADR-025;
-VERZIÓZOTT RENDSZERPROMPT és A/B — ADR-026; beszédhelyzetek golden
-halmaz; modell-összehasonlítás; írásbeli megerősítés; napló-archiválás
-és indítási ellenőrzés. Előzőleg: a bolt nem alternatíva — ADR-024)
+# Állapot — 2026-09-01 (frissítve: EXPLICIT KONTEXTUSMÉRET — ADR-027;
+ÁLLAPOTVEZÉRELT DISZPÉCSER — ADR-028; HANGKIMENET PIPERREL — ADR-029;
+`jelolt_valasztas` a modell szerződésében; nagy modellek megmérve.
+Előzőleg: csúszó előzmény-ablak — ADR-025, verziózott prompt — ADR-026)
 
-**A 2026-08-31-i kör hat mondata:**
+**A 2026-09-01-i kör hat mondata:**
 
-1. **A prompt nem nő tovább a beszélgetéssel — és mégsem felejt.** Az
-   utolsó négy forduló szó szerint megy át, a régebbiek helyett egyetlen
-   determinisztikusan előállított összefoglaló sor (bolt, szolgáltatás,
-   ELENGEDETT mezők, eddig keresett napok, sikertelen keresések száma).
-   Húsz fordulós beszélgetésen a beszélgetés-rész **74,5%-kal rövidül**,
-   a pontosság rétegenként **változatlan** (90,2%) — még `ablak=1`-gyel
-   is (ADR-025, `docs/ABLAK_MERES.md`).
-2. **A prompt-átépítés MEGBUKOTT a mérésen, ezért nem vezettük be.** A
-   „megkötések elöl, kevés de sokféle példa" változat 90,2% → **75,5%**,
-   és a veszteség pontosan azokon a rétegeken jelentkezett, amiknek a
-   példáját kivettük (tájszólás 100→50, töredékes 100→50, szleng
-   100→33). Egy harmadik verzió (tömör szerkezet + TELJES példakészlet)
-   szétválasztotta a két hatást: **a példák elhagyása −13,7 pont, a
-   szerkezet átrendezése −1,0 pont (zaj)**. Marad a v1 (ADR-026,
-   `docs/PROMPT_AB.md`).
-3. **A rövidebb prompt NEM lett gyorsabb.** 48%-kal kevesebb
-   rendszerprompt mellett a p50 3,68 s → 3,80 s. Ezen a méreten a
-   válaszidőt a generálás viszi, nem a prompt beolvasása — a tömörítés
-   ma nem latencia-eszköz. Ezt eddig hittük; most mértük.
-4. **A modell-összehasonlítás megerősítette a jelenlegi választást.** A
-   `qwen3:8b` (Apache-2.0, 8 GB-ba fér) a nyelvi halmazon **71,6%** a
-   `qwen3.5:9b` 90,2%-ával szemben, a beszédhelyzeteken 82,6% vs. 95,7%
-   — és **több VRAM-ot foglal** (5900 vs. 5368 MB), a kisebb letöltés
-   ellenére (`docs/MODELL_OSSZEHASONLITAS.md`).
-5. **Az írásbeli foglalás eddig nem volt befejezhető — most az.** A fej
-   nélküli végigjátszás új szakasza (gombnyomás nélkül, végig írásban)
-   megfogta: az „igen, foglald le" mondatból ÚJ KERESÉS lett, és a
-   folyamatban lévő megerősítés a kiválasztott időponttal együtt eltűnt.
-   Modellel ÉS tartalékágon egyaránt, tehát nem modellhiba: az
-   állapotgép nem kérdezte meg, hogy éppen megerősítésre vár-e. A
-   javítás determinisztikus rövidzár a modell előtt
-   (`assistant/megerosites.py`), ugyanaz az elv, mint a sorszámnál.
-6. **A véletlen tartalékági próba nehezebb lett.** Indításkor modális
-   ablak áll meg, ha nincs modell / nem fut az Ollama / nincs letöltve a
-   modell — három ok, három teendő, két gomb („Folytatom tartalékággal"
-   / „Kilépek"). A napló fordulónként rögzíti a modellt és a
-   PROMPT-VERZIÓT, a riport fejlécében pedig piros sáv jelenik meg, ha a
-   beszélgetésben egyetlen modellhívás sem volt.
+1. **A „csendes CPU-visszaesés" feltevés MEGDŐLT ezen a gépen.** Az
+   Ollama 0.33.2 alapértelmezése épp 8192, a modell 100%-ban a GPU-n
+   fut (5368 MB a 8188-ból) — kiszervezés nem volt. Az explicit
+   `num_ctx` ezért ma nem javít semmit; attól még helyes, mert a
+   szolgáltatói alapértelmezés nem a miénk (ADR-027).
+2. **A kiszervezés ára IDŐ, nem pontosság — legalábbis 36%-ig.**
+   `num_ctx=65536`-tal a modell 36%-a a CPU-ra került: a válaszidő
+   +35%, a pontosság viszont KÉT futásból egyszer 86,3%, egyszer
+   91,2% — vagyis a romlás nem reprodukálódott. A séma-kényszerítés
+   végig tartott: JSON parse-hiba egyetlen futásban sem volt
+   (`docs/NUM_CTX_ES_VRAM.md`).
+3. **A `temperature: 0` nem jelent futásonkénti azonosságot.** Ugyanaz
+   a kód, ugyanaz a modell, ugyanaz a beállítás 1-2 esetnyit ingadozik
+   — ezért kell két futás egy 4 pontos különbséghez. Ez a kör
+   legfontosabb módszertani tanulsága.
+4. **A nagy modellek nem hoztak áttörést.** `gemma3:12b`: 88,2%, de
+   **kétszer lassabb** (p50 7,39 s vs. 3,67 s), 41%-os kiszervezéssel.
+   `qwen2.5:14b`: 70,6%, 8,61 s. Marad a `qwen3.5:9b`.
+5. **A modell eddig NEM TUDTA kifejezni, hogy a vásárló a felajánlott
+   listából választott.** Nem prompt-hiba volt, hanem szerződéshiány: a
+   `{eszkoz, parameterek}` alakban nem volt rá érték. Az új
+   `jelolt_valasztas` (sorszámmal, két determinisztikus kapuval) ezt
+   pótolja — a „fél kilences jó lesz" típusú mondatok 0/4-ről 3/4-re
+   javultak (ADR-028, `docs/ALLAPOTSOR_MERES.md`).
+6. **A felolvasás soha nem szólalt meg — mert TTS nem is volt bekötve.**
+   A beszélhető mód (ADR-023) a SZÖVEGET formázta felolvasásra. Most van
+   hangkimenet (Piper, `assistant/hang.py`), `python feladat.py
+   hangproba` paranccsal, és ami a fontosabb: ha bármi hiányzik, a
+   rendszer MEGMONDJA — három hiány, három teendő —, a felület pedig a
+   mód-kapcsoló mellett kiírja (ADR-029).
 
-**Új golden halmaz: BESZÉDHELYZETEK** (23 eset, 9 réteg) — nem az
-számít, HOGYAN mondja a vásárló, hanem MILYEN HELYZETBEN: nem magának
-foglal, feltételesen tervez, összehasonlít, korábbi foglalásra
-hivatkozik azonosítás nélkül, két időpontot kér, elköszön, meggondolja
-magát, közbekérdez, szokatlan igét használ. `qwen3.5:9b`: **95,7%**,
-determinisztikus alapvonal 69,6% (`docs/BESZEDHELYZETEK_MERES.md`).
+**Az állapotgép mostantól kimondott:** hat állapot (`INDULAS`,
+`HIANYZO_ADAT`, `AJANLAT_VAR`, `MEGEROSITES_VAR`, `KESZ`, `KIUT`),
+kódban rögzített átmenetekkel, a promptba tett egysoros helyzetleírással
+és fordulónkénti naplózással. A `python feladat.py naplo` külön blokkban
+összesíti, mely állapotokban áll meg a beszélgetés.
 
 **A 2026-08-30-i kör ÖTÖDIK mondata (az ADR-024 köre):**
 
@@ -136,9 +127,9 @@ költöztek.
 
 ## Konkrét számok
 
-- **Tesztek:** 912 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`). A 2026-08-31-i kör négy új tesztfájlt hozott: **`test_ablak.py`** (a csúszó előzmény-ablak — rövidít, NEM felejt, és nem szivárogtat időpontot), **`test_indito_ellenorzes.py`** (a három hiány-ok és a hozzájuk tartozó három teendő), **`test_megerosites.py`** (írásbeli igen/nem — a felismerés SZŰK: „igen, de inkább szerdán" nem igenlés), **`test_beszedhelyzetek_halmaz.py`** (a harmadik golden halmaz szerkezeti őrzése).
+- **Tesztek:** 952 zöld + 1 `xfail` (`tests/egyseg/test_alapsema.py::test_cross_org_reference_ma_not_bukik_el`, `strict=True`). A 2026-08-31-i kör négy új tesztfájlt hozott: **`test_ablak.py`** (a csúszó előzmény-ablak — rövidít, NEM felejt, és nem szivárogtat időpontot), **`test_indito_ellenorzes.py`** (a három hiány-ok és a hozzájuk tartozó három teendő), **`test_megerosites.py`** (írásbeli igen/nem — a felismerés SZŰK: „igen, de inkább szerdán" nem igenlés), **`test_beszedhelyzetek_halmaz.py`** (a harmadik golden halmaz szerkezeti őrzése). A 2026-09-01-i kör három továbbit: **`test_allapotgep.py`** (zárt átmenetek, állapot a válaszból, az állapotsor mint helyzetleírás), **`test_hang.py`** (a felolvasás diagnózisa — sosem szólal meg és nem telepít semmit), plusz az orchestrator állapot- és `jelolt_valasztas`-tesztjei.
 - **Migrációk:** 4 (`0001_alapsema`, `0002_muszak_slot`, `0003_muszak_sablon`, `0004_bolt_szolgaltatas_tudas` — bolti tudás mezők, lásd lent). A `bolt_info` eszköz sémája **v3**-ra bővült (`pultosok`) — ez nem migráció: a nevek az `alkalmazott` táblából jönnek, ami az alapséma óta megvan.
-- **ADR-ek:** 25 dokumentum (001–014, 016–026) + 1 sablon. Ebből **24
+- **ADR-ek:** 28 dokumentum (001–014, 016–029) + 1 sablon. Ebből **27
   elfogadott**, **1 felülírva**: az ADR-016 (kaszkád sorrendje) —
   felülírta az **ADR-018**, amelynek első, elvető változata 2026-08-22-én
   született, és 2026-08-23-án ÁTFORDULT. Az **ADR-019** az ADR-018-at

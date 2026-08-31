@@ -10,9 +10,14 @@ from __future__ import annotations
 
 import time
 
+from assistant import allapotgep
 from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
-from assistant.orchestrator import BizonyossagKuszobok, Orchestrator, kovetkezo_kontextus
+from assistant.orchestrator import (
+    BizonyossagKuszobok,
+    Orchestrator,
+    kovetkezo_kontextus,
+)
 from assistant.tools.katalogus import BOLT_SLUGOK, MINDEGY
 from core.repo import foglalas_repo, migracio, muszak_repo, torzsadat_repo
 from core.slot import generator
@@ -28,9 +33,13 @@ class _ScriptedErtelmezo:
     def __init__(self, valaszok: list[dict]):
         self._valaszok = list(valaszok)
         self.hivasok: list[tuple[str, dict]] = []
+        self.utolso_kontextus: ErtelmezesKontextus | None = None
 
     def ertelmez(self, mondat: str, *, most: str, kontextus: ErtelmezesKontextus) -> dict:
         self.hivasok.append((mondat, dict(kontextus.megorzott_parameterek)))
+        # A TELJES kontextus is megmarad — az állapotsor (ADR-028)
+        # ellenőrzéséhez, ami nem a megőrzött paraméterek között utazik.
+        self.utolso_kontextus = kontextus
         return self._valaszok.pop(0)
 
 
@@ -1266,6 +1275,121 @@ def test_sorszamos_hivatkozas_utan_a_megerosites_ugyanoda_vezet(tmp_path):
 
     assert vegleges["tipus"] == "visszaigazolas"
     assert vegleges["foglalasi_kod"]
+
+
+# --- ÁLLAPOTVEZÉRELT DISZPÉCSER (ADR-028) ----------------------------
+
+
+def test_az_allapot_a_valaszbol_kovetkezik_es_naplozhato(tmp_path):
+    """Az állapot nem a válasz mezője (az a felület szerződése), hanem
+    megfigyelhetőség — ugyanaz a minta, mint az `utolso_ertelmezes`."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    valasz = orch.fordulo("s1", "mennék valamikor", _MOST)
+
+    assert "allapot" not in valasz, "a válasz szerződése nem változik"
+    assert orch.utolso_allapot == {
+        "elotte": allapotgep.INDULAS,
+        "utana": allapotgep.HIANYZO_ADAT,
+        "valtozott": True,
+    }
+
+
+def test_az_ajanlat_utan_az_allapotsor_a_jeloltek_szamat_mondja(tmp_path):
+    """Ez az egész ADR-028 lényege: a modell eddig nem tudta, hogy épp
+    felajánlottunk három időpontot, ezért egy csupasz „a második"
+    kétértelmű volt."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx)
+
+    sor = orch.allapot_sor("s1")
+
+    assert sor is not None
+    assert f"{len(ajanlat['jeloltek'])} időpontot" in sor
+
+
+def test_az_allapotsor_eljut_az_ertelmezohoz(tmp_path):
+    """A kontextuson utazik (`ErtelmezesKontextus.allapot_sor`), nem a
+    mondatba fűzve — a mondat a vásárlóé marad."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    orch.fordulo("s1", "az a fél kilences jó lesz", _MOST)
+
+    kontextus = ertelmezo.utolso_kontextus
+    assert kontextus.allapot_sor is not None
+    assert "AJANLAT_VAR" in kontextus.allapot_sor
+
+
+def test_megerosites_utan_a_kesz_allapot_all_be(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx)
+    orch.fordulo("s1", "az elsőt kérem", _MOST)
+
+    orch.megerosit("s1", "a" * 64)
+
+    assert orch._allapot("s1").allapot == allapotgep.KESZ
+
+
+def test_a_kozbevetett_kerdes_nem_veszti_el_az_ajanlatot(tmp_path):
+    """A vásárló a foglalás közepén mást kérdez — a felajánlott
+    időpontokra utána is lehet hivatkozni."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "nincs", "parameterek": {}}])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    orch.fordulo("s1", "amúgy milyen idő lesz?", _MOST)
+
+    assert orch._allapot("s1").allapot == allapotgep.AJANLAT_VAR
+
+
+def test_jelolt_valasztas_a_modelltol(tmp_path):
+    """A modell kimondhatja, hogy a vásárló a LISTÁBÓL választott —
+    erre eddig nem volt mivel (a legjobb, amit tehetett, egy újabb
+    keresés volt)."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": 2}}])
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "az a fél kilences jó lesz", _MOST)
+
+    assert valasz["tipus"] == "megerositest_ker"
+    assert valasz["slot_id"] == ajanlat["jeloltek"][1]["slot_id"]
+
+
+def test_jelolt_valasztas_csak_ajanlat_utan(tmp_path):
+    """Ha nincs mire hivatkozni, a „harmadik" bármi lehet — ilyenkor
+    kérdezünk, nem választunk."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": 2}}])
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    valasz = orch.fordulo("s1", "a másodikat", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
+
+
+def test_jelolt_valasztas_tartomanyon_kivul_nem_kerekit(tmp_path):
+    """Egy elrontott választás nem visszakérdezést okoz, hanem MÁS
+    IDŐPONTOT foglal le — a negyedikre ezért nem kerekítünk."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": 9}}])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "a kilencediket", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
 
 
 # --- ÍRÁSBELI IGEN / NEM a megerősítés-kérdésre ----------------------

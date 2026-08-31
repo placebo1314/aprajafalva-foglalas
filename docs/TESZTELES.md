@@ -336,12 +336,31 @@ Amit ebből leolvashatsz:
   `visszakerdezes` lesz, pedig a mondat egyértelműnek tűnt.
 - **`válasz`** — `ajanlat`, `visszakerdezes`, `elutasitas`, `kiut`,
   `eszkoz_hiba` vagy `sikeres`.
+- **`allapot` és `atmenet`** — hol tartott a beszélgetés a forduló
+  után, és hogyan jutott oda (ADR-028: `INDULAS`, `HIANYZO_ADAT`,
+  `AJANLAT_VAR`, `MEGEROSITES_VAR`, `KESZ`, `KIUT`). Egy furcsa
+  menetről eddig csak a válaszok sorrendjéből lehetett kitalálni, hol
+  tévedt el.
 - **`modell` és `prompt_verzio`** — fordulónként rögzítve (2026-08-31
   óta). A `réteg` csak azt mondja meg, KI oldotta meg a fordulót; ez
   azt, hogy a tartalék azért dolgozott-e, mert nem volt konfigurált
   modell, vagy mert a modell nem tudta megoldani. Két különböző baj,
   két különböző teendő. A `python feladat.py naplo` külön blokkban
   összesíti.
+
+#### A felolvasás kipróbálása
+
+A beszélhető mód 2026-09-01 óta meg is szólal — ha van mivel:
+
+```
+python feladat.py hangproba                 # egy mondat, végig
+python feladat.py hangproba --csak-diagnozis
+```
+
+Ha nincs Piper vagy nincs magyar hangmodell, a parancs megmondja, MI
+hiányzik és mit kell beírni; a felület pedig a mód-kapcsoló mellett
+kiírja ugyanezt. Korábban a felolvasás CSENDBEN maradt el (TTS nem volt
+bekötve), és a csend ugyanúgy nézett ki, mint a „nincs telepítve".
 
 #### A napló lezárása és az archívum
 

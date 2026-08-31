@@ -106,6 +106,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 import tkinter as tk
 import webbrowser
@@ -116,6 +117,7 @@ from tkinter import ttk
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from assistant import hang  # noqa: E402
 from assistant import valasz as valasz_szoveg  # noqa: E402
 from assistant.interpreter import (  # noqa: E402
     KI_RENDSZER,
@@ -225,6 +227,7 @@ def _proba_naplo_ir(
     egyetertes: int | None = None,
     modell: str | None = None,
     prompt_verzio: str | None = None,
+    allapot: dict | None = None,
     nyomkovetes: dict | None = None,
 ) -> None:
     """Egy fordulót ír a `naplo/probak.jsonl`-be — l. modul docstring,
@@ -285,6 +288,16 @@ def _proba_naplo_ir(
         # hiba, a másik mérési eredmény.
         "modell": modell,
         "prompt_verzio": prompt_verzio,
+        # ÁLLAPOT ÉS ÁTMENET (ADR-028). A `valasz_tipus` megmondja, mi
+        # történt EBBEN a fordulóban; az állapot azt, hogy a beszélgetés
+        # hol tartott előtte és hova jutott. Egy furcsa menetről eddig
+        # csak a válaszok sorrendjéből lehetett kitalálni, hol tévedt el.
+        "allapot": (allapot or {}).get("utana"),
+        "atmenet": (
+            f"{allapot['elotte']} -> {allapot['utana']}"
+            if allapot and allapot.get("valtozott")
+            else None
+        ),
         "valaszido_masodperc": (
             None if valaszido_masodperc is None else round(valaszido_masodperc, 3)
         ),
@@ -814,6 +827,21 @@ class VasarloApp(tk.Tk):
                 side="left"
             )
 
+        # HANGKIMENET ÁLLAPOTA (ADR-029) — a kapcsoló MELLETT, mert ott
+        # merül fel a kérdés. A beszélhető mód eddig CSENDBEN nem
+        # szólalt meg: nem volt bekötve TTS, és a felületen ez sehol nem
+        # látszott. A csend és a „nincs telepítve" ugyanúgy néz ki.
+        self.hang_allapot = hang.allapot()
+        ttk.Label(
+            mod_sor,
+            text=valasz_szoveg.hang_allapot_szoveg(
+                self.hang_allapot.hianyok,
+                self.hang_allapot.hang.stem if self.hang_allapot.hang else None,
+            ),
+            foreground=("#7a3b00" if self.hang_allapot.hianyok else "#2d6a2d"),
+            wraplength=520,
+        ).pack(side="left", padx=(16, 0))
+
         self.szo_naplo = tk.Text(tab, height=18, wrap="word", state="disabled")
         self.szo_naplo.pack(fill="both", expand=True)
 
@@ -994,6 +1022,35 @@ class VasarloApp(tk.Tk):
         szoveg = valasz_szoveg.fordulo_szoveg(reszek, self._mod())
         if szoveg:
             self._naplo_ir("Rendszer", szoveg)
+            self._felolvas(szoveg)
+
+    def _felolvas(self, szoveg: str) -> None:
+        """A megszólalás FELOLVASÁSA, ha van mivel (ADR-029).
+
+        Három dolog kell hozzá, és mindhárom hiányozhat: Piper, magyar
+        hangmodell, lejátszó. Ha bármelyik hiányzik, NEM csendben marad
+        el — az állapotsor a kapcsoló mellett kiírja, mi hiányzik, és
+        egy hiba az üzenetsorba kerül, nem a semmibe.
+
+        **Külön szálon**, mert a lejátszás blokkol: az eseményhurkon
+        futtatva a felület a mondat végéig megfagyna. A szál `daemon`,
+        tehát az ablak bezárása nem várja meg a mondat végét."""
+        if self._mod() != valasz_szoveg.MOD_BESZELHETO or not self.hang_allapot.rendben:
+            return
+
+        def dolgozik() -> None:
+            try:
+                hang.felolvas(szoveg)
+            except (RuntimeError, OSError) as exc:
+                # A hibaszöveget MOST kell kinyerni: a Python az
+                # `except ... as exc` nevet a blokk végén törli, tehát a
+                # később lefutó lambda már nem érné el.
+                uzenet = f"Felolvasási hiba: {exc}"
+                # A felület szálán kell megjeleníteni (Tkinter nem
+                # szálbiztos), ezért `after`-rel tesszük vissza.
+                self.after(0, lambda: self.szo_uzenet.config(text=uzenet))
+
+        threading.Thread(target=dolgozik, daemon=True).start()
 
     def _naplo_ir(self, ki_be: str, szoveg: str) -> None:
         self.szo_naplo.config(state="normal")
@@ -1087,6 +1144,7 @@ class VasarloApp(tk.Tk):
             egyetertes=getattr(self.orchestrator.ertelmezo, "utolso_egyetertes", None),
             modell=aktiv_modell_neve(),
             prompt_verzio=getattr(self._llm_reteg(), "utolso_prompt_verzio", None),
+            allapot=self.orchestrator.utolso_allapot,
             nyomkovetes=self._nyomkovetes(valasz, hivasok_elotte),
         )
         self._szoveges_valasz_kezel(valasz)

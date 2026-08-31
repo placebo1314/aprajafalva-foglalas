@@ -4,15 +4,34 @@
 **Értelmező:** `forditott` (ADR-018) · **Ablak:** 4 forduló (ADR-025) ·
 **Prompt:** v1 · `temperature 0`, `think: false`, Ollama
 
+> **2026-09-01-i kiegészítés.** A mezőny két nagy modellel bővült
+> (`gemma3:12b`, `qwen2.5:14b`), amik a 8 GB-os kártyán biztosan
+> kiszerveznek — a számok és a kiszervezés hatása:
+> `docs/NUM_CTX_ES_VRAM.md`. Az összefoglaló négy modellre:
+>
+> | modell | kiszervezés | pontosság | golden p50 |
+> |---|---|---|---|
+> | **`qwen3.5:9b`** (éles) | nincs | **90,2%** | **3,67 s** |
+> | `gemma3:12b` | 41% CPU | 88,2% | 7,39 s |
+> | `qwen3:8b` | nincs | 71,6% | 3,33 s |
+> | `qwen2.5:14b` | 41% CPU | 70,6% | 8,61 s |
+>
+> A döntés nem változott: marad a `qwen3.5:9b`. A `gemma3:12b`
+> meglepően közel került pontosságban (−2,0 pont), de kétszer lassabb —
+> hangcsatornán ez a különbség dönt, nem a két pont.
+
 ## Miért ez a kihívó
 
 A jelenlegi éles modell a `qwen3.5:9b`. A kihívónak három feltételt
 kellett teljesítenie:
 
-1. **Beleférjen 8 GB VRAM-ba.** Ez zárta ki a `gemma3:12b`-t (8,15 GB) és
-   a `qwen2.5:14b`-t (8,99 GB): a 14B-osztály kiszorulna a VRAM-ból, és
-   a CPU-ra kicsorgó rétegek a válaszidőt sokszorosára növelnék — az nem
-   modell-összehasonlítás lenne, hanem hardver-mérés.
+1. **Beleférjen 8 GB VRAM-ba.** Ez zárta ki elsőre a `gemma3:12b`-t
+   (8,15 GB) és a `qwen2.5:14b`-t (8,99 GB): a CPU-ra kicsorgó rétegek
+   a válaszidőt megnövelik, tehát az nem tiszta modell-összehasonlítás,
+   hanem hardver-mérés is egyben. **2026-09-01-én mégis megmértük
+   mindkettőt** — épp azért, hogy a „biztosan rosszabb" ne feltevés
+   maradjon: a számok fent, a kiszervezés hatásának elemzése a
+   `docs/NUM_CTX_ES_VRAM.md`-ben.
 2. **Apache-2.0 licenc**, mert az ADR-013 szerint az ELSŐDLEGES modell
    csak ilyen lehet. Ez zárta ki a `llama3.1:8b`-t (Llama Community
    License) — az legfeljebb ellenőrző jelölt lehetne, éles út nem.

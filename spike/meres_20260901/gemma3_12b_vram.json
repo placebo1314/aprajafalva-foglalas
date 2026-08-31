@@ -1,0 +1,17 @@
+{
+  "modell": "gemma3:12b",
+  "kert_num_ctx": 8192,
+  "tenyleges_kontextus": 8192,
+  "meret_byte": 8920068258,
+  "vram_byte": 5283040460,
+  "gpu_arany": 0.5922645777135038,
+  "idok": [
+    4.974496499999077,
+    3.987973700001021
+  ],
+  "gpu": {
+    "nev": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "osszes_mb": 8188,
+    "hasznalt_mb": 6313
+  }
+}

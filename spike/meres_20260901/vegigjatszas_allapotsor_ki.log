@@ -1,0 +1,329 @@
+Adatbázis: C:\Users\kenny\Desktop\Aprajafalva\aprajafalva-foglalas\aprajafalva.db
+Modell: qwen3.5:9b (éles út)
+Beosztás:  {'elso_nap': '2026-12-21', 'utolso_nap': '2026-12-27', 'boltok': ['Szundi', 'Törpilla', 'Ügyifogyi']}
+Indító sor: A demóadat 2026-12-21 – 2026-12-27 hetére szól, beosztás ezekben a boltokban van: Szundi, Törpilla, Ügyifogyi. A mai nap (2026-08-31) kívül esik ezen, ezért a „ma” ezen a felületen 2026-12-21-t jelent — nem kell dátumot fejben tartanod. Értelmező: qwen3.5:9b (ha nem fut, csendben szabály-alapú).
+Értelmező: ForditottKaszkadErtelmezo
+KIMENETI MÓD: szoveges
+"most" a szöveges úton: 2026-12-21T00:00:00Z
+
+========================================================================
+# vagylagos
+
+  > Petárdázni szeretnék.
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'ugyifogyi', 'datum_tol': '2026-12-21T00:00:00Z', 'datum_ig': '2026-12-27T23:59:59Z', 'napszak': 'barmikor'}
+    | Te: Petárdázni szeretnék.
+    | Rendszer: Mindjárt megmondom, mi van a(z) Ügyifogyi boltban, 2026-12-21 és 2026-12-27 között…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-21 08:00–08:05 (UTC)', '2026-12-21 08:05–08:10 (UTC)', '2026-12-21 08:10–08:15 (UTC)']
+
+  > jövő héten, vagy 28-án tudok menni?
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'ugyifogyi', 'datum_tol': '2026-12-28T00:00:00Z', 'datum_ig': '2027-01-03T23:59:59Z', 'napszak': 'barmikor'}
+    | Te: jövő héten, vagy 28-án tudok menni?
+    | Rendszer: Egy pillanat, körülnézek a(z) Ügyifogyi boltban, 2026-12-28 és 2027-01-03 között…
+    | Rendszer: Erre az időszakra a bolt még nem hirdetett meg időpontokat — ez nem azt jelenti, hogy megtelt. Próbáld később, vagy nézz meg másik boltot.
+
+========================================================================
+# üres szándék
+
+  > Valamikor mennék, ha lehet.
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: Valamikor mennék, ha lehet.
+    | Rendszer: Ehhez még kellene tudnom: melyik boltba szeretnél menni.
+    gombok:      ['Szundi', 'Törpilla', 'Ügyifogyi']
+
+========================================================================
+# feltételes
+
+  > Szeretnék időpontot a Szundiba.
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'szundi', 'datum_tol': '2026-12-21T00:00:00Z', 'datum_ig': '2026-12-27T23:59:59Z', 'napszak': 'barmikor', 'szolgaltatas_id': 'altato'}
+    | Te: Szeretnék időpontot a Szundiba.
+    | Rendszer: Mindjárt megmondom, mi van a(z) Szundi boltban, 2026-12-21 és 2026-12-27 között…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-21 13:00–13:30 (UTC)', '2026-12-21 14:00–14:30 (UTC)', '2026-12-21 15:00–15:30 (UTC)']
+
+  > ha van hely szerdán, akkor az jó, ha nincs, csütörtök
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'szundi', 'datum_tol': '2026-12-23T00:00:00Z', 'datum_ig': '2026-12-24T23:59:59Z', 'napszak': 'barmikor', 'szolgaltatas_id': 'altato'}
+    | Te: ha van hely szerdán, akkor az jó, ha nincs, csütörtök
+    | Rendszer: Egy pillanat, körülnézek a(z) Szundi boltban, 2026-12-23 és 2026-12-24 között…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-23 13:00–13:30 (UTC)', '2026-12-23 14:00–14:30 (UTC)', '2026-12-23 15:00–15:30 (UTC)']
+
+========================================================================
+# indoklás mellékmondattal
+
+  > Azért kellene délelőtt, mert délután dolgozom.
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi'], 'napszak': 'delelott'}
+    | Te: Azért kellene délelőtt, mert délután dolgozom.
+    | Rendszer: Ehhez még kellene tudnom: melyik boltba szeretnél menni.
+    gombok:      ['Szundi', 'Törpilla', 'Ügyifogyi']
+
+========================================================================
+# kettős kérés
+
+  > A Törpillánál mikor van nyitva, és tudok-e ma menni?
+    réteg:       llm
+    eszköz:      bolt_info
+    paraméterek: {'bolt_id': 'torpilla', 'mit': 'nyitvatartas', 'datum': '2026-12-21'}
+    | Te: A Törpillánál mikor van nyitva, és tudok-e ma menni?
+    | Rendszer: Nyitvatartás: H-Szo 08:00-16:00
+
+========================================================================
+# visszavonás
+
+  > Petárdázni szeretnék kedden.
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'ugyifogyi', 'datum_tol': '2026-12-22T00:00:00Z', 'datum_ig': '2026-12-22T23:59:59Z', 'napszak': 'barmikor'}
+    | Te: Petárdázni szeretnék kedden.
+    | Rendszer: Nézem, mi van a(z) Ügyifogyi boltban, 2026-12-22…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-22 08:00–08:05 (UTC)', '2026-12-22 08:05–08:10 (UTC)', '2026-12-22 08:10–08:15 (UTC)']
+
+  > és jövő héten péntek?
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'ugyifogyi', 'datum_tol': '2027-01-01T00:00:00Z', 'datum_ig': '2027-01-01T23:59:59Z', 'napszak': 'barmikor'}
+    | Te: és jövő héten péntek?
+    | Rendszer: Mindjárt megmondom, mi van a(z) Ügyifogyi boltban, 2027-01-01…
+    | Rendszer: Erre az időszakra a bolt még nem hirdetett meg időpontokat — ez nem azt jelenti, hogy megtelt. Próbáld később, vagy nézz meg másik boltot.
+
+  > mégsem, inkább maradjunk a keddnél
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'ugyifogyi', 'datum_tol': '2026-12-22T00:00:00Z', 'datum_ig': '2026-12-22T23:59:59Z', 'napszak': 'barmikor'}
+    | Te: mégsem, inkább maradjunk a keddnél
+    | Rendszer: Mindjárt megmondom, mi van a(z) Ügyifogyi boltban, 2026-12-22…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-22 08:15–08:20 (UTC)', '2026-12-22 08:20–08:25 (UTC)', '2026-12-22 08:25–08:30 (UTC)']
+
+========================================================================
+# bizonytalan
+
+  > Szundihoz mennék.
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'szundi', 'datum_tol': '2026-12-21T00:00:00Z', 'datum_ig': '2026-12-27T23:59:59Z', 'napszak': 'barmikor', 'szolgaltatas_id': 'altato'}
+    | Te: Szundihoz mennék.
+    | Rendszer: Máris nézem, mi van a(z) Szundi boltban, 2026-12-21 és 2026-12-27 között…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-22 13:00–13:30 (UTC)', '2026-12-22 14:00–14:30 (UTC)', '2026-12-22 15:00–15:30 (UTC)']
+
+  > talán jövő héten, még nem tudom biztosan
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'szundi', 'datum_tol': '2026-12-28T00:00:00Z', 'datum_ig': '2027-01-03T23:59:59Z', 'napszak': 'barmikor', 'szolgaltatas_id': 'altato'}
+    | Te: talán jövő héten, még nem tudom biztosan
+    | Rendszer: Máris nézem, mi van a(z) Szundi boltban, 2026-12-28 és 2027-01-03 között…
+    | Rendszer: Erre az időszakra a bolt még nem hirdetett meg időpontokat — ez nem azt jelenti, hogy megtelt. Próbáld később, vagy nézz meg másik boltot.
+
+========================================================================
+# köznyelvi töltelék
+
+  > Törpillához mennék.
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'torpilla', 'datum_tol': '2026-12-21T00:00:00Z', 'datum_ig': '2026-12-27T23:59:59Z', 'napszak': 'barmikor', 'szolgaltatas_id': 'nagy_orom'}
+    | Te: Törpillához mennék.
+    | Rendszer: Nézem, mi van a(z) Törpilla boltban, 2026-12-21 és 2026-12-27 között…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-21 07:00–07:10 (UTC)', '2026-12-21 07:00–07:20 (UTC)', '2026-12-21 07:00–07:15 (UTC)']
+
+  > hát izé, valamikor a jövő hét elején lenne jó
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    paraméterek: {'bolt_id': 'torpilla', 'datum_tol': '2026-12-28T00:00:00Z', 'datum_ig': '2027-01-03T23:59:59Z', 'napszak': 'barmikor', 'szolgaltatas_id': 'nagy_orom'}
+    | Te: hát izé, valamikor a jövő hét elején lenne jó
+    | Rendszer: Egy pillanat, körülnézek a(z) Törpilla boltban, 2026-12-28 és 2027-01-03 között…
+    | Rendszer: Erre az időszakra a bolt még nem hirdetett meg időpontokat — ez nem azt jelenti, hogy megtelt. Próbáld később, vagy nézz meg másik boltot.
+
+========================================================================
+# zárt kérdés + gombnyomás + sorszámos választás
+
+  > szeretnék időpontot holnapra
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi'], 'datum_tol': '2026-12-22T00:00:00Z', 'datum_ig': '2026-12-22T23:59:59Z'}
+    | Te: szeretnék időpontot holnapra
+    | Rendszer: Ehhez még kellene tudnom: melyik boltba szeretnél menni.
+    gombok:      ['Szundi', 'Törpilla', 'Ügyifogyi']
+
+  > torpilla
+    réteg:       szabaly:zart_valasz
+    eszköz:      szabad_idopontok
+    paraméterek: {'datum_tol': '2026-12-22T00:00:00Z', 'datum_ig': '2026-12-22T23:59:59Z', 'bolt_id': 'torpilla', 'napszak': 'barmikor', 'szolgaltatas_id': 'nagy_orom'}
+    | Te: torpilla
+    | Rendszer: Nézem, mi van a(z) Törpilla boltban, 2026-12-22…
+    | Rendszer: Ezeket az időpontokat találtam — melyik jó?
+    gombok:      ['2026-12-22 09:20–09:30 (UTC)', '2026-12-22 10:00–10:10 (UTC)', '2026-12-22 10:20–10:30 (UTC)']
+
+  > a másodikat kérem
+    réteg:       orchestrator:sorszam
+    eszköz:      jelolt_valasztas
+    paraméterek: {'sorszam': 2, 'slot_id': '1b74bb3d92f340dc84d385c083075ed5'}
+    | Te: a másodikat kérem
+    | Rendszer: Biztosan lefoglaljam ezt az időpontot?
+    gombok:      ['Biztosan lefoglaljam ezt az időpontot?', 'Azonosító (számsor):']
+
+========================================================================
+# kapuőr
+
+  > Mennyibe kerül a nagy petárda?
+    réteg:       kapuor
+    eszköz:      nincs
+    paraméterek: {}
+    | Te: Mennyibe kerül a nagy petárda?
+    | Rendszer: Az árakról itt nem tudok tájékoztatást adni — azt a boltban mondják meg. Időpontot viszont szívesen keresek.
+
+========================================================================
+# tényválasz
+
+  > Hogy néz ki a Törpilla bolt?
+    réteg:       szabaly:tenyvalasz
+    eszköz:      bolt_info
+    paraméterek: {'bolt_id': 'torpilla', 'mit': 'megjelenes'}
+    | Te: Hogy néz ki a Törpilla bolt?
+    | Rendszer: A Fő utca 7., a pékség és a kút között — barátságos, virágos kirakat, az ajtóban mindig várja valaki mosollyal a betérőket. Nincs cégér, csak egy kézzel festett szív az ajtóüvegen. Belül három kis asztal áll egymástól távol (ez a három pult), mindegyiken kancsó víz és egy doboz zsebkendő. A várakozóban könyvek és egy alvó macska. Aki csak beülni jön, azt is beengedik — de időpont nélkül nem biztos, hogy sorra kerül.
+
+========================================================================
+# lemondás kód nélkül
+
+  > Le szeretném mondani a foglalásomat.
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'foglalasi_kod', 'varhato_kerdes_tipusa': 'nyitott'}
+    | Te: Le szeretném mondani a foglalásomat.
+    | Rendszer: Ehhez még kellene tudnom: mi a foglalási kódod.
+
+========================================================================
+# ismétlés → kiút
+
+  > mennék
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: mennék
+    | Rendszer: Ehhez még kellene tudnom: melyik boltba szeretnél menni.
+    gombok:      ['Szundi', 'Törpilla', 'Ügyifogyi']
+
+  > szeretnék menni
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: szeretnék menni
+    | Rendszer: Úgy látom, így nem jutunk előre. Melyiket próbáljuk: másik napot, másik napszakot vagy a legkorábbi szabad időpontot?
+    gombok:      ['Másik nap', 'Másik napszak', 'A legkorábbi szabad időpont']
+
+  > menni szeretnék
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: menni szeretnék
+    | Rendszer: Úgy látom, ez így nem vezet sehova — ne kínlódj vele tovább. A boltban élőben is fel tudnak venni időpontot, és a koppintós úton (a másik fülön) is végig lehet menni pár kattintással.
+
+========================================================================
+# frusztráció → emberhez
+
+  > nem értem, mit kell csinálni
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: nem értem, mit kell csinálni
+    | Rendszer: Ehhez még kellene tudnom: melyik boltba szeretnél menni.
+    gombok:      ['Szundi', 'Törpilla', 'Ügyifogyi']
+
+  > nem értem, mit kell csinálni
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: nem értem, mit kell csinálni
+    | Rendszer: Úgy látom, így nem jutunk előre. Melyiket próbáljuk: másik napot, másik napszakot vagy a legkorábbi szabad időpontot?
+    gombok:      ['Másik nap', 'Másik napszak', 'A legkorábbi szabad időpont']
+
+  > nem értem, mit kell csinálni
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: nem értem, mit kell csinálni
+    | Rendszer: Úgy látom, ez így nem vezet sehova — ne kínlódj vele tovább. A boltban élőben is fel tudnak venni időpontot, és a koppintós úton (a másik fülön) is végig lehet menni pár kattintással.
+
+  > nem értem, mit kell csinálni
+    réteg:       llm
+    eszköz:      visszakerdez
+    paraméterek: {'hianyzo_mezo': 'bolt_id', 'varhato_kerdes_tipusa': 'zart', 'valaszthato_ertekek': ['szundi', 'torpilla', 'ugyifogyi']}
+    | Te: nem értem, mit kell csinálni
+    | Rendszer: Úgy látom, ez így nem vezet sehova — ne kínlódj vele tovább. A boltban élőben is fel tudnak venni időpontot, és a koppintós úton (a másik fülön) is végig lehet menni pár kattintással.
+
+========================================================================
+# teljes foglalási menet (keresés → jelölt → megerősítés → kód)
+
+  > Törpillához mennék holnap
+    jelöltek:    ['2026-12-22 09:20–09:30 (UTC)', '2026-12-22 10:00–10:20 (UTC)', '2026-12-22 10:20–10:30 (UTC)']
+    megerősítés: Biztosan lefoglaljam ezt az időpontot?
+    megerősítés: Azonosító (számsor):
+    eredmény:    ['Foglalás létrejött! Foglalási kód: 8FN4TSK3']
+========================================================================
+# foglalási menet ÍRÁSBAN (gombnyomás nélkül, a 4. lépés kivételével)
+
+  > Törpillához mennék holnap
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    jelöltek:    ['2026-12-22 10:00–10:20 (UTC)', '2026-12-22 10:20–10:40 (UTC)', '2026-12-22 11:00–11:20 (UTC)']
+
+  > a másodikat kérem
+    réteg:       orchestrator:sorszam
+    eszköz:      jelolt_valasztas
+    jelöltek:    ['Biztosan lefoglaljam ezt az időpontot?', 'Azonosító (számsor):']
+    kérdés:      Biztosan lefoglaljam ezt az időpontot?
+    kérdés:      Azonosító (számsor):
+
+  > igen, foglald le
+    réteg:       orchestrator:megerosites
+    eszköz:      megerosites_valasz
+    jelöltek:    ['Biztosan lefoglaljam ezt az időpontot?', 'Azonosító (számsor):']
+    kérdés:      Biztosan lefoglaljam ezt az időpontot?
+    kérdés:      Azonosító (számsor):
+
+  (a megerősítés után az azonosítót a felület űrlapja kéri be —
+   a foglaláshoz vásárlói kulcs kell, azt egy mondat nem pótolja)
+    eredmény:    ['Foglalás létrejött! Foglalási kód: 2BHWB27A']
+========================================================================
+# állapotfüggő hivatkozások (állapotsor: KI)
+
+  > az a fél kilences jó lesz
+    réteg:       llm
+    eszköz:      jelolt_valasztas
+    állapot:     MEGEROSITES_VAR   -> MEGEROSITES_VAR
+
+  > a középső legyen
+    réteg:       llm
+    eszköz:      jelolt_valasztas
+    állapot:     MEGEROSITES_VAR   -> MEGEROSITES_VAR
+
+  > a legkorábbi megfelel
+    réteg:       llm
+    eszköz:      legkozelebbi_idopont
+    állapot:     AJANLAT_VAR   -> nem választás
+
+  > inkább a késeibb
+    réteg:       llm
+    eszköz:      szabad_idopontok
+    állapot:     AJANLAT_VAR   -> nem választás
+========================================================================
+# indítási ellenőrzés (modális ablak, valódi Tk)
+  OK  'Folytatom tartalékággal' -> folytatás=True (várt: True)
+       ablak címe: Nem az éles úton indulnál
+  OK  'Kilépek' -> folytatás=False (várt: False)
+       ablak címe: Nem az éles úton indulnál
+$ C:\Program Files\Python314\python.exe -m tools.vegigjatszas

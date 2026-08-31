@@ -1,0 +1,17 @@
+{
+  "modell": "qwen2.5:14b",
+  "kert_num_ctx": 8192,
+  "tenyleges_kontextus": 8192,
+  "meret_byte": 10775880005,
+  "vram_byte": 6342909623,
+  "gpu_arany": 0.5886210332758804,
+  "idok": [
+    5.609212399998796,
+    6.0862901999935275
+  ],
+  "gpu": {
+    "nev": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "osszes_mb": 8188,
+    "hasznalt_mb": 6203
+  }
+}

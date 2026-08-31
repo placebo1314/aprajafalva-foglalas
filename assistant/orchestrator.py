@@ -33,6 +33,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+from assistant import allapotgep
 from assistant.frusztracio import Frusztracio
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
 from assistant.megerosites import NEM, megerosito_valasz
@@ -221,7 +222,17 @@ _LEKERDEZES_VALASZIDO_PADDING_MASODPERC = 0.1
 @dataclass
 class _SessionAllapot:
     session_id: str
-    allapot: str = "kezdet"  # kezdet | valasztasra_var | megerositesre_var | lezarva
+    # A beszélgetés ÁLLAPOTA (ADR-028, `assistant/allapotgep.py`):
+    # INDULAS | HIANYZO_ADAT | AJANLAT_VAR | MEGEROSITES_VAR | KESZ | KIUT.
+    # Az átmeneteket az `allapotgep.ATMENETEK` rögzíti, és minden váltás
+    # az `Orchestrator._allapotba()`-n megy át — enélkül a felület
+    # gombos útja és a szöveges út állapota szétcsúszhatna.
+    allapot: str = allapotgep.INDULAS
+    # Az utolsó átmenet (honnan, hova) — a naplóé (`ui/vasarlo.py`).
+    utolso_atmenet: tuple[str, str] | None = None
+    # Mire kérdeztünk vissza utoljára — az állapotsor ezt mondja el a
+    # modellnek („zárt kérdést tettünk fel a boltról").
+    utolso_hianyzo_mezo: str | None = None
     megorzott_parameterek: dict = field(default_factory=dict)
     sikertelen_ertelmezesek: int = 0
     aktualis_jeloltek: list[dict] = field(default_factory=list)
@@ -261,6 +272,10 @@ class Orchestrator:
         # ({eszkoz, parameterek}) — nem a válasz része, csak
         # megfigyelhetőséghez (pl. ui/vasarlo.py próba-naplózásához).
         self.utolso_ertelmezes: dict | None = None
+        # Az utolsó forduló ÁLLAPOTÁTMENETE (ADR-028) — a próba-napló
+        # ebből tölti a `allapot`/`atmenet` mezőt. Nem a válasz része
+        # (l. `fordulo`), mert a válasz a felület szerződése.
+        self.utolso_allapot: dict | None = None
 
     def _allapot(self, session_id: str) -> _SessionAllapot:
         if session_id not in self._sessionok:
@@ -289,9 +304,55 @@ class Orchestrator:
         mondattá). `None` esetén az értelmező előzmények nélkül dolgozik
         — ez a determinisztikus út és az egyfordulós mérés esete."""
         allapot = self._allapot(session_id)
+        elotte = allapot.allapot
         valasz = self._fordulo_belso(allapot, session_id, mondat, most, elozmenyek or [])
         valasz = self._ismetlest_figyel(allapot, valasz)
-        return self._frusztraciot_figyel(allapot, mondat, valasz)
+        valasz = self._frusztraciot_figyel(allapot, mondat, valasz)
+
+        # AZ ÁLLAPOT A VÁLASZ TÍPUSÁBÓL dől el (ADR-028). Azért a
+        # legvégén, mert az ismétlés- és a frusztráció-figyelő UTÓLAG
+        # alakíthatja kiúttá a fordulót — ha korábban vennénk fel az
+        # állapotot, a napló mást mondana, mint amit a vásárló lát.
+        #
+        # A már felvett állapotot (pl. `AJANLAT_VAR` egy keresés után)
+        # ez nem írja felül: a levezetés ugyanoda vezet, a
+        # `_allapotba` pedig ellenőrzi az átmenetet.
+        self._allapotba(allapot, allapotgep.kovetkezo_allapot(allapot.allapot, valasz))
+        # AZ ÁLLAPOT NEM A VÁLASZ MEZŐJE, hanem megfigyelhetőség — ugyanaz
+        # a minta, mint az `utolso_ertelmezes`-nél. A válasz dict a
+        # felület SZERZŐDÉSE (típus szerint ágazik el rajta, és a tesztek
+        # pontos egyezést várnak); egy megfigyelési mező odatétele
+        # csendben megváltoztatná azt a szerződést.
+        self.utolso_allapot = {
+            "elotte": elotte,
+            "utana": allapot.allapot,
+            "valtozott": elotte != allapot.allapot,
+        }
+        return valasz
+
+    def _allapotba(self, allapot: _SessionAllapot, uj: str) -> None:
+        """Állapotváltás — EGY helyen, ellenőrzött átmenettel
+        (`allapotgep.ATMENETEK`).
+
+        Minden váltás ezen megy át, a gombos és a szöveges úton
+        egyaránt: a felület közvetlenül is hívja a `valaszt()`/
+        `megerosit()`/`elvet()` metódusokat, és ha azok másképp
+        vezetnék az állapotot, a kettő szétcsúszna."""
+        vegleges = allapotgep.atmenet(allapot.allapot, uj)
+        if vegleges != allapot.allapot:
+            allapot.utolso_atmenet = (allapot.allapot, vegleges)
+            allapot.allapot = vegleges
+
+    def allapot_sor(self, session_id: str) -> str | None:
+        """Az ÁLLAPOTSOR a modellnek — hol tart a beszélgetés, és mit
+        várunk most (`allapotgep.prompt_sor`). A hívó (felület) ezt adja
+        át az értelmezőnek; `None`, ha nincs mit mondani."""
+        allapot = self._allapot(session_id)
+        return allapotgep.prompt_sor(
+            allapot.allapot,
+            jeloltek_szama=len(allapot.aktualis_jeloltek),
+            hianyzo_mezo=allapot.utolso_hianyzo_mezo,
+        )
 
     def _fordulo_belso(
         self,
@@ -343,7 +404,7 @@ class Orchestrator:
         # zárt kérdést, a válasz zárt halmaz, és nincs mit értelmeztetni
         # rajta. Csak `megerositesre_var` állapotban szólal meg — máshol
         # az „igen" önmagában semmit nem jelent.
-        if allapot.allapot == "megerositesre_var" and allapot.valasztott_slot_id:
+        if allapot.allapot == allapotgep.MEGEROSITES_VAR and allapot.valasztott_slot_id:
             dontes = megerosito_valasz(mondat)
             if dontes is not None:
                 self.utolso_ertelmezes = {
@@ -386,6 +447,14 @@ class Orchestrator:
         kontextus = ErtelmezesKontextus(
             megorzott_parameterek=dict(allapot.megorzott_parameterek),
             elozmenyek=list(elozmenyek),
+            # Az ÁLLAPOTSOR (ADR-028): hol tartunk, és mit várunk most.
+            # Ezt csak az orchestrator tudja — a felület a beszélgetést
+            # vezeti, az állapotgépet nem.
+            allapot_sor=allapotgep.prompt_sor(
+                allapot.allapot,
+                jeloltek_szama=len(allapot.aktualis_jeloltek),
+                hianyzo_mezo=allapot.utolso_hianyzo_mezo,
+            ),
         )
         ertelmezes = self.ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
         self.utolso_ertelmezes = ertelmezes
@@ -415,6 +484,41 @@ class Orchestrator:
 
         if eszkoz == "visszakerdez":
             return self._visszakerdez(allapot, parameterek)
+
+        # JELÖLT VÁLASZTÁSA a felajánlott listából (ADR-028) — a modell
+        # kimondja, hogy a vásárló a listából választott, és hányadikat.
+        #
+        # Ez a determinisztikus rövidzár (`assistant/sorszam.py`) PÁRJA,
+        # nem a helyettesítője: a zárt alakokat („a másodikat") továbbra
+        # is a rövidzár dönti el, a modell ELŐTT. Ez az ág azokra a
+        # mondatokra való, amik ugyanarra a listára hivatkoznak, de
+        # mintára nem illeszkednek („az a fél kilences jó lesz").
+        #
+        # KÉT KAPU védi, mert egy elrontott választás nem
+        # visszakérdezést okoz, hanem MÁS IDŐPONTOT foglal le:
+        # (1) csak AJANLAT_VAR állapotban fogadjuk el — ha nincs mire
+        #     hivatkozni, a „harmadik" bármi lehet;
+        # (2) csak a tényleges tartományban — a negyedikre nem
+        #     kerekítünk, mert az félreértés, nem elírás.
+        if eszkoz == "jelolt_valasztas":
+            sorszam = parameterek.get("sorszam")
+            ervenyes = (
+                allapot.allapot == allapotgep.AJANLAT_VAR
+                and isinstance(sorszam, int)
+                and 1 <= sorszam <= len(allapot.aktualis_jeloltek)
+            )
+            if not ervenyes:
+                _LOG.info(
+                    "jelolt_valasztas elutasítva (állapot=%s, sorszám=%r, jelöltek=%d)",
+                    allapot.allapot,
+                    sorszam,
+                    len(allapot.aktualis_jeloltek),
+                )
+                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+            jelolt = allapot.aktualis_jeloltek[sorszam - 1]
+            valasz = self.valaszt(session_id, jelolt["slot_id"])
+            valasz["valasztott_jelolt"] = jelolt
+            return valasz
 
         # Minden más ág valódi eszközhívás — a sikertelen-számláló
         # nullázódik, mert az értelmezés ezúttal konkrétumra vezetett.
@@ -623,6 +727,10 @@ class Orchestrator:
         else:
             kerdes_tipusa = parameterek.get("varhato_kerdes_tipusa", "nyitott")
 
+        # Az állapotsor ezt mondja el a modellnek a KÖVETKEZŐ fordulóban
+        # („zárt kérdést tettünk fel a boltról") — enélkül az állapot
+        # csak annyit tudna, hogy kérdeztünk, azt nem, hogy mit.
+        allapot.utolso_hianyzo_mezo = parameterek.get("hianyzo_mezo")
         return {
             "tipus": "visszakerdezes",
             "hianyzo_mezo": parameterek.get("hianyzo_mezo"),
@@ -720,7 +828,7 @@ class Orchestrator:
             return {"tipus": "eszkoz_hiba", "felismert_ablak": felismert_ablak, **eredmeny}
 
         allapot.aktualis_jeloltek = eredmeny["jeloltek"]
-        allapot.allapot = "valasztasra_var"
+        self._allapotba(allapot, allapotgep.AJANLAT_VAR)
         allapot.utolso_kereses = dict(teljes)
         return {
             "tipus": "ajanlat",
@@ -758,7 +866,7 @@ class Orchestrator:
             return {"tipus": "eszkoz_hiba", "felismert_ablak": felismert_ablak, **eredmeny}
 
         allapot.aktualis_jeloltek = eredmeny["jeloltek"]
-        allapot.allapot = "valasztasra_var"
+        self._allapotba(allapot, allapotgep.AJANLAT_VAR)
         return {
             "tipus": "ajanlat",
             "jeloltek": eredmeny["jeloltek"],
@@ -850,14 +958,14 @@ class Orchestrator:
                 foglalas_repo.hold_release(self.conn, hold_id)
 
         allapot.valasztott_slot_id = slot_id
-        allapot.allapot = "megerositesre_var"
+        self._allapotba(allapot, allapotgep.MEGEROSITES_VAR)
         return {"tipus": "megerositest_ker", "slot_id": slot_id}
 
     # -- végleges megerősítés -----------------------------------------
 
     def megerosit(self, session_id: str, vasarlo_kulcs_hash: str) -> dict:
         allapot = self._allapot(session_id)
-        if allapot.allapot != "megerositesre_var" or allapot.valasztott_slot_id is None:
+        if allapot.allapot != allapotgep.MEGEROSITES_VAR or allapot.valasztott_slot_id is None:
             return {"tipus": "hiba", "uzenet_kulcs": "nincs_folyamatban_levo_valasztas"}
 
         eredmeny = foglalas_letrehozas.hivas(
@@ -872,7 +980,7 @@ class Orchestrator:
         if not eredmeny["sikeres"]:
             return {"tipus": "eszkoz_hiba", **eredmeny}
 
-        allapot.allapot = "lezarva"
+        self._allapotba(allapot, allapotgep.KESZ)
         return {"tipus": "visszaigazolas", "foglalasi_kod": eredmeny["foglalasi_kod"]}
 
     def elvet(self, session_id: str) -> dict:
@@ -888,5 +996,8 @@ class Orchestrator:
             if hold_id is not None:
                 foglalas_repo.hold_release(self.conn, hold_id)
         allapot.valasztott_slot_id = None
-        allapot.allapot = "valasztasra_var" if allapot.aktualis_jeloltek else "kezdet"
+        self._allapotba(
+            allapot,
+            allapotgep.AJANLAT_VAR if allapot.aktualis_jeloltek else allapotgep.INDULAS,
+        )
         return {"tipus": "elvetve"}

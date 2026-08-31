@@ -250,10 +250,20 @@ def elemez(sorok: list[dict]) -> dict:
     modellek = Counter(sor.get("modell") or "nincs" for sor in sorok)
     prompt_verziok = Counter(sor.get("prompt_verzio") or "nincs" for sor in sorok)
 
+    # ÁLLAPOTOK ÉS ÁTMENETEK (ADR-028). Az állapot-megoszlásból az
+    # látszik, hol áll meg a beszélgetés (pl. sok `HIANYZO_ADAT` = sokat
+    # kérdezünk vissza), az átmenetekből pedig az, milyen utakon jár
+    # ténylegesen a rendszer — a tervezett állapotgép és a valóság
+    # eltérése eddig sehol nem látszott.
+    allapotok = Counter(sor.get("allapot") for sor in sorok if sor.get("allapot"))
+    atmenetek = Counter(sor.get("atmenet") for sor in sorok if sor.get("atmenet"))
+
     return {
         "fordulok": len(sorok),
         "modellek": dict(modellek),
         "prompt_verziok": dict(prompt_verziok),
+        "allapotok": dict(allapotok),
+        "atmenetek": dict(atmenetek),
         "elso": sorok[0].get("idobelyeg") if sorok else None,
         "utolso": sorok[-1].get("idobelyeg") if sorok else None,
         "retegek": dict(retegek),
@@ -298,6 +308,13 @@ def jelentes(osszesites: dict) -> str:
     for verzio, darab in sorted(osszesites.get("prompt_verziok", {}).items(), key=lambda p: -p[1]):
         cimke = "nem futott modellhívás" if verzio == "nincs" else verzio
         ki(f"  prompt: {cimke:24s} {darab:4d}  {_arany(darab, osszesites['fordulok'])}")
+
+    if osszesites.get("allapotok"):
+        ki("\n-- Állapotok (a forduló UTÁN) és átmenetek --")
+        for allapot, darab in sorted(osszesites["allapotok"].items(), key=lambda p: -p[1]):
+            ki(f"  {allapot:18s} {darab:4d}  {_arany(darab, osszesites['fordulok'])}")
+        for atmenet, darab in sorted(osszesites.get("atmenetek", {}).items(), key=lambda p: -p[1]):
+            ki(f"    {atmenet:38s} {darab:4d}")
 
     ki("\n-- Válasz-típusok --")
     for tipus, darab in sorted(osszesites["valasz_tipusok"].items(), key=lambda p: -p[1]):

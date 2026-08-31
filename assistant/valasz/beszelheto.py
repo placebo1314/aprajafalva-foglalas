@@ -40,8 +40,16 @@ mindegyik mögött egy konkrét hangcsatorna-hiba:
 ## Amit ez a modul NEM csinál
 
 Nem szintetizál hangot, nem detektál fordulóhatárt, nem kezel
-barge-int. Ez szövegoldali előkészítés — az ASR, a TTS, a
-turn-detection és a barge-in konfiguráció, nem építés
+barge-int. Ez szövegoldali előkészítés: MIT mondjunk, nem azt, hogy
+milyen hangon.
+
+**A hangkimenet 2026-09-01 óta létezik** (`assistant/hang.py`,
+ADR-029): a felület beszélhető módban felolvassa ezt a szöveget, ha
+van hozzá Piper és magyar hangmodell — `python feladat.py hangproba`
+megmondja, van-e. Addig ez a modul CSENDBEN készült felolvasásra, és a
+csend ugyanúgy nézett ki, mint a „nincs telepítve".
+
+Az ASR, a turn-detection és a barge-in továbbra is hiányzik
 (`docs/roadmap.md`, M6).
 """
 

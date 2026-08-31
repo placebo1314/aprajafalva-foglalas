@@ -368,3 +368,40 @@ def test_a_jelentes_kiirja_a_modellt_es_a_promptot():
     assert "Modell és prompt" in szoveg
     assert "qwen3.5:9b" in szoveg
     assert "v2" in szoveg
+
+
+# -- ÁLLAPOTOK ÉS ÁTMENETEK (ADR-028) ---------------------------------
+
+
+def test_allapot_es_atmenet_megoszlas():
+    """Az állapot-megoszlásból az látszik, hol áll meg a beszélgetés; az
+    átmenetekből az, milyen utakon jár ténylegesen a rendszer."""
+    osszesites = elemez(
+        [
+            _sor(allapot="AJANLAT_VAR", atmenet="INDULAS -> AJANLAT_VAR"),
+            _sor(allapot="MEGEROSITES_VAR", atmenet="AJANLAT_VAR -> MEGEROSITES_VAR"),
+            _sor(allapot="MEGEROSITES_VAR", atmenet=None),
+        ]
+    )
+
+    assert osszesites["allapotok"] == {"AJANLAT_VAR": 1, "MEGEROSITES_VAR": 2}
+    assert osszesites["atmenetek"] == {
+        "INDULAS -> AJANLAT_VAR": 1,
+        "AJANLAT_VAR -> MEGEROSITES_VAR": 1,
+    }
+
+
+def test_allapot_nelkuli_naplo_nem_ir_ki_allapot_blokkot():
+    """A 2026-09-01 ELŐTTI naplósorokban nincs állapot — ilyenkor a
+    blokk kimarad, nem üres címként áll ott."""
+    szoveg = jelentes(elemez([_sor()]))
+
+    assert "Állapotok" not in szoveg
+
+
+def test_a_jelentes_kiirja_az_allapotokat():
+    szoveg = jelentes(elemez([_sor(allapot="KIUT", atmenet="AJANLAT_VAR -> KIUT")]))
+
+    assert "Állapotok" in szoveg
+    assert "KIUT" in szoveg
+    assert "AJANLAT_VAR -> KIUT" in szoveg

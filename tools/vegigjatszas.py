@@ -262,6 +262,7 @@ def vegigjatszas(
         _sajat_probak(app)
         _foglalasi_menet(app)
         _foglalasi_menet_irasban(app)
+        _allapotsor_probak(app)
         _indito_ellenorzes_proba(app)
     if robusztus or csak_robusztus:
         kilepokod = _robusztus_halmaz(app)
@@ -438,6 +439,57 @@ def _foglalasi_menet(app) -> None:
     print(f"    eredmény:    {eredmeny}")
     if app.szo_uzenet.cget("text"):
         print(f"    hibasor:     {app.szo_uzenet.cget('text')}")
+
+
+# ÁLLAPOTFÜGGŐ HIVATKOZÁSOK (ADR-028) — olyan mondatok, amiket a
+# determinisztikus rövidzár (`assistant/sorszam.py`) SZÁNDÉKOSAN nem
+# ismer fel: nincs bennük sorszó, vagy nem a kötött szerkezetben.
+# Ezekre csak az segít, ha a modell tudja, hogy épp három időpontot
+# ajánlottunk fel — ez az állapotsor tulajdonképpeni mérőszáma.
+ALLAPOTSOR_PROBAK = (
+    "az a fél kilences jó lesz",
+    "a középső legyen",
+    "a legkorábbi megfelel",
+    "inkább a késeibb",
+)
+
+
+def _allapotsor_probak(app) -> None:
+    """Az ÁLLAPOTSOR próbája: felajánlott időpontokra hivatkozó
+    mondatok, amiket a zárt minta nem fog meg.
+
+    Miért itt és nem a golden seten: a golden mérési út az ÉRTELMEZŐT
+    hívja, nem az orchestratort — ott nincs session, nincsenek
+    felajánlott jelöltek, tehát állapot sincs. Egy kitalált állapotsor a
+    mérésben hamisítás lenne (ugyanaz az elv, mint az ADR-019-ben a
+    rendszer-válaszoknál).
+
+    Az `APRAJAFALVA_ALLAPOT_SOR=ki` kapcsolóval ugyanez lefuttatható az
+    állapotsor NÉLKÜL — a kettő különbsége a mérés."""
+    from assistant import allapotgep
+
+    print("=" * 72)
+    print(f"# állapotfüggő hivatkozások (állapotsor: {'BE' if allapotgep.bekapcsolva() else 'KI'})")
+
+    for mondat in ALLAPOTSOR_PROBAK:
+        app._uj_beszelgetes()
+        app._szo_kuldes(FOGLALASI_MENET_MONDAT)
+        jeloltek = _jelolt_gombok(app)
+        if not jeloltek:
+            print("    NINCS jelölt — a próba kimarad.")
+            return
+        app._szo_kuldes(mondat)
+        ertelmezes = app.orchestrator.utolso_ertelmezes or {}
+        reteg = ertelmezes.get("reteg") or getattr(app.orchestrator.ertelmezo, "utolso_reteg", None)
+        allapot = (app.orchestrator.utolso_allapot or {}).get("utana")
+        # A SIKER mércéje: a forduló megerősítés-kérésbe fut-e (tehát a
+        # rendszer értette, hogy a felajánlott listából választottak), és
+        # nem indít-e új keresést.
+        siker = "MEGEROSITES_VAR" if allapot == "MEGEROSITES_VAR" else "nem választás"
+        print(f"\n  > {mondat}")
+        print(f"    réteg:       {reteg}")
+        print(f"    eszköz:      {ertelmezes.get('eszkoz')}")
+        print(f"    állapot:     {allapot}   -> {siker}")
 
 
 def _indito_ellenorzes_proba(app) -> None:

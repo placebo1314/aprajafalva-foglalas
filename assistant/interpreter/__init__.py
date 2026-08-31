@@ -58,6 +58,15 @@ class ErtelmezesKontextus:
 
     megorzott_parameterek: dict = field(default_factory=dict)
     elozmenyek: list[tuple[str, str]] = field(default_factory=list)
+    # ÁLLAPOTSOR (ADR-028, `assistant/allapotgep.py::prompt_sor`): hol
+    # tart a beszélgetés, és mit várunk most — egyetlen mondat, amit az
+    # ORCHESTRATOR állít elő, mert egyedül ő ismeri a session állapotát.
+    #
+    # Miért kell: a modell eddig a mondatot ÖNMAGÁBAN olvasta, tehát egy
+    # csupasz „a második" vagy „igen" kétértelmű volt. A beszélgetés
+    # (`elozmenyek`) ezt csak közvetve mutatja; az állapot kimondva
+    # egyértelmű.
+    allapot_sor: str | None = None
 
 
 @runtime_checkable
