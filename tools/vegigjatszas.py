@@ -450,7 +450,17 @@ ALLAPOTSOR_PROBAK = (
     "az a fél kilences jó lesz",
     "a középső legyen",
     "a legkorábbi megfelel",
+    # IDŐRENDI hivatkozások — ezekhez a modellnek a jelöltek SORRENDJÉT
+    # is értenie kell, nem csak a darabszámukat. A 2026-09-01-i mérésen
+    # az „inkább a késeibb" mindkét felállásban elbukott; a bővítés
+    # (2026-09-05) azt méri, hogy ez a fajta hivatkozás elbukik-e
+    # következetesen, vagy csak az az egy mondat volt szerencsétlen.
     "inkább a késeibb",
+    "a legkésőbbit kérem",
+    "az utolsó előtti jó lesz",
+    # NEM hivatkozás, hanem ÚJ kérés — ellenpróba: az állapotsor nem
+    # teheti azt, hogy a rendszer mindenáron a listából választ.
+    "mégis inkább jövő héten",
 )
 
 

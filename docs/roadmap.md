@@ -173,10 +173,17 @@ fele viszont ezzel teljesült: **két modell össze van hasonlítva**
 (`qwen3.5:9b` vs. `qwen3:8b`, `docs/MODELL_OSSZEHASONLITAS.md`), és a
 mérés a prompt-verziókra is kiterjedt (`docs/PROMPT_AB.md`).
 
-**Kilépési feltétel:** 150-200 eset (ma 142, ebből NYELVI 51 — a
-feltétel a nyelvi halmazra vonatkozik, tehát nem teljesült),
+**2026-09-05:** mindkét nyelvi halmaz bővült — nyelvi 51 → **55**
+(elengedés-ellenpróbák: mikor NEM szabad elengedni; és a MINDEGY
+visszavonhatósága), beszédhelyzetek 23 → **28** (sürgetés,
+másik csatornára hivatkozás). Együtt **151 eset**. A bővítés azonnal
+két hibát talált (`docs/ALTALANOSITAS.md` 2.9c–2.9d) — ez a golden set
+tulajdonképpeni haszna: nem a zöld szám, hanem a talált bukás.
+
+**Kilépési feltétel:** 150-200 eset (ma **151**, ebből NYELVI 55 — a
+feltétel a nyelvi halmazra vonatkozik, tehát MÉG nem teljesült),
 futtatható értékelő (**kész**), két modell összehasonlítható
-(**kész, 2026-08-31**).
+(**kész** — 2026-09-05-re öt modell van megmérve ugyanazon a halmazon).
 
 ---
 

@@ -59,6 +59,10 @@ meta:
     meggondolas: 0.90
     kozbevetes: 0.90
     szohasznalat: 0.90
+    # 2026-09-05-i bővítés — két új beszédhelyzet, mérés előtt felvett
+    # 0,90-es céllal (a mai szintjüket a jelentés írja le, nem a küszöb).
+    surgosseg: 0.90
+    mas_csatorna: 0.90
 
 esetek:
 
@@ -512,3 +516,101 @@ esetek:
       ilyenkor szándékosan `None`. A várt érték ezért PONTOSAN a tartalék
       ablak.
     cimkek: [szohasznalat, idegen_ige, tartalek_ablak]
+
+  # ---------------------------------------------------------------------
+  # 10. réteg — sürgetés (3 eset)
+  #
+  # A vásárló SIET, és ezt ki is mondja. A rendszernek NINCS sürgősségi
+  # sávja és nincs előresorolás (ADR-017: „nincs sürgősség-becslés
+  # szövegből") — a sietés tehát nem paraméter, hanem hangulat. A helyes
+  # viselkedés: a keresés ugyanúgy fut, a legkorábbi időpont a válasz, és
+  # semmilyen kitalált „sürgős" mező nem keletkezik.
+  # ---------------------------------------------------------------------
+
+  - id: surgosseg-01-siet
+    bemenet: "Sürgős lenne, ma kellene a petárdáshoz mennem."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-17T23:59:59Z"
+        napszak: barmikor
+    tilos:
+      - surgosseg_parameter
+    megjegyzes: >
+      A „sürgős" nem paraméter (ADR-017). A mondatban VAN nap („ma"),
+      tehát a keresés arra megy — a sietés nem változtat rajta, és nem
+      is keletkezhet belőle mező.
+    cimkek: [surgosseg, nincs_surgossegi_sav]
+
+  - id: surgosseg-02-siet-nap-nelkul
+    bemenet: "Nagyon sietek, mikor tudok leghamarabb menni a Szundihoz?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: legkozelebbi_idopont
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+    tilos:
+      - surgosseg_parameter
+    megjegyzes: >
+      A sietésre a rendszernek VAN becsületes válasza: a legkorábbi
+      szabad időpont. Nem azért, mert siet, hanem mert ezt kérdezte —
+      és pont ez a különbség a sürgősségi sáv és a legkorábbi időpont
+      között.
+    cimkek: [surgosseg, legkorabbi]
+
+  - id: surgosseg-03-elore-sorolast-ker
+    bemenet: "Nem lehetne előrevenni engem? Nagyon fontos lenne."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [nincs, visszakerdez]
+    tilos:
+      - surgosseg_parameter
+      - kitalalt_datum
+    megjegyzes: >
+      ELŐRESOROLÁST kér, ami a rendszerben NEM LÉTEZIK — nincs
+      prioritás, nincs várólista-átugrás. A helyes válasz az udvarias
+      elhárítás vagy a kérdés (melyik boltba, mikorra), NEM egy
+      hallgatólagos ígéret. A legrosszabb válasz az lenne, ha a rendszer
+      úgy tenne, mintha teljesítené.
+    cimkek: [surgosseg, nem_letezo_kepesseg, hatokoron_kivul]
+
+  # ---------------------------------------------------------------------
+  # 11. réteg — másik csatornára hivatkozás (2 eset)
+  #
+  # A vásárló olyasmire hivatkozik, ami NEM ebben a beszélgetésben
+  # történt: telefonált, ott járt, üzenetet hagyott. A rendszer ezekről
+  # semmit nem tud, és nem is tehet úgy, mintha tudna. A helyes válasz a
+  # kérdés — a rossz az, ha a rendszer „emlékszik" valamire, ami nem
+  # létezik (ez a `korabbi_foglalas` réteg rokona, de ott a SAJÁT
+  # rendszerünk korábbi foglalására hivatkoztak).
+  # ---------------------------------------------------------------------
+
+  - id: mas_csatorna-01-telefonalt
+    bemenet: "Tegnap telefonon már megbeszéltem valakivel, csak megerősíteném."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, nincs]
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      A rendszer NEM tud a telefonos beszélgetésről — se megerősíteni,
+      se cáfolni nem tudja. A helyes viselkedés a kérdés (melyik boltba,
+      mikorra), a rossz pedig bármilyen „igen, látom" típusú válasz: az
+      hazugság lenne a rendszer részéről.
+    cimkek: [mas_csatorna, nem_ismert_elozmeny]
+
+  - id: mas_csatorna-02-uzenetet-hagyott
+    bemenet: "Hagytam üzenetet a Törpillánál, arra szeretnék visszatérni."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, nincs, szabad_idopontok]
+    megjegyzes: >
+      Ugyanaz, MEGNEVEZETT bolttal — ettől a keresés is elfogadható
+      viselkedés lesz (a bolt megvan, a szándék foglalás). Amit
+      továbbra sem tehet a rendszer: úgy tenni, mintha ismerné az
+      üzenetet.
+    cimkek: [mas_csatorna, nem_ismert_elozmeny]

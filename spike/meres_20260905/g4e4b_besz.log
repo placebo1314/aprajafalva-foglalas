@@ -1,0 +1,99 @@
+Betöltve: 28 eset (beszedhelyzetek halmaz), meta.most = 2026-08-17T09:00:00Z
+Értelmező: forditott (modell=gemma4:e4b-it-qat)
+
+  masnak-01-anyamnak               1.0  OK
+  masnak-02-szomszed-nevében       1.0  OK
+  masnak-03-jogosultsag-kerdes     1.0  OK (elfogadható viselkedés)
+  felteteles-01-ha-esik-akkor-szerdan 1.0  OK
+  felteteles-02-akkor-nem-megyek   1.0  OK (elfogadható viselkedés)
+  osszehasonlitas-01-melyik-boltban-hamarabb 1.0  OK
+  osszehasonlitas-02-szundi-vagy-torpilla 1.0  OK (elfogadható viselkedés)
+  korabbi_foglalas-01-ugyanoda-mint-multkor 1.0  OK
+  korabbi_foglalas-02-multkori-megismetlese 1.0  OK (elfogadható viselkedés)
+  tobb_idopont-01-kettot-egymas-utan 1.0  OK (elfogadható viselkedés)
+  tobb_idopont-02-nekem-es-a-felesegemnek 1.0  OK (elfogadható viselkedés)
+  udvariassag-01-koszonom-viszlat  1.0  OK
+  udvariassag-02-koszonom-a-segitseget 1.0  OK
+  meggondolas-01-megsem-kell       1.0  OK
+  meggondolas-02-megse-akarok-foglalni 1.0  OK
+  kozbevetes-01-meddig-tart        1.0  OK
+  kozbevetes-02-hol-van-a-bolt     1.0  OK
+  kozbevetes-03-mennyibe-kerul     1.0  OK
+  szohasznalat-01-bejelentkeznek   1.0  OK
+  szohasznalat-02-sorszamot-kernek 0.0  várt 'szabad_idopontok', kapott 'jelolt_valasztas'
+  szohasznalat-03-beugranek        1.0  OK
+  szohasznalat-04-lestoppolnek     0.0  várt 'szabad_idopontok', kapott 'visszakerdez'
+  szohasznalat-05-foliratkoznek    0.0  várt 'szabad_idopontok', kapott 'visszakerdez'
+  surgosseg-01-siet                1.0  OK
+  surgosseg-02-siet-nap-nelkul     1.0  OK
+  surgosseg-03-elore-sorolast-ker  1.0  OK (elfogadható viselkedés)
+  mas_csatorna-01-telefonalt       1.0  OK (elfogadható viselkedés)
+  mas_csatorna-02-uzenetet-hagyott 1.0  OK (elfogadható viselkedés)
+
+=== forditott — összesítés ===
+
+Címkénkénti pontosság:
+  alanyvaltas                  100.0%  (n=1)
+  azonositas_nelkul            100.0%  (n=1)
+  bolt_nem_alternativa         100.0%  (n=1)
+  felteteles                   100.0%  (n=2)
+  hallucinacio_csapda          100.0%  (n=1)
+  hatokoron_kivul              100.0%  (n=3)
+  hianyzo_bolt                 100.0%  (n=1)
+  idegen_ige                    50.0%  (n=4)
+  ket_bolt_megnevezve          100.0%  (n=1)
+  ket_nap                      100.0%  (n=1)
+  ket_szereplo                 100.0%  (n=2)
+  korabbi_foglalas             100.0%  (n=2)
+  kozbevetes                   100.0%  (n=3)
+  legkorabbi                   100.0%  (n=1)
+  mas_csatorna                 100.0%  (n=2)
+  masnak                       100.0%  (n=3)
+  meggondolas                  100.0%  (n=2)
+  napszak                      100.0%  (n=1)
+  nem_ismert_elozmeny          100.0%  (n=2)
+  nem_letezo_kepesseg          100.0%  (n=1)
+  nem_tamogatott_keres         100.0%  (n=1)
+  nincs_keres                  100.0%  (n=1)
+  nincs_surgossegi_sav         100.0%  (n=1)
+  osszehasonlitas              100.0%  (n=2)
+  surgosseg                    100.0%  (n=3)
+  szabaly_kerdes               100.0%  (n=1)
+  szleng_ige                     0.0%  (n=1)
+  szohasznalat                  40.0%  (n=5)
+  tartalek_ablak                 0.0%  (n=1)
+  tenyvalasz                   100.0%  (n=2)
+  tobb_idopont                 100.0%  (n=2)
+  tobbfordulos                 100.0%  (n=5)
+  udvariassag                  100.0%  (n=2)
+  visszavonas                  100.0%  (n=2)
+  zaras                        100.0%  (n=2)
+
+Réteg-küszöbök:
+  felteteles           100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  korabbi_foglalas     100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  kozbevetes           100.0%  (n= 3)  küszöb 90%  [TARTJA]
+  mas_csatorna         100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  masnak               100.0%  (n= 3)  küszöb 90%  [TARTJA]
+  meggondolas          100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  osszehasonlitas      100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  surgosseg            100.0%  (n= 3)  küszöb 90%  [TARTJA]
+  szohasznalat          40.0%  (n= 5)  küszöb 90%  [NEM TARTJA]
+  tobb_idopont         100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  udvariassag          100.0%  (n= 2)  küszöb 90%  [TARTJA]
+
+Összesített pontosság: 89.3%  (n=28)
+Leggyengébb réteg (ez a mérőszám, nem az átlag): szohasznalat = 40.0%
+
+Válaszidő-eloszlás fordulónként (ezen a futáson, szekvenciálisan, n=33):
+  p50     3.04 s   (elvárás < 10 s)  [TARTJA]
+  p95     3.28 s   (elvárás < 25 s)  [TARTJA]
+  átlag   2.89 s   max   3.34 s
+  tendencia: első fél p50 3.11 s → második fél p50 3.01 s   [stabil, -3%]
+
+Réteg-megoszlás (melyik oldotta meg, utolsó forduló): kapuor=1, llm=27
+
+JSON mentve: spike\meres_20260905\g4e4b_besz.json
+
+Réteg-küszöb alatt: szohasznalat: 40% < küszöb 90%
+$ C:\Program Files\Python314\python.exe -m tests.golden.futtato --ertelmezo forditott --halmaz beszedhelyzetek --json spike/meres_20260905/g4e4b_besz.json

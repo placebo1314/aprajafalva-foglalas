@@ -1,0 +1,175 @@
+Betöltve: 55 eset (nyelvi halmaz), meta.most = 2026-08-17T09:00:00Z
+Értelmező: forditott (modell=gemma4:e2b-it-qat)
+
+  koznyelvi-01                     1.0  OK
+  koznyelvi-02                     1.0  OK
+  koznyelvi-03                     1.0  OK
+  koznyelvi-04                     1.0  OK
+  koznyelvi-05                     1.0  OK
+  tajszolas-01                     1.0  OK
+  tajszolas-02                     0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  tajszolas-03                     1.0  OK
+  tajszolas-04                     1.0  OK
+  toredekes-01                     1.0  OK
+  toredekes-02                     1.0  OK
+  toredekes-03                     1.0  OK
+  toredekes-04                     0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  szleng-01                        0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  szleng-02                        0.0  várt 'szabad_idopontok', kapott 'bolt_info'
+  szleng-03                        1.0  OK
+  egyszerusitett-01                1.0  OK
+  egyszerusitett-02                1.0  OK
+  egyszerusitett-03                1.0  OK
+  egyszerusitett-04                0.0  várt 'szabad_idopontok', kapott 'legkozelebbi_idopont'
+  kapuor-01                        1.0  OK
+  kapuor-02                        1.0  OK
+  alkudozas-01-szukites            0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  alkudozas-02-tagitas             0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  alkudozas-03-visszalepes         0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  alkudozas-04-napszakvaltas       1.0  OK
+  alkudozas-05-boltvaltas          0.0  várt 'szabad_idopontok', kapott 'legkozelebbi_idopont'
+  alkudozas-06-elutasitas-utan-alternativa 1.0  OK
+  elengedes-01-bolt                0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-02-bolt-mas-megfogalmazas 0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-03-szolgaltatas        1.0  OK
+  elengedes-04-ellenproba-megtartja-a-boltot 1.0  OK
+  elengedes-05-szolgaltatas-ellenproba 0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  valtozatossag-01-vagylagos       0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  valtozatossag-02-lemondas-minta-nelkul 1.0  OK
+  valtozatossag-03-bolt-termek-szerint 1.0  OK
+  valtozatossag-04-bolt-megjelenes-szerint 1.0  OK
+  valtozatossag-05-ures-keres      1.0  OK
+  mintan_tul-01-vagylagos          1.0  OK
+  mintan_tul-02-ures-szandek       1.0  OK
+  mintan_tul-03-felteteles         0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'szundi', 
+  mintan_tul-04-indoklas           0.5  visszakérdezett, de a megőrzött paramétereket elvesztette
+  mintan_tul-05-kettos-keres       0.5  részleges elfogadás
+  mintan_tul-06-visszavonas        1.0  OK
+  mintan_tul-07-bizonytalan        1.0  OK
+  mintan_tul-08-koznyelvi-toltelek 1.0  OK
+  mintan_tul-09-indoklas-tukor     1.0  OK
+  mindegy-01-szolgaltatas          0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  mindegy-02-napszak               0.0  várt 'szabad_idopontok', kapott 'legkozelebbi_idopont'
+  mindegy-03-pult                  0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  mindegy-04-legkorabbi-elengedessel 1.0  OK
+  mindegy-07-elengedes-utan-uj-ertek 0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  mindegy-08-nem-mindegy-hanem-kerdes 1.0  OK (elfogadható viselkedés)
+  mindegy-05-ellenproba-mindegyik-lista 1.0  OK
+  mindegy-06-ellenproba-mindegy-nekem-melyik-nap 1.0  OK
+
+=== forditott — összesítés ===
+
+Címkénkénti pontosság:
+  alkudozas                     33.3%  (n=6)
+  athelyezes                   100.0%  (n=1)
+  azonositas_hianya            100.0%  (n=1)
+  azonositas_nelkul            100.0%  (n=1)
+  bizonytalansag               100.0%  (n=1)
+  bizonytalansag_jelzese       100.0%  (n=1)
+  bolt_korulras                100.0%  (n=1)
+  bolt_korulras_szinonimaval   100.0%  (n=1)
+  bolt_megjelenes_szerint      100.0%  (n=1)
+  boltvaltas                     0.0%  (n=1)
+  csapda_szo                    50.0%  (n=2)
+  egyszerusitett                75.0%  (n=4)
+  elengedes                     40.0%  (n=5)
+  elengedes_visszavonasa         0.0%  (n=1)
+  elengedett_mezo                0.0%  (n=2)
+  ellenproba                    80.0%  (n=5)
+  elutasitas_utan_alternativa  100.0%  (n=1)
+  felteteles                     0.0%  (n=1)
+  foglalasi_kod                100.0%  (n=1)
+  hallucinacio_csapda          100.0%  (n=1)
+  harmadik_szemely_kontextus     0.0%  (n=1)
+  hatokoron_kivul              100.0%  (n=2)
+  hianyzo_adat                 100.0%  (n=1)
+  hol_kerdes                   100.0%  (n=1)
+  indoklas_mellekmondattal      75.0%  (n=2)
+  ismetles                     100.0%  (n=1)
+  jovo_het_ertelmezes          100.0%  (n=1)
+  kapuor                       100.0%  (n=2)
+  kemeny_resz_elengedes         33.3%  (n=3)
+  kettos_keres                  50.0%  (n=1)
+  korabbi_foglalasra_utalas    100.0%  (n=1)
+  koznyelvi                    100.0%  (n=5)
+  legkorabbi                   100.0%  (n=1)
+  legkorabbi_kerdes            100.0%  (n=1)
+  lemondas                     100.0%  (n=1)
+  lemondas_korulras            100.0%  (n=1)
+  ma                             0.0%  (n=1)
+  mindegy                       50.0%  (n=8)
+  mintan_tul                    77.8%  (n=9)
+  napszakvaltas                100.0%  (n=1)
+  negativ_kimenet_lehetseges     0.0%  (n=1)
+  nem_letezo_mezo                0.0%  (n=1)
+  nulla_konkretum              100.0%  (n=1)
+  onmagaval_beszeles           100.0%  (n=1)
+  preferencia                    0.0%  (n=1)
+  redakcio                     100.0%  (n=1)
+  regies                         0.0%  (n=1)
+  relativ_datum                100.0%  (n=1)
+  reszleges_adat               100.0%  (n=1)
+  reszleges_szolgaltatas         0.0%  (n=1)
+  roviditett_nap               100.0%  (n=1)
+  szandek_megorzes             100.0%  (n=1)
+  szleng                        33.3%  (n=3)
+  szolgaltatas_azonositas      100.0%  (n=1)
+  szukites                       0.0%  (n=1)
+  tagitas                        0.0%  (n=1)
+  tajszolas                     75.0%  (n=4)
+  tavirat_stilus               100.0%  (n=1)
+  tenyvalasz                   100.0%  (n=2)
+  tobbfordulos                  47.1%  (n=17)
+  toltelekszo                   50.0%  (n=2)
+  toredekes                     75.0%  (n=4)
+  udvariassagi_bevezetes       100.0%  (n=1)
+  ures_keres                   100.0%  (n=1)
+  ures_szandek                 100.0%  (n=1)
+  vagylagos                     50.0%  (n=2)
+  valtozatossag                 80.0%  (n=5)
+  visszalepes                    0.0%  (n=1)
+  visszavonas                  100.0%  (n=1)
+  zart_kerdes                    0.0%  (n=1)
+
+Réteg-küszöbök:
+  alkudozas             33.3%  (n= 6)  küszöb 90%  [NEM TARTJA]
+  egyszerusitett        75.0%  (n= 4)  küszöb 90%  [NEM TARTJA]
+  elengedes             40.0%  (n= 5)  küszöb 90%  [NEM TARTJA]
+  kapuor               100.0%  (n= 2)  nincs küszöb (pl. kapuőr)  [—]
+  koznyelvi            100.0%  (n= 5)  küszöb 98%  [TARTJA]
+  mindegy               50.0%  (n= 8)  küszöb 90%  [NEM TARTJA]
+  mintan_tul            77.8%  (n= 9)  küszöb 90%  [NEM TARTJA]
+  szleng                33.3%  (n= 3)  küszöb 92%  [NEM TARTJA]
+  tajszolas             75.0%  (n= 4)  küszöb 90%  [NEM TARTJA]
+  toredekes             75.0%  (n= 4)  küszöb 90%  [NEM TARTJA]
+  valtozatossag         80.0%  (n= 5)  küszöb 90%  [NEM TARTJA]
+
+Összesített pontosság: 65.5%  (n=55)
+Leggyengébb réteg (ez a mérőszám, nem az átlag): alkudozas = 33.3%
+
+Válaszidő-eloszlás fordulónként (ezen a futáson, szekvenciálisan, n=74):
+  p50     2.73 s   (elvárás < 10 s)  [TARTJA]
+  p95     2.99 s   (elvárás < 25 s)  [TARTJA]
+  átlag   2.67 s   max  11.23 s
+  tendencia: első fél p50 2.76 s → második fél p50 2.72 s   [stabil, -2%]
+
+Réteg-megoszlás (melyik oldotta meg, utolsó forduló): kapuor=2, llm=50, szabaly:tenyvalasz=3
+
+JSON mentve: spike\meres_20260905\g4e2b_nyelvi.json
+
+Réteg-küszöb alatt: alkudozas: 33% < küszöb 90%; egyszerusitett: 75% < küszöb 90%; elengedes: 40% < küszöb 90%; mindegy: 50% < küszöb 90%; mintan_tul: 78% < küszöb 90%; szleng: 33% < küszöb 92%; tajszolas: 75% < küszöb 90%; toredekes: 75% < küszöb 90%; valtozatossag: 80% < küszöb 90%
+$ C:\Program Files\Python314\python.exe -m tests.golden.futtato --ertelmezo forditott --halmaz nyelvi --json spike/meres_20260905/g4e2b_nyelvi.json
+GPU: NVIDIA GeForce RTX 4060 Laptop GPU — 2955/8188 MB foglalt (mérés előtt)
+Modell: gemma4:e2b-it-qat, kért num_ctx: 8192
+
+  1. hívás:  2.81 s   prompt 30 token, válasz 27 token (hideg — betöltéssel)
+  2. hívás:  2.79 s   prompt 30 token, válasz 27 token
+  3. hívás:  2.74 s   prompt 30 token, válasz 27 token
+
+Betöltve:      1707 MB, ebből VRAM 1707 MB
+Kiszervezés:   100% GPU
+Tényleges kontextus: 8192 (kért: 8192)
+GPU foglaltság: 2955/8188 MB (mérés után)
+Válaszidő (meleg): 2.77 s átlag, 2.74–2.79 s
+
+JSON mentve: spike\meres_20260905\g4e2b_vram.json

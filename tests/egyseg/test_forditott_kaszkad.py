@@ -783,3 +783,56 @@ def test_a_modell_napszak_dontese_megmarad_ha_a_mondat_beszel_rola():
 
     assert eredmeny["parameterek"]["napszak"] == "delutan"
     assert eredmeny["parameterek"]["datum_ig"] == "2026-08-18T17:59:59Z"
+
+
+# --- JELÖLT VÁLASZTÁSA (ADR-028) -------------------------------------
+#
+# A modell új irányítási értéke: kimondja, hogy a vásárló a felajánlott
+# listából választott. A kaszkád dolga ITT csak annyi, hogy a SORSZÁMOT
+# épségben átengedje — a tartomány-ellenőrzés az orchestratoré, mert
+# egyedül ő tudja, hány jelöltet ajánlottunk fel.
+
+
+def test_jelolt_valasztas_atmegy_a_kapun():
+    kaszkad = _kaszkad(_FakeLLM({"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": 2}}))
+
+    eredmeny = kaszkad.ertelmez(
+        "a középső legyen", most=_MOST, kontextus=ErtelmezesKontextus()
+    )
+
+    assert eredmeny["eszkoz"] == "jelolt_valasztas"
+    assert eredmeny["parameterek"] == {"sorszam": 2}
+
+
+def test_jelolt_valasztas_sorszam_nelkul_nem_valasztas():
+    """Sorszám nélkül nincs mit választani — a `nincs` a legártalmatlanabb
+    kimenet (az orchestrator elutasításként kezeli, nem foglal)."""
+    kaszkad = _kaszkad(_FakeLLM({"eszkoz": "jelolt_valasztas", "parameterek": {}}))
+
+    eredmeny = kaszkad.ertelmez("azt kérem", most=_MOST, kontextus=ErtelmezesKontextus())
+
+    assert eredmeny["eszkoz"] == "nincs"
+
+
+def test_jelolt_valasztas_szoveges_sorszam_kiesik():
+    """A séma egész számot ír elő; ha egy jövőbeli szolgáltató mégis
+    szöveget adna vissza („második"), az itt esik ki — a kötött
+    dekódolás mellett ez a második védvonal."""
+    kaszkad = _kaszkad(
+        _FakeLLM({"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": "második"}})
+    )
+
+    eredmeny = kaszkad.ertelmez("a másodikat", most=_MOST, kontextus=ErtelmezesKontextus())
+
+    assert eredmeny["eszkoz"] == "nincs"
+
+
+def test_jelolt_valasztas_nulla_vagy_negativ_kiesik():
+    for sorszam in (0, -1):
+        kaszkad = _kaszkad(
+            _FakeLLM({"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": sorszam}})
+        )
+
+        eredmeny = kaszkad.ertelmez("azt", most=_MOST, kontextus=ErtelmezesKontextus())
+
+        assert eredmeny["eszkoz"] == "nincs", f"sorszám={sorszam}"

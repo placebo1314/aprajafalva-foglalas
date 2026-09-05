@@ -590,6 +590,47 @@ esetek:
       ablakra esik vissza — ez a szándék-rétegzés szerint helyes.
     cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]
 
+  - id: elengedes-04-ellenproba-megtartja-a-boltot
+    bemenet:
+      - "Petárdázni szeretnék kedden."
+      - "és szerdán van hely?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-19T00:00:00Z"
+        datum_ig: "2026-08-19T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      ELLENPRÓBA az elengedés-rétegre. Ugyanaz a szerkezet („és …?"
+      folytatás), de itt a vásárló a NAPOT cseréli, nem a boltot — a
+      boltnak tehát MEG KELL MARADNIA. Egy réteg, ami mindenre
+      visszakérdez a boltra, 100%-ot érne el az 01–03. eseteken, és
+      használhatatlan lenne; ez az eset azt méri, hogy a modell a kettőt
+      megkülönbözteti. (Ez az `alkudozas` réteggel rokon, de ott a
+      kérdés a szándék-rétegzés, itt az elengedés HATÁRA.)
+    cimkek: [elengedes, ellenproba, tobbfordulos]
+
+  - id: elengedes-05-szolgaltatas-ellenproba
+    bemenet:
+      - "Nagy petárdát szeretnék kedden."
+      - "és csütörtökön ugyanez?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: nagy_petarda
+        datum_tol: "2026-08-20T00:00:00Z"
+        datum_ig: "2026-08-20T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Az „ugyanez" a KEMÉNY részre mutat vissza (nagy petárda), a nap
+      viszont új. A helyes válasz a szolgáltatás megtartása — az
+      `elengedes-03` tükre, ahol ugyanez a mező esik ki.
+    cimkek: [elengedes, ellenproba, tobbfordulos]
+
 # -----------------------------------------------------------------------
 # Nyelvi változatosság — amit MINTAILLESZTÉSSEL nem lehet megoldani
 # (ADR-018). Ezek nem "nehezebb" esetek, hanem MÁS FAJTÁJÚAK: mindegyik
@@ -1006,6 +1047,41 @@ esetek:
       arra, amit a mondat épp megválaszolt. A Szundi szolgáltatása
       egyértelmű, ezért kitölthető.
     cimkek: [mindegy, legkorabbi]
+
+  - id: mindegy-07-elengedes-utan-uj-ertek
+    bemenet:
+      - "Bármelyik petárda jó, csak csütörtökön legyen."
+      - "mégis inkább a nagyot kérem"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: nagy_petarda
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Az ELENGEDÉS VISSZAVONHATÓ: aki azt mondta, mindegy, később
+      mondhat konkrétat. A három állapot (nem tudjuk / elengedve /
+      tudjuk) között OD A VISSZA is lehet mozogni — a MINDEGY nem
+      zárja le a mezőt véglegesen. A dátum a második fordulóban nincs
+      megismételve, ezért az általános ablakra esik vissza (a puha rész
+      minden fordulóban frissen dől el).
+    cimkek: [mindegy, elengedes_visszavonasa, tobbfordulos]
+
+  - id: mindegy-08-nem-mindegy-hanem-kerdes
+    bemenet: "Számít, hogy melyik petárdát kérem?"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [bolt_info, visszakerdez, nincs]
+    megjegyzes: >
+      ELLENPRÓBA: a „számít" szó ugyanabból a szócsaládból való, mint a
+      „nem számít" (ami elengedés) — de ez KÉRDÉS, nem döntés. A vásárló
+      azt kérdezi, van-e különbség; erre a termékleírás a válasz, vagy a
+      visszakérdezés. Ami hiba lenne: MINDEGY-et írni egy olyan mezőre,
+      amit a vásárló épp meg akar érteni.
+    cimkek: [mindegy, ellenproba]
 
   - id: mindegy-05-ellenproba-mindegyik-lista
     bemenet: "Mindegyik boldogság-fajta érdekel, mi mindent lehet kapni a Törpillánál?"

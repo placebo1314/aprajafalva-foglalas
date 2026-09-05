@@ -58,12 +58,40 @@ kimondja: ha két egymást követő mérésen nem jobb az állapotsorral, ki
 kell venni — a kapcsoló emiatt marad a kódban.
 
 **4. A negyedik mondat mindkét felállásban elbukik.** Az „inkább a
-késeibb" összehasonlító hivatkozás („a felajánlottak közül a későbbi"),
-amihez a rendszernek a jelöltek IDŐRENDJÉT is értenie kellene — az
-állapotsor ma csak a darabszámot mondja meg. Ez a következő lépés
-természetes helye: a felajánlott időpontok bekerülhetnének az
-állapotsorba is (ma csak a beszélgetés-előzményben szerepelnek,
-sorszámozva).
+késeibb" összehasonlító hivatkozás. Ebből akkor arra következtettünk,
+hogy az IDŐRENDI hivatkozásokhoz a jelöltek sorrendje kellene — l. a
+kiegészítést lent, ami ezt megcáfolta.
+
+## Kiegészítés (2026-09-05): bővített próbakészlet
+
+A négy próba nyolcra bővült — három új időrendi hivatkozással és egy
+ELLENPRÓBÁVAL (olyan mondat, amire NEM szabad a listából választani).
+`qwen3.5:9b`, állapotsor BE:
+
+| mondat | eredmény |
+|---|---|
+| „az a fél kilences jó lesz" | `jelolt_valasztas` ✔ |
+| „a középső legyen" | `jelolt_valasztas` ✔ |
+| „a legkorábbi megfelel" | `jelolt_valasztas` ✔ |
+| „a legkésőbbit kérem" | `jelolt_valasztas` ✔ |
+| „az utolsó előtti jó lesz" | `jelolt_valasztas` ✔ |
+| „inkább a késeibb" | `szabad_idopontok` ✘ |
+| **ellenpróba:** „mégis inkább jövő héten" | `szabad_idopontok` ✔ (helyesen NEM választ) |
+
+**Az előző következtetés téves volt.** Nem az időrendi hivatkozás a
+gond: „a legkésőbbit" és „az utolsó előtti" is megy — pedig azokhoz is
+a jelöltek sorrendje kell. Ami marad, az az egyetlen mondat, aminek a
+SZÓALAKJA szokatlan („késeibb" a köznyelvi „későbbi" helyett) — ez a
+`tajszolas` réteg problémája, nem az állapotgépé.
+
+**Az ellenpróba a fontosabbik hír:** a „mégis inkább jövő héten"
+mondatra a rendszer NEM választott a listából, hanem új keresést
+indított. Az állapotsor legfőbb kockázata az volt, hogy a modell
+utasításnak veszi és mindenáron választ — ez a próba szerint nem
+történik meg.
+
+Így a bővített készleten: **6/7 a hivatkozásokon, plusz a helyes
+ellenpróba.**
 
 ## A többi menetre nincs hatása
 

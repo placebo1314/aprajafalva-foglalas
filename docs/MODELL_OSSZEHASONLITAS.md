@@ -4,6 +4,14 @@
 **Értelmező:** `forditott` (ADR-018) · **Ablak:** 4 forduló (ADR-025) ·
 **Prompt:** v1 · `temperature 0`, `think: false`, Ollama
 
+> **2026-09-05-i kiegészítés.** A mezőny a Gemma 4 családdal bővült
+> (`12b-it-qat`, `e4b-it-qat`, `e2b-it-qat`), és a golden halmazok is
+> bővültek — az összehasonlítás mostantól **55 + 28 eseten** fut, öt
+> modellel. A számok és a döntés (marad a `qwen3.5:9b`):
+> `docs/MODELLKERESES_20260905.md`. A LÉNYEG: a `gemma4:12b` a
+> beszédhelyzeteken 96,4%-ot ad (a valaha mért legjobbat), de a nyelvi
+> halmazon és a leggyengébb rétegen alulmarad, és 58%-kal lassabb.
+>
 > **2026-09-01-i kiegészítés.** A mezőny két nagy modellel bővült
 > (`gemma3:12b`, `qwen2.5:14b`), amik a 8 GB-os kártyán biztosan
 > kiszerveznek — a számok és a kiszervezés hatása:

@@ -336,6 +336,57 @@ kemény részének elvetése („és bármelyik másik boltban?") a modell
 képessége; mintával reménytelen, mert a mondatban nincs olyan szó,
 amit keresni lehetne.
 
+### 2.9d A MINDEGY RAGADÓS — az elengedés nem vonható vissza (2026-09-05)
+
+**A bukás** (`mindegy-07-elengedes-utan-uj-ertek`, mérve `qwen3.5:9b` ÉS
+`gemma4:e4b` esetén is): a vásárló előbb elenged egy mezőt („Bármelyik
+petárda jó"), majd meggondolja magát („mégis inkább a nagyot kérem") —
+és a rendszer marad a `MINDEGY`-nél.
+
+```
+1. forduló: "Bármelyik petárda jó, csak csütörtökön legyen."
+            -> szolgaltatas_id: MINDEGY        (helyes)
+2. forduló: "mégis inkább a nagyot kérem"
+            -> szolgaltatas_id: MINDEGY        (HIBÁS, nagy_petarda kellene)
+```
+
+**Miért fontos:** a három állapot (nem tudjuk / elengedve / tudjuk)
+között ODA-VISSZA kellene mozogni. Ma az elengedés EGYIRÁNYÚ ajtó — aki
+egyszer azt mondta, mindegy, az ebben a beszélgetésben nem tud
+konkrétat kérni. Ez rosszabb, mint ha meg sem kérdeztük volna.
+
+**A javítást MEGPRÓBÁLTUK, és megbukott.** A rendszerprompt kapott egy
+mondatot („Az elengedés VISSZAVONHATÓ: … FELÜLÍRJA a korábbi
+MINDEGY-et"), és két futáson mérve: a célzott eset **továbbra is
+bukott**, az összesített szám nem javult (86,4% → 85,5% / 83,6%). A
+szabály ezért nincs a promptban — a saját szabályunk szerint (ha nem
+javít, ne vezesd be).
+
+**A determinisztikus javítás sem járható ma.** Az kellene hozzá, hogy a
+szabály-alapú réteg felismerje a mondatban a konkrét értéket („a
+nagyot") — de a minta (`nagy` szóhatárral) a toldalékolt alakra nem
+illeszkedik, kitágítva viszont a „nagyon sietek" mondatból is
+petárdaméret lenne. Ez ráigazítás lenne, nem javítás — a bukás ezért
+marad KORLÁT, dokumentálva.
+
+### 2.9c A szolgáltatás nem él túl egy fordulót (2026-09-05)
+
+**A bukás** (`elengedes-05-szolgaltatas-ellenproba`, mindkét mért
+modellen): a KEMÉNY rész (bolt + szolgáltatás) az ADR-019 szerint
+végigkíséri a beszélgetést, de a gyakorlatban csak a BOLT teszi.
+
+```
+1. forduló: "Nagy petárdát szeretnék kedden."   -> ugyifogyi + nagy_petarda
+2. forduló: "és csütörtökön ugyanez?"           -> ugyifogyi, szolgáltatás NÉLKÜL
+```
+
+A modell látja a beszélgetést, mégsem tölti ki a szolgáltatást — és az
+ADR-019 döntése szerint ilyenkor a `None` erősebb a megőrzött értéknél,
+tehát a rendszer nem is pótolja. A kimenet így nem hibás foglalás, csak
+tágabb keresés (minden petárdaméretre) — ezért ez KORLÁT, nem invariáns-
+sértés. Az „ugyanez" névmás feloldása a következő lépés természetes
+helye.
+
 ### 2.9b A MINDEGY átszivárog a szomszéd mezőre
 
 `nyelvi_alap.yaml::mindegy-03-pult`. Mérve (2026-08-30, `qwen3.5:9b`,
