@@ -55,7 +55,7 @@ import random
 
 from assistant.tools import katalogus
 from assistant.valasz import beszelheto as beszelheto_modul
-from assistant.valasz import szamok
+from assistant.valasz import ragozas, szamok
 from assistant.valasz.sablonok import SABLONOK
 
 _NYELV_ALAPERTELMEZETT = "hu"
@@ -271,12 +271,15 @@ def kiut_szoveg(
     sablonok = SABLONOK[nyelv]["kiut"]
     gombok = [(d, sablonok["dimenzio"][d]) for d in dimenziok if d in sablonok["dimenzio"]]
     if not _beszelheto_e(mod):
-        return sablonok["bevezetes"], gombok
+        # Dimenzió nélkül (keresés még nem futott) MÁS a mondat: a
+        # három dimenzió felsorolása olyat ígérne, amit nem kínálunk.
+        kulcs = "bevezetes" if gombok else "bevezetes_bolt"
+        return sablonok[kulcs], gombok
 
     beszelt = SABLONOK[nyelv]["beszelheto"]["kiut"]
     nevek = [beszelt["dimenzio"][d] for d, _ in gombok if d in beszelt["dimenzio"]]
     if not nevek:
-        return kimenet(beszelt["bevezetes"], mod), gombok
+        return kimenet(beszelt["bevezetes_bolt"], mod), gombok
     kerdes = beszelt["kerdes"].format(dimenziok=_felsorolas(nevek))
     # `bevezetessel=False`: a hívó MÁR kimondott egy tényt ebben a
     # fordulóban (pl. „ezen a héten nincs időpont"), és hangon két
@@ -329,7 +332,11 @@ def alternativa_szoveg(
 
 
 def visszakerdezes_szoveg(
-    hianyzo_mezo: str | None, *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
+    hianyzo_mezo: str | None,
+    *,
+    valasztek: list[str] | None = None,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+    mod: str = MOD_SZOVEGES,
 ) -> str:
     """A visszakérdezés mondata — a `hianyzo_mezo` (eszkoz-szerzodes skill
     mezőneve) emberi megfogalmazását illeszti a sablonba. Ismeretlen vagy
@@ -341,7 +348,18 @@ def visszakerdezes_szoveg(
     olyan mondat, amire a vásárló hallgatással felel."""
     if _beszelheto_e(mod):
         kerdes = _beszelheto_sablon(nyelv, "zart_kerdes", "mezo_neve", hianyzo_mezo or "")
-        return kerdes or _beszelheto_sablon(nyelv, "zart_kerdes", "tartalek")
+        kerdes = kerdes or _beszelheto_sablon(nyelv, "zart_kerdes", "tartalek")
+        # HANGON NINCS GOMB (ADR-032): ha van választék, a kérdésnek
+        # magának kell felsorolnia — különben a vásárló nem tudja, mi
+        # közül választhat. Ez az első idegen próba tanulsága: a
+        # „Melyik boltba szeretnél menni?" annak szól, aki ismeri a
+        # boltokat.
+        if valasztek:
+            sablon = _beszelheto_sablon(nyelv, "zart_kerdes", "valasztekkal")
+            return kimenet(
+                sablon.format(kerdes=kerdes.rstrip("?"), valasztek=_felsorolas(valasztek)), mod
+            )
+        return kerdes
     sablonok = SABLONOK[nyelv]["zart_kerdes"]
     mezo_szoveg = sablonok["mezo_neve"].get(hianyzo_mezo, hianyzo_mezo or "mit szeretnél")
     return sablonok["bevezetes"].format(mezo_szoveg=mezo_szoveg)
@@ -565,6 +583,67 @@ def hang_allapot_szoveg(
     }
     felsorolas = ", ".join(nevek.get(h, h) for h in hianyok)
     return sablonok["hang_hianyzik"].format(hianyok=felsorolas)
+
+
+def bolt_tetel_mondva(
+    nev: str, szolgaltatasok: list[dict], *, nyelv: str = _NYELV_ALAPERTELMEZETT
+) -> str:
+    """Egy bolt KIMONDHATÓ alakja: „a Szundiba altatóért".
+
+    Ugyanaz a tétel kell a köszönéshez, a kínálat-felsoroláshoz és a
+    beszélhető zárt kérdéshez — egy helyen, hogy a három ne
+    driftelhessen szét. A ragozás a `ragozas.py`-é, a szórend a
+    sabloné, a NEVEK az adatbázisé."""
+    sablon = SABLONOK[nyelv]["bemutatkozas"]["bolt_tetel"]
+    return (
+        sablon.format(
+            bolt=f"{ragozas.nevelo(nev)} {ragozas.hova(nev)}",
+            szolgaltatas=ragozas.ert(szolgaltatasok[0]["nev"]) if szolgaltatasok else "",
+        )
+    ).strip()
+
+
+def bemutatkozas_szoveg(
+    boltok: list[dict],
+    *,
+    koszones: bool = False,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+    mod: str = MOD_SZOVEGES,
+) -> str:
+    """KÖSZÖNÉS és KÍNÁLAT válasza (ADR-032): mi van itt egyáltalán.
+
+    `boltok`: a `kinalat` eszköz kimenete — bolt-slug, NÉV és a
+    szolgáltatások (név + rövid leírás). **Minden adat az
+    adatbázisból**; ez a függvény csak mondattá fűzi, és ragoz
+    (`ragozas.py`).
+
+    Két alak, két helyzet:
+
+    - **röviden** (köszönés, vagy több bolt): „a Szundiba altatóért, az
+      Ügyifogyiba petárdáért…" — a listát a vásárló azért kapja, hogy
+      VÁLASSZON, nem azért, hogy elolvassa;
+    - **részletesen** (EGY bolt): a leírás is elhangzik, mert ott már
+      nem választásról van szó, hanem arról, mit kap.
+    """
+    sablonok = SABLONOK[nyelv]["bemutatkozas"]
+    if not boltok:
+        return kimenet(SABLONOK[nyelv]["hiba"]["ervenytelen_kereses"], mod)
+
+    if len(boltok) == 1:
+        bolt = boltok[0]
+        sorok = [
+            sablonok["bolt_tetel_reszletes"]
+            .format(bolt=bolt["nev"], szolgaltatas=sz["nev"], leiras=sz["leiras"])
+            .rstrip(": ")
+            for sz in bolt["szolgaltatasok"]
+        ]
+        return kimenet(" ".join(sorok) if sorok else bolt["nev"], mod)
+
+    tetelek = [
+        bolt_tetel_mondva(bolt["nev"], bolt["szolgaltatasok"], nyelv=nyelv) for bolt in boltok
+    ]
+    kulcs = "koszones" if koszones else "kinalat"
+    return kimenet(sablonok[kulcs].format(boltok=", ".join(tetelek)), mod)
 
 
 def meta_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES) -> str:

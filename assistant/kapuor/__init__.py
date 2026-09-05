@@ -17,6 +17,7 @@ szólal** — nem is hívjuk meg.
 | `ENGEDELYEZETT_TENYVALASZ` | a `bolt_info` zárt mezőkészlete | egyenesen a szerkesztett adathoz |
 | `HATOKORON_KIVUL` | egyik sem | `nincs` — elhárítás, modellhívás nélkül |
 | `META_KERDES` | magáról a rendszerről kérdez | rövid bemutatkozás, modellhívás nélkül |
+| `KOSZONES` | csak köszön | köszönés + bemutatkozás + MI VAN ITT |
 
 A döntés mellé egy zárt `ok` kulcs is jár. Az `ok` NEM negyedik
 kategória: kizárólag azt választja meg, MELYIK magyar mondat menjen ki
@@ -96,8 +97,24 @@ HATOKORON_KIVUL = "hatokoron_kivul"
 # — erre viszont TUDUNK válaszolni, és a válasz nem elhárítás, hanem
 # bemutatkozás. Két különböző mondat, két különböző szándék.
 META_KERDES = "meta_kerdes"
+# KÖSZÖNÉS: „helló", „jó napot", „szia". ELSŐ IDEGEN PRÓBA találata
+# (2026-09-05): a „helló." mondatra a rendszer azt kérdezte, melyik
+# boltba szeretne menni a vásárló — vagyis feltételezte, hogy ismeri a
+# boltokat. Négy forduló múlva ott tartottunk, hogy „ne kínlódj vele
+# tovább".
+#
+# A köszönés nem foglalási szándék (nincs benne kérés), nem tényválasz
+# (nem kérdez semmit), és végképp nem hatókörön kívüli. Az egyetlen
+# helyes válasz: köszönés + rövid bemutatkozás + MI VAN ITT.
+KOSZONES = "koszones"
 
-KATEGORIAK = (FOGLALASI_SZANDEK, ENGEDELYEZETT_TENYVALASZ, HATOKORON_KIVUL, META_KERDES)
+KATEGORIAK = (
+    FOGLALASI_SZANDEK,
+    ENGEDELYEZETT_TENYVALASZ,
+    HATOKORON_KIVUL,
+    META_KERDES,
+    KOSZONES,
+)
 
 # -- az `ok` zárt kulcsai ---------------------------------------------
 #
@@ -115,6 +132,10 @@ OK_MATEMATIKA = "matematika"
 OK_KREATIV_KERES = "kreativ_keres"
 OK_ALTALANOS_TUDAS = "altalanos_tudas"
 OK_EGESZSEGUGY = "egeszsegugy"
+# KÍNÁLAT-kérdés: „milyenek vannak?", „mit lehet itt?" — engedélyezett
+# TÉNYVÁLASZ, csak nem a `bolt_info` mezőiből, hanem a katalógusból
+# (ADR-032, `assistant/tools/kinalat.py`).
+OK_KINALAT = "kinalat"
 
 
 # =====================================================================
@@ -148,6 +169,54 @@ _META_MINTAK = (
     re.compile(r"\b(érted|értesz)\s+(amit|magyarul)\b"),
     re.compile(r"\bveled\s+beszélek\b"),
 )
+
+
+# KÖSZÖNÉS — a mondat EGÉSZE köszönés (esetleg udvariassági kísérővel).
+# Szűk, mert a „jó napot, szeretnék időpontot" NEM köszönés, hanem
+# foglalási kérés: ott a köszönés csak bevezetés.
+_KOSZONES_MINTA = re.compile(
+    r"^\s*(hello|helló|hallo|halló|szia|sziasztok|szevasz|csá|csáó|csumi|üdv|üdvözlöm|"
+    r"jó\s+(napot|reggelt|estét|napot\s+kívánok)|jónapot|kezicsókolom|"
+    r"adjon\s+isten|szép\s+napot)"
+    r"[\s.,!?]*$"
+)
+
+
+def _koszones_e(also: str) -> bool:
+    """A mondat EGÉSZE köszönés-e. A „jó napot, szeretnék időpontot"
+    nem az: ott a köszönés bevezetés, és a kérés viszi a fordulót."""
+    return bool(_KOSZONES_MINTA.match(also.strip()))
+
+
+# KÍNÁLAT-KÉRDÉS — „mi van itt egyáltalán?". Ez az a kérdés, amit egy
+# olyan ember tesz fel, aki még semmit nem tud a rendszerről; épp ezért
+# NEM tartalmaz boltnevet, és épp ezért esett eddig a
+# „nem-értem"-ágra.
+_KINALAT_MINTAK = (
+    re.compile(r"\bmilyen(ek)?\s+(vannak|van|lehetőség|szolgáltatás)"),
+    re.compile(r"\bmi(t|k)?\s+(lehet|van|kapható|árul|kínál)"),
+    re.compile(r"\bmi\s+(van|újság)\s+(itt|nálatok|maguknál|önöknél)"),
+    re.compile(r"\bmit\s+(tudok|lehet)\s+(itt|nálatok)\s+(foglalni|kérni|venni)"),
+    re.compile(r"\bmik\s+a\s+(lehetőségek|szolgáltatások|boltok)"),
+    re.compile(r"\bmilyen\s+boltok\s+vannak"),
+    re.compile(r"\bmiből\s+lehet\s+(választani|kérni)"),
+    re.compile(r"\bmit\s+árul(tok|nak)"),
+    re.compile(r"\bhol\s+lehet\s+(nálatok|itt)\s+foglalni"),
+)
+
+
+def _kinalat_kerdes_e(also: str) -> bool:
+    """Kínálat-kérdés-e — MEGNEVEZETT BOLT NÉLKÜL.
+
+    A boltot megnevező kérdés („Mit árulnak a Törpillánál?") NEM
+    katalógus-kérdés, hanem a `bolt_info` termék-ága: ott a vásárló már
+    tudja, hova megy, és a másik két bolt felsorolása zaj lenne. A
+    katalógus épp azoké, akik még nem tudják, mi közül választhatnak."""
+    from assistant.interpreter import rule_based
+
+    if rule_based.bolt_feloldas(also) is not None:
+        return False
+    return any(minta.search(also) for minta in _KINALAT_MINTAK)
 
 
 def _meta_kerdes_e(also: str) -> bool:
@@ -386,6 +455,15 @@ def dontes(mondat: str) -> KapuorDontes:
     # A META-KÉRDÉS a foglalási szándék ELŐTT: a „mit tudsz?" és a „csak
     # a választ beszéled?" mondatokban lehet foglalásra emlékeztető szó,
     # és az éles próbában pontosan ez történt (keresés lett belőle).
+    # KÖSZÖNÉS és KÍNÁLAT-KÉRDÉS a foglalási szándék ELŐTT: egyikben
+    # sincs boltnév, tehát a mögöttes rétegek „hiányzó adatnak" olvasnák
+    # őket, és visszakérdeznének — pontosan ez történt az első idegen
+    # próbában.
+    if _koszones_e(also):
+        return KapuorDontes(KOSZONES, None, "koszones")
+    if _kinalat_kerdes_e(also):
+        return KapuorDontes(ENGEDELYEZETT_TENYVALASZ, OK_KINALAT, "kinalat")
+
     if _meta_kerdes_e(also):
         return KapuorDontes(META_KERDES, None, "meta_kerdes")
 

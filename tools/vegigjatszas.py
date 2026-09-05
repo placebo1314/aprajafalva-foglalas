@@ -116,6 +116,14 @@ BESZELGETESEK: list[tuple[str, list[str]]] = [
     # kézi próbája, ami eddig CSAK kézzel volt végigjátszható. A
     # végigjátszás enélkül azt állította magáról, hogy a teljes utat
     # méri, holott a beszélgetés legrosszabb végkimenetelét kihagyta.
+    # AZ ELSŐ IDEGEN PRÓBA négy fordulója, SZÓ SZERINT (ADR-032). A
+    # golden set az ÉRTELMEZÉST méri rajta; itt az a kérdés, mit lát a
+    # vásárló a képernyőn — felsorolja-e a boltokat, és NEM szólal-e meg
+    # a kiút olyan beszélgetésben, ami egyetlen keresésig sem jutott el.
+    (
+        "első találkozás (idegen próba)",
+        ["helló.", "milyenek vannak?", "másik napszakot.", "de én mindenképp itt akarom."],
+    ),
     (
         "frusztráció → emberhez",
         [

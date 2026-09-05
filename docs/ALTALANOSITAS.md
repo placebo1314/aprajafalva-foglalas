@@ -365,6 +365,41 @@ amire nincs szava** — és ilyenkor nem hibázik, hanem a legközelebbi
 meglévő szót használja. A javítás ezért sosem prompt-fegyelem: új szó
 kell a szerződésbe.
 
+### 1.13 Aki nem ismeri a rendszert, azt a rendszer FAGGATJA (2026-09-19, ADR-032)
+
+**A bukás** (első IDEGEN próba, négy forduló): a „helló." mondatra a
+rendszer azt kérdezte, MELYIK boltba szeretne menni. A „milyenek
+vannak?" kérdésre — mert az sem tartalmazott boltnevet — az
+ismétlés-figyelő kiutat ajánlott, a harmadikra pedig elküldte a
+vásárlót a boltba, élőben. Keresés egyetlenegyszer sem futott.
+
+**A tanulság általánosítható:** minden rétegünk (visszakérdezés,
+ismétlés-figyelő, frusztráció-figyelő) EGY közös feltevésre épült — hogy
+a vásárló tudja, mit lehet nálunk kérni. A feltevés sehol nem volt
+kimondva, ezért sehol nem is lehetett megcáfolni; a rétegek nem
+egymástól függetlenül hibáztak, hanem együtt, ugyanazon a ponton.
+
+Ebből két külön dolog következik:
+
+1. **A ki nem mondott feltevés nem téveszthető el, csak öröklődik.** Aki
+   megnevezte a boltot, annak minden réteg jól működött — a mérés tehát
+   nem is mutathatta a hibát, mert a golden set minden esete olyan
+   emberé volt, aki már tudta, mit akar. **Egy halmaz nem tudja mérni
+   azt a beszédhelyzetet, amit nem tartalmaz.** Ezért lett az
+   `elso_talalkozas` külön réteg, és ezért a próba SZÓ SZERINTI
+   mondataiból.
+2. **A kudarcot jelző mechanizmusnak tudnia kell, honnan indultunk.** Az
+   ismétlés- és a frusztráció-figyelő „nem jutunk előre"-t mért, és
+   igaza is volt — csak épp az „előre" nem ugyanaz annak, aki elakadt,
+   és annak, aki még el sem indult. A kiút kapuja ezért állapotkérdés
+   (`utolso_kereses`), nem szövegkérdés: **a feladás csak próbálkozás
+   után értelmes.**
+
+Rokon 1.11-gyel: ott a rendszerről szóló kérdésnek nem volt kategóriája,
+itt a kínálatról szólónak. Mindkét esetben a hiányzó kategória nem
+semlegesen viselkedett, hanem a legközelebbi meglévőbe esett — ott
+keresés lett belőle, itt kiút.
+
 ### 2.9d A MINDEGY ragadóssága — MEGOLDVA (2026-09-12, ADR-031)
 
 **A bukás** (`mindegy-07`, `elengedes-10/11`): aki elengedett egy mezőt

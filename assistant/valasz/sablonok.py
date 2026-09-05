@@ -162,6 +162,14 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "Úgy látom, így nem jutunk előre. Melyiket próbáljuk: "
                 "másik napot, másik napszakot vagy a legkorábbi szabad időpontot?"
             ),
+            # KERESÉS NÉLKÜL (ADR-032) a fenti mondat HAZUDNA: nap- és
+            # napszak-váltást ígérne olyasmiből, amiből a vásárló még
+            # semmit nem látott — és a gombok sem jönnének hozzá. Ilyenkor
+            # az egyetlen értelmes következő lépés a bolt kiválasztása.
+            "bevezetes_bolt": (
+                "Úgy látom, így nem jutunk előre. Kezdjük a legelején: "
+                "melyik boltba szeretnél menni?"
+            ),
             "dimenzio": {
                 "nap": "Másik nap",
                 "napszak": "Másik napszak",
@@ -195,6 +203,10 @@ SABLONOK: dict[str, dict[str, object]] = {
         # ------------------------------------------------------------
         "zart_kerdes": {
             "bevezetes": "Ehhez még kellene tudnom: {mezo_szoveg}.",
+            # A VÁLASZTÉK KIMONDVA (ADR-032) — beszélhető módban nincs
+            # gomb, tehát a kérdésnek magának kell felsorolnia, mi közül
+            # lehet választani. Szöveges módban a gombok viszik ezt.
+            "valasztekkal": "{kerdes} {valasztek}?",
             "mezo_neve": {
                 "bolt_id": "melyik boltba szeretnél menni",
                 "szolgaltatas_id": "melyik szolgáltatást szeretnéd",
@@ -213,6 +225,28 @@ SABLONOK: dict[str, dict[str, object]] = {
         # tesz: nem ígér emberi ügyintézőt (ADR-012: értesítés előáll,
         # de nem megy ki), és nem sorolja fel a technológiát.
         # ------------------------------------------------------------
+        # ------------------------------------------------------------
+        # bemutatkozas — KÖSZÖNÉS és KÍNÁLAT (ADR-032). A boltok és a
+        # leírásaik NEM itt vannak: azok az adatbázisból jönnek
+        # (`assistant/tools/kinalat.py`), és a `{boltok}` helyre kerülnek
+        # be. A sablon csak a KERETET adja.
+        #
+        # Miért fontos ez a különbség: ha a bolt-leírás sablonba
+        # égetne, egy admin-oldali átírás után a rendszer mást mondana,
+        # mint amit a törzsadat tartalmaz — és a vásárló azt hinné, a
+        # rendszer téved. A szerkesztett adat egyetlen forrása a
+        # `bolt`/`szolgaltatas` tábla.
+        # ------------------------------------------------------------
+        "bemutatkozas": {
+            "koszones": "Szia! Időpontot tudok foglalni három boltba: {boltok}. Melyik érdekel?",
+            "kinalat": "Ezekbe a boltokba tudok időpontot foglalni: {boltok}. Melyik érdekel?",
+            "kinalat_egy_bolt": "{boltok}",
+            # Egy bolt a felsorolásban: „a Szundiba altatóért". A RAGOZOTT
+            # alakokat a `ragozas.py` állítja elő a törzsadat neveiből —
+            # a sablon csak a sorrendet rögzíti.
+            "bolt_tetel": "{bolt} {szolgaltatas}",
+            "bolt_tetel_reszletes": "{bolt} — {szolgaltatas}: {leiras}",
+        },
         "meta": {
             "bemutatkozas": (
                 "Gép vagyok, a három aprajafalvi bolt időpontfoglalója: a Szundié, "
@@ -429,6 +463,7 @@ SABLONOK: dict[str, dict[str, object]] = {
             # menni." kijelentő mondat, amire a vásárló hallgatással
             # felel.
             "zart_kerdes": {
+                "valasztekkal": "{kerdes} {valasztek}?",
                 "mezo_neve": {
                     "bolt_id": "Melyik boltba szeretnél menni?",
                     "szolgaltatas_id": "Melyik szolgáltatást szeretnéd?",
@@ -444,6 +479,11 @@ SABLONOK: dict[str, dict[str, object]] = {
                 # kimeneti kapu szóközre cserélné („körbe körbe"), de
                 # egy jó mondatot nem javítgatni kell, hanem megírni.
                 "bevezetes": "Úgy látom, így nem jutunk előre.",
+                # Keresés nélkül l. a szöveges alak megjegyzését.
+                "bevezetes_bolt": (
+                    "Úgy látom, így nem jutunk előre. "
+                    "Kezdjük a legelején: melyik boltba szeretnél menni?"
+                ),
                 "kerdes": "Próbáljunk {dimenziok}?",
                 "dimenzio": {
                     "nap": "másik napot",

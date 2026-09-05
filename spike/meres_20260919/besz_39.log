@@ -1,0 +1,128 @@
+Betöltve: 39 eset (beszedhelyzetek halmaz), meta.most = 2026-08-17T09:00:00Z
+Értelmező: forditott (modell=qwen3.5:9b)
+
+Előmelegítés (a modell betöltése)… kész
+  masnak-01-anyamnak               1.0  OK
+  masnak-02-szomszed-nevében       1.0  OK
+  masnak-03-jogosultsag-kerdes     1.0  OK (elfogadható viselkedés)
+  felteteles-01-ha-esik-akkor-szerdan 1.0  OK
+  felteteles-02-akkor-nem-megyek   1.0  OK (elfogadható viselkedés)
+  osszehasonlitas-01-melyik-boltban-hamarabb 1.0  OK
+  osszehasonlitas-02-szundi-vagy-torpilla 1.0  OK (elfogadható viselkedés)
+  korabbi_foglalas-01-ugyanoda-mint-multkor 1.0  OK
+  korabbi_foglalas-02-multkori-megismetlese 1.0  OK (elfogadható viselkedés)
+  tobb_idopont-01-kettot-egymas-utan 1.0  OK (elfogadható viselkedés)
+  tobb_idopont-02-nekem-es-a-felesegemnek 1.0  OK (elfogadható viselkedés)
+  udvariassag-01-koszonom-viszlat  1.0  OK
+  udvariassag-02-koszonom-a-segitseget 1.0  OK
+  meggondolas-01-megsem-kell       1.0  OK
+  meggondolas-02-megse-akarok-foglalni 0.0  TILTOTT MINTA: kitalalt_datum — a modell dátumot adott meg, 
+  kozbevetes-01-meddig-tart        1.0  OK
+  kozbevetes-02-hol-van-a-bolt     0.0  várt 'bolt_info', kapott 'szabad_idopontok'
+  kozbevetes-03-mennyibe-kerul     1.0  OK
+  szohasznalat-01-bejelentkeznek   1.0  OK
+  szohasznalat-02-sorszamot-kernek 1.0  OK
+  szohasznalat-03-beugranek        1.0  OK
+  szohasznalat-04-lestoppolnek     1.0  OK
+  szohasznalat-05-foliratkoznek    1.0  OK
+  surgosseg-01-siet                1.0  OK
+  surgosseg-02-siet-nap-nelkul     1.0  OK
+  surgosseg-03-elore-sorolast-ker  1.0  OK (elfogadható viselkedés)
+  mas_csatorna-01-telefonalt       1.0  OK (elfogadható viselkedés)
+  mas_csatorna-02-uzenetet-hagyott 1.0  OK (elfogadható viselkedés)
+  elesbol-01-a-het-tizenotos       1.0  OK
+  elesbol-02-meta-kerdes           1.0  OK
+  elesbol-03-valassz-te            1.0  OK
+  elso_talalkozas-01-hello         1.0  OK
+  elso_talalkozas-02-milyenek-vannak 1.0  OK
+  elso_talalkozas-03-masik-napszakot 1.0  OK (elfogadható viselkedés)
+  elso_talalkozas-04-mindenkepp-itt 1.0  OK (elfogadható viselkedés)
+  elso_talalkozas-05-mit-tudtok-csinalni 1.0  OK
+  elso_talalkozas-06-jo-napot-onmagaban 1.0  OK
+  elso_talalkozas-07-ellenproba-koszones-plusz-keres 1.0  OK
+  elso_talalkozas-08-ellenproba-megnevezett-bolt 1.0  OK
+
+=== forditott — összesítés ===
+
+Címkénkénti pontosság:
+  alanyvaltas                  100.0%  (n=1)
+  azonositas_nelkul            100.0%  (n=1)
+  bolt_nem_alternativa         100.0%  (n=1)
+  dontes_atadasa               100.0%  (n=1)
+  elesbol                      100.0%  (n=3)
+  ellenproba                   100.0%  (n=2)
+  elso_talalkozas              100.0%  (n=8)
+  felteteles                   100.0%  (n=2)
+  hallucinacio_csapda          100.0%  (n=1)
+  hatokoron_kivul              100.0%  (n=3)
+  hianyzo_bolt                 100.0%  (n=1)
+  idegen_ige                   100.0%  (n=4)
+  jelolt_hivatkozas            100.0%  (n=1)
+  ket_bolt_megnevezve          100.0%  (n=1)
+  ket_nap                      100.0%  (n=1)
+  ket_szereplo                 100.0%  (n=2)
+  kimondott_idopont            100.0%  (n=1)
+  kinalat                      100.0%  (n=2)
+  kiut_utan                    100.0%  (n=2)
+  korabbi_foglalas             100.0%  (n=2)
+  koszones                     100.0%  (n=2)
+  kozbevetes                    66.7%  (n=3)
+  legkorabbi                   100.0%  (n=1)
+  mas_csatorna                 100.0%  (n=2)
+  masnak                       100.0%  (n=3)
+  meggondolas                   50.0%  (n=2)
+  meta_kerdes                  100.0%  (n=1)
+  napszak                      100.0%  (n=1)
+  nem_ismert_elozmeny          100.0%  (n=2)
+  nem_letezo_kepesseg          100.0%  (n=1)
+  nem_tamogatott_keres         100.0%  (n=1)
+  nincs_keres                  100.0%  (n=1)
+  nincs_surgossegi_sav         100.0%  (n=1)
+  osszehasonlitas              100.0%  (n=2)
+  surgosseg                    100.0%  (n=3)
+  szabaly_kerdes               100.0%  (n=1)
+  szleng_ige                   100.0%  (n=1)
+  szohasznalat                 100.0%  (n=5)
+  tartalek_ablak               100.0%  (n=1)
+  tenyvalasz                    66.7%  (n=3)
+  tobb_idopont                 100.0%  (n=2)
+  tobbfordulos                  77.8%  (n=9)
+  udvariassag                  100.0%  (n=2)
+  visszavonas                   50.0%  (n=2)
+  zaras                        100.0%  (n=2)
+
+Réteg-küszöbök:
+  elesbol              100.0%  (n= 3)  küszöb 90%  [TARTJA]
+  elso_talalkozas      100.0%  (n= 8)  küszöb 90%  [TARTJA]
+  felteteles           100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  korabbi_foglalas     100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  kozbevetes            66.7%  (n= 3)  küszöb 90%  [NEM TARTJA]
+  mas_csatorna         100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  masnak               100.0%  (n= 3)  küszöb 90%  [TARTJA]
+  meggondolas           50.0%  (n= 2)  küszöb 90%  [NEM TARTJA]
+  osszehasonlitas      100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  surgosseg            100.0%  (n= 3)  küszöb 90%  [TARTJA]
+  szohasznalat         100.0%  (n= 5)  küszöb 90%  [TARTJA]
+  tobb_idopont         100.0%  (n= 2)  küszöb 90%  [TARTJA]
+  udvariassag          100.0%  (n= 2)  küszöb 90%  [TARTJA]
+
+Összesített pontosság: 94.9%  (n=39)
+Leggyengébb réteg (ez a mérőszám, nem az átlag): meggondolas = 50.0%
+
+Válaszidő-eloszlás fordulónként (ezen a futáson, szekvenciálisan, n=49):
+  p50     4.30 s   (elvárás < 10 s)  [TARTJA]
+  p95     4.82 s   (elvárás < 25 s)  [TARTJA]
+  átlag   3.45 s   max   5.03 s
+  tendencia: első fél p50 4.38 s → második fél p50 4.00 s   [stabil, -9%]
+
+Réteg-megoszlás (melyik oldotta meg, utolsó forduló): kapuor=6, llm=32, szabaly:tenyvalasz=1
+
+=== ISMÉTELHETŐSÉG ===
+
+  Egy futás — a szórásról ez semmit nem mond. Két futáshoz: --ismetles 2
+  Zajküszöb: 3.0 százalékpont (a 3 pontos alapérték és a mért tartomány közül a nagyobb)
+
+JSON mentve: spike\meres_20260919\besz_39.json
+
+Réteg-küszöb alatt: kozbevetes: 67% < küszöb 90%; meggondolas: 50% < küszöb 90%
+$ C:\Program Files\Python314\python.exe -m tests.golden.futtato --ertelmezo forditott --halmaz beszedhelyzetek --json spike/meres_20260919/besz_39.json

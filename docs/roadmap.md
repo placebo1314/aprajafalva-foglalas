@@ -186,7 +186,16 @@ leggyengébb réteg tíz-tíz új esetet kapott, más beszédhelyzetekből
 mostantól ISMÉTELT mérést is tud (`--ismetles`), és kimondja, ha egy
 különbség a szóráson belül van.
 
-**Kilépési feltétel:** 150-200 eset — **teljesült** (184, ebből nyelvi
+**2026-09-19:** a beszédhelyzetek halmaz 31 → **39 eset** — új réteg az
+`elso_talalkozas` (8 eset): olyan mondatok, amiket egy a rendszert NEM
+ISMERŐ ember mond. A négy alapesete az első IDEGEN próbából való, SZÓ
+SZERINT, a helyes válasszal (`docs/BEVEZETES_20260919.md`). Együtt
+**192 eset**. A réteg 100% — de a lényeg nem a szám: **a rés azért volt
+láthatatlan, mert a halmaz minden esete olyan emberé volt, aki már
+tudta, mit akar.** Egy halmaz nem tudja mérni azt a beszédhelyzetet,
+amit nem tartalmaz.
+
+**Kilépési feltétel:** 150-200 eset — **teljesült** (192, ebből nyelvi
 85); futtatható értékelő — **kész**; két modell összehasonlítható —
 **kész** (2026-09-05-re öt modell van megmérve ugyanazon a halmazon).
 Ami a lezáráshoz még hiányzik: SZITUÁCIÓS esetek (naptárállapot →

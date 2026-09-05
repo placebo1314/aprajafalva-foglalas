@@ -342,3 +342,58 @@ def test_a_meta_kerdes_nem_hatokoron_kivul():
 
     assert dontes.kivul is False
     assert dontes.kategoria in kapuor.KATEGORIAK
+
+
+# --- KÖSZÖNÉS és KATALÓGUS-KÉRDÉS (ADR-032) --------------------------
+#
+# AZ ELSŐ IDEGEN PRÓBA: a „helló." mondatra a rendszer azt kérdezte,
+# melyik boltba szeretne menni — feltételezte, hogy a vásárló ismeri a
+# boltokat.
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    ["helló.", "Helló!", "szia", "Sziasztok", "jó napot", "Jó napot kívánok!", "üdv", "csá"],
+)
+def test_koszones_felismerese(mondat):
+    assert kapuor.dontes(mondat).kategoria == kapuor.KOSZONES
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    [
+        # A köszönés BEVEZETÉS, a kérés viszi a fordulót.
+        "jó napot, szeretnék időpontot",
+        "Szia! Kedden ráérek a Szundinál.",
+        "helló, mikor van nyitva a Törpilla?",
+    ],
+)
+def test_a_koszones_utan_ALLO_keres_viszi_a_fordulot(mondat):
+    assert kapuor.dontes(mondat).kategoria != kapuor.KOSZONES
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    [
+        "milyenek vannak?",
+        "mit lehet itt?",
+        "mit árultok?",
+        "mi van nálatok?",
+        "mik a lehetőségek?",
+        "milyen boltok vannak?",
+        "miből lehet választani?",
+    ],
+)
+def test_katalogus_kerdes_felismerese(mondat):
+    dontes = kapuor.dontes(mondat)
+
+    assert dontes.kategoria == kapuor.ENGEDELYEZETT_TENYVALASZ
+    assert dontes.ok == kapuor.OK_KINALAT
+
+
+def test_a_megnevezett_bolt_nem_katalogus_kerdes():
+    """„Mit árulnak a Törpillánál?" — ott a vásárló már tudja, hova
+    megy: a `bolt_info` termék-ága a válasz, nem a katalógus."""
+    dontes = kapuor.dontes("Mit árulnak a Törpillánál?")
+
+    assert dontes.ok == "termek"

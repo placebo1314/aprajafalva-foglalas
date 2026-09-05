@@ -983,3 +983,41 @@ def test_a_visszautalas_a_boltot_is_athozza():
     )
 
     assert eredmeny["parameterek"]["bolt_id"] == "szundi"
+
+
+# --- KÖSZÖNÉS és KATALÓGUS a modell ELŐTT (ADR-032) ------------------
+
+
+def test_koszones_a_modell_elott_dol_el():
+    llm = _FakeLLM({"eszkoz": "visszakerdez", "parameterek": {"hianyzo_mezo": "bolt_id"}})
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = kaszkad.ertelmez("helló.", most=_MOST, kontextus=ErtelmezesKontextus())
+
+    assert eredmeny["eszkoz"] == "koszones"
+    assert llm.kapott_mondatok == [], "a modellt meg sem hívtuk"
+
+
+def test_katalogus_kerdes_a_modell_elott_dol_el():
+    llm = _FakeLLM({"eszkoz": "visszakerdez", "parameterek": {"hianyzo_mezo": "bolt_id"}})
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = kaszkad.ertelmez("milyenek vannak?", most=_MOST, kontextus=ErtelmezesKontextus())
+
+    assert eredmeny["eszkoz"] == "kinalat"
+    assert eredmeny["parameterek"] == {}
+    assert llm.kapott_mondatok == []
+
+
+def test_a_katalogus_a_beszelgetesbol_veszi_a_boltot():
+    """„és itt mi van?" — ha a beszélgetésből tudjuk, melyik boltról van
+    szó, csak azt soroljuk fel."""
+    kaszkad = _kaszkad(_FakeLLM())
+
+    eredmeny = kaszkad.ertelmez(
+        "mit lehet itt?",
+        most=_MOST,
+        kontextus=ErtelmezesKontextus(megorzott_parameterek={"bolt_id": "szundi"}),
+    )
+
+    assert eredmeny["parameterek"] == {"bolt_id": "szundi"}

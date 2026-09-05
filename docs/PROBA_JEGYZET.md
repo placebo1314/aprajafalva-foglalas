@@ -61,6 +61,29 @@ Az első fordulónak már nem kell megvárnia a modell betöltését: az ablak
 indításkor előmelegít, és a „Kimenet:" sor mellett kiírja, mikor lett
 kész.
 
+## 2c. Amit az első IDEGEN próba után érdemes kipróbálni
+
+Az első próbát olyan ember végezte, aki nem ismerte a rendszert — és
+négy forduló alatt jutott el a köszönéstől odáig, hogy menjen be a
+boltba élőben (`docs/BEVEZETES_20260919.md`). **Ha valakinek megmutatod
+a rendszert, ezzel kezdd**, mert ezen az úton jár egy új ember:
+
+| írd be | mit kell látnod |
+|---|---|
+| „helló." | köszönés + a három bolt LEÍRÁSSAL: „a Szundiba altatóért, az Ügyifogyiba petárdáért…" — és gombok |
+| „milyenek vannak?", „mit lehet itt?" | ugyanaz a felsorolás, modellhívás NÉLKÜL (a naplóban `kapuor` réteg) |
+| „Mit lehet kapni a Törpillánál?" | CSAK a Törpilla — aki megnevezi a boltot, annak a három felsorolása zaj |
+| „Jó napot! Szeretnék időpontot a Szundiba holnapra" | keresés, NEM bemutatkozás — a kérés viszi a fordulót |
+
+**A gombokon leírás áll, nem azonosító**: „Szundi — altató", nem
+„szundi". A zárt bolt-kérdés mellett ott a **„Mit lehet itt?"** gomb is.
+
+**Amit NEM szabad látnod**: „menjen be a boltba élőben" olyan
+beszélgetésben, amiben keresés még nem futott. Írd be háromszor, hogy
+„mennék" — a válaszoknak MÁSNAK kell lenniük: visszakérdezés →
+katalógus → „Kezdjük a legelején: melyik boltba szeretnél menni?". A
+negyedikre jön csak az emberhez irányítás.
+
 ## 3. Amit érdemes beírni
 
 **Mindhárom boltban van beosztás**, három különböző ritmusban — ez

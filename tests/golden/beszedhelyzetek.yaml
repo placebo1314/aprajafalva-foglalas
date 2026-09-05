@@ -65,6 +65,8 @@ meta:
     mas_csatorna: 0.90
     # ÉLES PRÓBÁBÓL származó esetek (2026-09-05) — l. a réteg fejlécét.
     elesbol: 0.90
+    # ELSŐ TALÁLKOZÁS (ADR-032) — a bevezetési rés esetei.
+    elso_talalkozas: 0.90
 
 esetek:
 
@@ -704,3 +706,141 @@ esetek:
       üres: nincs mit megadni, a választást az orchestrator hajtja
       végre.
     cimkek: [elesbol, dontes_atadasa, tobbfordulos]
+
+  # ---------------------------------------------------------------------
+  # 13. réteg — ELSŐ TALÁLKOZÁS (8 eset)
+  #
+  # Olyan mondatok, amiket egy a rendszert NEM ISMERŐ ember mond. A négy
+  # első eset SZÓ SZERINT az első idegen próbából való
+  # (`naplo/probak.jsonl`, 2026-09-05) — a többi ugyanennek a
+  # beszédhelyzetnek a rokona.
+  #
+  # **A várt válasz az, aminek történnie KELLETT VOLNA**, nem az, ami
+  # történt. Ami történt: négy forduló alatt jutott el a köszönéstől
+  # odáig, hogy „menjen be a boltba élőben" — úgy, hogy a rendszer
+  # egyetlen keresést sem futtatott.
+  #
+  # A `koszones` és a `kinalat` a kapuőr döntése (ADR-032), tehát ezek
+  # az esetek MODELL NÉLKÜL is mennek — de csak a KASZKÁDON
+  # (`--ertelmezo forditott`), mert a kapuőr ott fut. A csupasz
+  # szabály-alapú alapvonalon (`--ertelmezo szabaly`) buknak, és ez így
+  # helyes: az a réteg nem ismeri a kapuőrt. Ami számít: az ÉLES úton
+  # akkor is megvannak, ha nem fut az Ollama.
+  # ---------------------------------------------------------------------
+
+  - id: elso_talalkozas-01-hello
+    bemenet: "helló."
+    varhato:
+      eszkoz: koszones
+    megjegyzes: >
+      AZ ELSŐ IDEGEN PRÓBA 1. FORDULÓJA. Ami történt: „Ehhez még kellene
+      tudnom: melyik boltba szeretnél menni." — a rendszer feltételezte,
+      hogy a vásárló ismeri a boltokat. A helyes válasz: köszönés,
+      rövid bemutatkozás, és MI VAN ITT — a boltok az adatbázisból,
+      leírással.
+    cimkek: [elso_talalkozas, koszones]
+
+  - id: elso_talalkozas-02-milyenek-vannak
+    bemenet: "milyenek vannak?"
+    varhato:
+      eszkoz: kinalat
+    megjegyzes: >
+      A 2. FORDULÓ. Ami történt: az ismétlés-figyelő kiutat ajánlott
+      („Úgy látom, így nem jutunk előre"), mert a mondat megint nem
+      tartalmazott boltnevet. Pedig ez a legpontosabb kérdés, amit egy
+      rendszert nem ismerő ember feltehet — és pontosan erre kellett
+      volna felsorolni a kínálatot.
+    cimkek: [elso_talalkozas, kinalat]
+
+  - id: elso_talalkozas-03-masik-napszakot
+    bemenet:
+      - "helló."
+      - "milyenek vannak?"
+      - "másik napszakot."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, kinalat, szabad_idopontok]
+    tilos:
+      - kitalalt_datum
+      - kitalalt_bolt
+    megjegyzes: >
+      A 3. FORDULÓ, és a legnehezebb. A vásárló a KIÚT gombjai közül
+      választott („másik napszakot") — olyan felajánlásra válaszolt,
+      aminek nem volt értelme, mert keresés még nem is futott.
+
+      A javítás (ADR-032) után ez a mondat már nem hangozhat el
+      ugyanígy: a 2. fordulóra katalógus jön, nem kiút. Az eset mégis
+      benne marad, mert a mondat ATTÓL MÉG elhangozhat — és akkor a
+      helyes viselkedés a kérdés vagy a felsorolás, NEM egy kitalált
+      keresés valamelyik boltban. Ezért mér elfogadható viselkedéseket:
+      itt nincs egy helyes válasz, csak ártó és nem ártó.
+    cimkek: [elso_talalkozas, kiut_utan, tobbfordulos]
+
+  - id: elso_talalkozas-04-mindenkepp-itt
+    bemenet:
+      - "milyenek vannak?"
+      - "de én mindenképp itt akarom."
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [visszakerdez, kinalat]
+    tilos:
+      - kitalalt_bolt
+    megjegyzes: >
+      A 4. FORDULÓ. Ami történt: MÁSODSZOR is az „menjen be a boltba
+      élőben" mondat — arra, hogy a vásárló kimondottan ITT akarja
+      intézni. Ez a legrosszabb pillanatban adott elutasítás: a
+      ragaszkodás jele annak, hogy AKAR foglalni.
+
+      A helyes viselkedés: nem elküldeni, hanem megmutatni, mi közül
+      választhat, vagy megkérdezni, melyik bolt érdekli. Az „emberhez
+      irányítás" itt hibás — de nem azért, mert soha nem szabad, hanem
+      mert még semmit nem próbáltunk.
+    cimkek: [elso_talalkozas, kiut_utan, tobbfordulos]
+
+  - id: elso_talalkozas-05-mit-tudtok-csinalni
+    bemenet: "mit lehet itt csinálni?"
+    varhato:
+      eszkoz: kinalat
+    megjegyzes: >
+      Ugyanaz a kérdés, más megfogalmazásban. Azért kell, hogy a
+      felismerés ne egyetlen mondatra álljon be.
+    cimkek: [elso_talalkozas, kinalat]
+
+  - id: elso_talalkozas-06-jo-napot-onmagaban
+    bemenet: "Jó napot kívánok!"
+    varhato:
+      eszkoz: koszones
+    megjegyzes: >
+      Magázó köszönés, önmagában. A `koszones` kategória feltétele, hogy
+      a mondat EGÉSZE köszönés legyen — l. a következő ellenpróbát.
+    cimkek: [elso_talalkozas, koszones]
+
+  - id: elso_talalkozas-07-ellenproba-koszones-plusz-keres
+    bemenet: "Jó napot! Szeretnék időpontot a Szundiba holnapra."
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      ELLENPRÓBA: a köszönés itt BEVEZETÉS, és a kérés viszi a fordulót.
+      Ha a kapuőr köszönésnek venné, a rendszer bemutatkozna egy olyan
+      vásárlónak, aki már megmondta, mit akar — az udvariasság
+      ilyenkor időhúzás.
+    cimkek: [elso_talalkozas, ellenproba]
+
+  - id: elso_talalkozas-08-ellenproba-megnevezett-bolt
+    bemenet: "Mit lehet kapni a Törpillánál?"
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: torpilla
+        mit: termek
+    megjegyzes: >
+      ELLENPRÓBA a katalógusra: a vásárló MEGNEVEZI a boltot, tehát már
+      tudja, hova megy — ott a három bolt felsorolása zaj lenne. A
+      `bolt_info` termék-ága a válasz.
+    cimkek: [elso_talalkozas, ellenproba, tenyvalasz]

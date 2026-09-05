@@ -143,6 +143,24 @@ SEMAK: dict[str, dict[str, dict]] = {
             "additionalProperties": False,
         }
     },
+    # KÍNÁLAT — „milyenek vannak?", „mit lehet itt?" (ADR-032). Az
+    # egyetlen eszköz, aminek MINDEN paramétere opcionális a
+    # `session_id`-n kívül: pont az a kérdés, amit egy olyan vásárló tesz
+    # fel, aki még semmit nem tud a rendszerről.
+    #
+    # A `bolt_id` szűkít: ha a beszélgetésből már tudjuk, hova megy a
+    # vásárló, a másik két bolt felsorolása zaj lenne.
+    "kinalat": {
+        "v1": {
+            "type": "object",
+            "properties": {
+                "bolt_id": {"type": "string", "enum": sorted(BOLT_SLUGOK)},
+                "session_id": {"type": "string"},
+            },
+            "required": ["session_id"],
+            "additionalProperties": False,
+        }
+    },
     "bolt_info": {
         "v1": {
             "type": "object",

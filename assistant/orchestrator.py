@@ -34,6 +34,7 @@ import time
 from dataclasses import dataclass, field
 
 from assistant import allapotgep
+from assistant import valasz as valasz_szoveg
 from assistant.frusztracio import Frusztracio
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
 from assistant.megerosites import NEM, megerosito_valasz
@@ -44,6 +45,7 @@ from assistant.tools import (
     foglalas_lekerdezes,
     foglalas_lemondas,
     foglalas_letrehozas,
+    kinalat,
     legkozelebbi_idopont,
     szabad_idopontok,
 )
@@ -489,6 +491,24 @@ class Orchestrator:
         if eszkoz == "meta_valasz":
             return {"tipus": "meta_valasz"}
 
+        # KÖSZÖNÉS és KÍNÁLAT (ADR-032) — mindkettő ugyanabból a
+        # katalógusból dolgozik (`assistant/tools/kinalat.py`), csak a
+        # keret más: a köszönésre bemutatkozunk, a kérdésre felsorolunk.
+        # A boltok és a leírásaik az ADATBÁZISBÓL jönnek, nem sablonból.
+        if eszkoz in ("koszones", "kinalat"):
+            allapot.sikertelen_ertelmezesek = 0
+            eredmeny = kinalat.hivas(
+                self.conn,
+                {k: v for k, v in parameterek.items() if v} | {"session_id": session_id},
+                org_id=self.org_id,
+            )
+            if not eredmeny["sikeres"]:
+                return {"tipus": "eszkoz_hiba", **eredmeny}
+            return {
+                "tipus": "koszones" if eszkoz == "koszones" else "kinalat",
+                "boltok": eredmeny["boltok"],
+            }
+
         if eszkoz == "visszakerdez":
             return self._visszakerdez(allapot, parameterek)
 
@@ -709,12 +729,48 @@ class Orchestrator:
         (`Frusztracio.kiut_ajanlva`), tehát a MÁSODIK kiút — jöjjön
         bármelyik jelzőtől — már embert ajánl, nem újabb szűkítést
         (a vásárló 8. igénye)."""
+        # KIÚT ELŐTT BEMUTATKOZÁS (ADR-032).
+        #
+        # Ha a beszélgetés még EGYETLEN keresésig sem jutott el, a kiút
+        # rossz válasz: a vásárló nem elakadt, hanem el sem indult. Az
+        # első idegen próbában a „milyenek vannak?" kérdésre jött a
+        # „körbe-körbe járunk" mondat, két fordulóval később pedig az,
+        # hogy menjen be a boltba élőben — mindezt úgy, hogy a rendszer
+        # egyszer sem keresett semmit.
+        #
+        # A kiút azoké, akik tudják, mit akarnak, és nem sikerül; nem
+        # azoké, akik még nem tudják, mit lehet.
+        # ...de LEGFELJEBB EGYSZER. Ha a felsorolás után sem
+        # választott a vásárló boltot, a lista megismétlése nem
+        # segítség — onnantól a rendes kiút jön, a saját
+        # fokozataival (`Frusztracio.bemutatkozhat`).
+        if (
+            not allapot.utolso_kereses
+            and allapot.frusztracio.bemutatkozhat()
+            and self.org_id is not None
+        ):
+            eredmeny = kinalat.hivas(
+                self.conn, {"session_id": allapot.session_id}, org_id=self.org_id
+            )
+            if eredmeny["sikeres"]:
+                allapot.frusztracio.bemutatkozas_kiadva()
+                return {"tipus": "kinalat", "boltok": eredmeny["boltok"], "ok": ok}
+
         emberhez = allapot.frusztracio.kiut_ajanlva >= 1
         allapot.frusztracio.kiut_kiadva()
+        # A KIÚT DIMENZIÓI (másik nap, másik napszak, legkorábbi) csak
+        # akkor jelentenek bármit, ha VOLT keresés — különben olyat
+        # kínálnánk, amiből a vásárló még nem látott semmit. (Idáig csak
+        # akkor jutunk el, ha a katalógus-válasz nem állt elő; a
+        # normál út a bemutatkozás, l. fent.)
+        volt_kereses = bool(allapot.utolso_kereses)
         valasz = {
             "tipus": "kiut",
             "uzenet_kulcs": "emberhez_iranyitas" if emberhez else "ismetlodo_valasz_kiut",
-            "valaszthato_dimenziok": [] if emberhez else list(_KIUT_DIMENZIOK),
+            "valaszthato_dimenziok": (
+                [] if emberhez or not volt_kereses else list(_KIUT_DIMENZIOK)
+            ),
+            "volt_kereses": volt_kereses,
             "ok": ok,
             "emberhez": emberhez,
         }
@@ -722,6 +778,21 @@ class Orchestrator:
             valasz["eredeti_uzenet_kulcs"] = eredeti_uzenet_kulcs
         if eredeti is not None:
             valasz["eredeti"] = eredeti
+        # KERESÉS NÉLKÜLI KIÚT: a mondat nem kínálhat nap/napszak-váltást
+        # (l. fent), tehát VALAMIT kínálnia kell helyette — különben a
+        # vásárló egy zsákutcába ér, gomb nélkül. A boltok mennek ki,
+        # ugyanazzal a leírással, amit a katalógus ad (ADR-032).
+        if not volt_kereses and not emberhez and self.org_id is not None:
+            katalogus_eredmeny = kinalat.hivas(
+                self.conn, {"session_id": allapot.session_id}, org_id=self.org_id
+            )
+            if katalogus_eredmeny["sikeres"]:
+                valasz["boltok"] = katalogus_eredmeny["boltok"]
+                # A „mit lehet itt?" gomb csak akkor jár, ha a
+                # felsorolás MÉG NEM ment ki ebben a beszélgetésben —
+                # különben azt kínálnánk gombként, amit egy fordulóval
+                # korábban már elmondtunk.
+                valasz["kinalat_gomb"] = allapot.frusztracio.bemutatkozas_szama == 0
         return valasz
 
     def _frusztraciot_figyel(self, allapot: _SessionAllapot, mondat: str, valasz: dict) -> dict:
@@ -766,12 +837,51 @@ class Orchestrator:
         # („zárt kérdést tettünk fel a boltról") — enélkül az állapot
         # csak annyit tudna, hogy kérdeztünk, azt nem, hogy mit.
         allapot.utolso_hianyzo_mezo = parameterek.get("hianyzo_mezo")
+        ertekek = parameterek.get("valaszthato_ertekek", [])
         return {
             "tipus": "visszakerdezes",
             "hianyzo_mezo": parameterek.get("hianyzo_mezo"),
             "kerdes_tipusa": kerdes_tipusa,
-            "valaszthato_ertekek": parameterek.get("valaszthato_ertekek", []),
+            "valaszthato_ertekek": ertekek,
+            # A VÁLASZTÉK LEÍRÁSSAL (ADR-032): „Szundi — altató", nem
+            # „szundi". Az első idegen próba mutatta meg, miért: a
+            # slugokból álló lista annak szól, aki már ismeri a
+            # boltokat — a többinek három értelmetlen szó.
+            "valaszthato_leirasok": self._bolt_leirasok(ertekek),
+            # HANGON nincs gomb: ott a kérdésnek magának kell
+            # felsorolnia, mi közül lehet választani — és más alakban,
+            # mint a gombfelirat („a Szundiba altatóért", nem
+            # „Szundi — altató").
+            "valaszthato_mondva": self._bolt_leirasok(ertekek, mondva=True),
         }
+
+    def _bolt_leirasok(self, ertekek: list[str], *, mondva: bool = False) -> dict[str, str]:
+        """Bolt-slug → „NÉV — szolgáltatás", a TÖRZSADATBÓL.
+
+        Nem a `katalogus.BOLT_NEVEK`-ből: az csak a nevet tudja, a
+        szolgáltatást nem — és épp az a szó mondja meg a vásárlónak,
+        mit kap. Ha egy slug nem oldható fel (más szervezet, üres
+        adatbázis), egyszerűen kimarad: a felület ilyenkor a nevet
+        használja, ahogy eddig."""
+        if not ertekek or self.org_id is None:
+            return {}
+        eredmeny = kinalat.hivas(self.conn, {"session_id": "leirasok"}, org_id=self.org_id)
+        if not eredmeny["sikeres"]:
+            return {}
+        leirasok = {}
+        for bolt in eredmeny["boltok"]:
+            if bolt["bolt_id"] not in ertekek:
+                continue
+            if mondva:
+                leirasok[bolt["bolt_id"]] = valasz_szoveg.bolt_tetel_mondva(
+                    bolt["nev"], bolt["szolgaltatasok"]
+                )
+                continue
+            nevek = [sz["nev"] for sz in bolt["szolgaltatasok"]]
+            leirasok[bolt["bolt_id"]] = (
+                f"{bolt['nev']} — {', '.join(nevek)}" if nevek else bolt["nev"]
+            )
+        return leirasok
 
     def _foglalas_lekerdezes(self, allapot: _SessionAllapot, teljes: dict) -> dict:
         """Enumeráció-védelem és rate limiting (blueprint 8. szakasz,

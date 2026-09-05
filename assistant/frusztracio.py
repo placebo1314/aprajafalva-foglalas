@@ -85,6 +85,14 @@ class Frusztracio:
     # ezt használják, amikor egy MÁSIK mechanizmust (pl. az
     # ismétlésfigyelést) akarnak elszigetelten mérni.
     kuszob: int = KUSZOB
+    # Hányszor ment ki a kiút HELYETT bemutatkozás (ADR-032). Egyszer
+    # van értelme: a felsorolás arra válasz, hogy „mit lehet itt?" — ha
+    # a vásárló ezután SEM választ boltot, a listát megismételni nem
+    # segítség, hanem ugyanaz a körbe-körbe, amit el akartunk kerülni.
+    # A FEJ NÉLKÜLI VÉGIGJÁTSZÁS találta meg: az „ismétlés → kiút"
+    # beszélgetés második és harmadik fordulójára szó szerint ugyanaz a
+    # felsorolás ment ki.
+    bemutatkozas_szama: int = 0
 
     def fordulo(self, mondat: str, valasz_tipus: str | None) -> None:
         """Egy lezárt forduló beszámítása. `valasz_tipus` a `fordulo()`
@@ -118,6 +126,22 @@ class Frusztracio:
         szándékosan nem számít „eredménytelen fordulónak", így a
         pontszám sosem éri el újra a küszöböt."""
         return self.kiut_ajanlva >= 1 and kimondott_jel(mondat)
+
+    def bemutatkozhat(self) -> bool:
+        """Kiadható-e még a kiút HELYETT bemutatkozás? Csak egyszer —
+        utána a rendes kiút jön, a saját fokozataival."""
+        return self.bemutatkozas_szama < 1
+
+    def bemutatkozas_kiadva(self) -> None:
+        """A kiút HELYETT bemutatkozás ment ki (ADR-032): a beszélgetés
+        még egyetlen keresésig sem jutott el.
+
+        A pontszám nullázódik, a `kiut_ajanlva` viszont NEM nő: nem
+        kiutat adtunk, hanem elmondtuk, mi van itt. Ha ezután is elakad
+        a vásárló, az ELSŐ kiút jár neki, nem rögtön a második (ami már
+        embert ajánl)."""
+        self.pont = 0
+        self.bemutatkozas_szama += 1
 
     def kiut_kiadva(self) -> None:
         """A kiút felajánlása után nullázunk, hogy ne minden további

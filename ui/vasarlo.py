@@ -1057,6 +1057,23 @@ class VasarloApp(tk.Tk):
             self._naplo_ir("Rendszer", szoveg)
             self._felolvas(szoveg)
 
+    def _bolt_gombok(self, boltok: list[dict]) -> None:
+        """A boltok GOMBKÉNT, leírással — a katalógus-válasz alatt.
+
+        Egy felsorolás után a legtermészetesebb következő lépés a
+        választás; ha ehhez újra be kell gépelni a bolt nevét, a
+        felsorolás fele elveszett. Több bolt esetén jár csak: egyetlen
+        boltnál nincs mit választani."""
+        if len(boltok) < 2:
+            return
+        for bolt in boltok:
+            nevek = ", ".join(sz["nev"] for sz in bolt["szolgaltatasok"])
+            ttk.Button(
+                self.szo_gombsor,
+                text=f"{bolt['nev']} — {nevek}" if nevek else bolt["nev"],
+                command=lambda b=bolt["bolt_id"]: self._szo_kuldes(b),
+            ).pack(side="left", padx=(0, 6))
+
     def _felolvas(self, szoveg: str) -> None:
         """A megszólalás FELOLVASÁSA, ha van mivel (ADR-029).
 
@@ -1268,7 +1285,17 @@ class VasarloApp(tk.Tk):
             else:
                 reszek.append(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
         elif tipus == "visszakerdezes":
-            reszek.append(valasz_szoveg.visszakerdezes_szoveg(valasz.get("hianyzo_mezo"), mod=mod))
+            mondva = valasz.get("valaszthato_mondva") or {}
+            reszek.append(
+                valasz_szoveg.visszakerdezes_szoveg(
+                    valasz.get("hianyzo_mezo"),
+                    valasztek=[
+                        mondva[e] for e in (valasz.get("valaszthato_ertekek") or []) if e in mondva
+                    ]
+                    or None,
+                    mod=mod,
+                )
+            )
         elif tipus == "ajanlat":
             reszek.append(valasz_szoveg.nyugtazo_szoveg(valasz.get("felismert_ablak", {}), mod=mod))
             reszek.append(
@@ -1344,20 +1371,66 @@ class VasarloApp(tk.Tk):
                     text=felirat,
                     command=lambda d=dimenzio: self._kiut_valasztas(d),
                 ).pack(side="left", padx=(0, 6))
+            # KERESÉS NÉLKÜLI KIÚT (ADR-032): nap/napszak helyett a
+            # BOLTOK jönnek gombként. Enélkül a mondat kérdezne
+            # („melyik boltba?"), de nem lenne mire koppintani.
+            self._bolt_gombok(valasz.get("boltok") or [])
+            if valasz.get("kinalat_gomb"):
+                ttk.Button(
+                    self.szo_gombsor,
+                    text="Mit lehet itt?",
+                    command=lambda: self._szo_kuldes("mit lehet itt?"),
+                ).pack(side="left", padx=(12, 0))
             return
 
         if tipus == "visszakerdezes":
             hianyzo = valasz.get("hianyzo_mezo")
-            self._rendszer_mondat(valasz_szoveg.visszakerdezes_szoveg(hianyzo, mod=mod))
             valasztek = valasz.get("valaszthato_ertekek") or []
+            mondva = valasz.get("valaszthato_mondva") or {}
+            self._rendszer_mondat(
+                valasz_szoveg.visszakerdezes_szoveg(
+                    hianyzo,
+                    # Beszélhető módban a kérdés FELSOROLJA a
+                    # lehetőségeket (nincs gomb, amire mutasson);
+                    # szövegesen a gombok viszik, ott a mondat rövid marad.
+                    valasztek=[mondva[e] for e in valasztek if e in mondva] or None,
+                    mod=mod,
+                )
+            )
+            # A GOMB FELIRATA LEÍRÁSSAL (ADR-032): „Szundi — altató".
+            # A slug annak szól, aki már ismeri a boltokat; a leírás
+            # annak, aki most találkozik a rendszerrel.
+            leirasok = valasz.get("valaszthato_leirasok") or {}
             if valasz.get("kerdes_tipusa") == "zart" and valasztek:
                 for ertek in valasztek:
-                    cimke = katalogus.BOLT_NEVEK.get(ertek, ertek)
+                    cimke = leirasok.get(ertek) or katalogus.BOLT_NEVEK.get(ertek, ertek)
                     ttk.Button(
                         self.szo_gombsor,
                         text=cimke,
                         command=lambda e=ertek: self._szo_kuldes(e),
                     ).pack(side="left", padx=(0, 6))
+                # „MIT LEHET ITT?" (ADR-032) — a zárt bolt-kérdés annak
+                # szól, aki már tudja, mit akar; aki most találkozik a
+                # rendszerrel, annak ez a gomb az első lépés. Nem
+                # rejtett tudás: ugyanaz, amit begépelve is kérdezhetne.
+                if hianyzo == "bolt_id":
+                    ttk.Button(
+                        self.szo_gombsor,
+                        text="Mit lehet itt?",
+                        command=lambda: self._szo_kuldes("mit lehet itt?"),
+                    ).pack(side="left", padx=(12, 0))
+            return
+
+        if tipus in ("koszones", "kinalat"):
+            # MI VAN ITT (ADR-032). Nem indít keresést, és nem rajzol
+            # jelölt-gombokat — a boltok viszont GOMBKÉNT is megjelennek,
+            # mert a kérdés végén úgyis választani kell.
+            self._rendszer_mondat(
+                valasz_szoveg.bemutatkozas_szoveg(
+                    valasz.get("boltok") or [], koszones=(tipus == "koszones"), mod=mod
+                )
+            )
+            self._bolt_gombok(valasz.get("boltok") or [])
             return
 
         if tipus == "meta_valasz":

@@ -101,7 +101,9 @@ _VALASZ_ALLAPOT = {
 # mutatta meg, miért fontos — ott a „csak a választ beszéled?" mondat a
 # KESZ állapotból AJANLAT_VAR-ba rántotta vissza a beszélgetést, egy már
 # lezárt foglalás után.
-_ALLAPOTTARTO = frozenset({"elutasitas", "eszkoz_hiba", "hiba", "meta_valasz"})
+_ALLAPOTTARTO = frozenset(
+    {"elutasitas", "eszkoz_hiba", "hiba", "meta_valasz", "koszones", "kinalat"}
+)
 
 _KORNYEZETI_VALTOZO = "APRAJAFALVA_ALLAPOT_SOR"
 

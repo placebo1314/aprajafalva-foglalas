@@ -767,7 +767,14 @@ def test_ismetles_a_MASODIK_azonos_valasz_helyett_mar_kiut(tmp_path):
     assert elso["tipus"] == "visszakerdezes"
     assert masodik["tipus"] == "kiut"
     assert masodik["uzenet_kulcs"] == "ismetlodo_valasz_kiut"
-    assert masodik["valaszthato_dimenziok"] == ["nap", "napszak", "legkorabbi"]
+    # A KIÚT DIMENZIÓI CSAK KERESÉS UTÁN (ADR-032): itt egyetlen keresés
+    # sem futott, tehát a „másik nap / másik napszak" olyat kínálna,
+    # amiből a vásárló még semmit nem látott. (Éles adatbázison idáig el
+    # sem jutnánk: ott a katalógus-válasz megy ki a kiút HELYETT — ebben
+    # a tesztben az `org_id` szándékosan érvénytelen, ezért esünk át a
+    # tartalék ágra.)
+    assert masodik["valaszthato_dimenziok"] == []
+    assert masodik["volt_kereses"] is False
 
 
 def test_ismetles_a_nyitottrol_zartra_valtas_NEM_ismetles(tmp_path):
@@ -1390,6 +1397,136 @@ def test_jelolt_valasztas_tartomanyon_kivul_nem_kerekit(tmp_path):
     valasz = orch.fordulo("s1", "a kilencediket", _MOST)
 
     assert valasz["tipus"] == "visszakerdezes"
+
+
+# --- BEVEZETÉS: köszönés, katalógus, kiút-kapu (ADR-032) -------------
+#
+# AZ ELSŐ IDEGEN PRÓBA (2026-09-05, négy forduló): a rendszer
+# feltételezte, hogy a vásárló ismeri a boltokat. „helló." -> melyik
+# boltba? „milyenek vannak?" -> körbe-körbe járunk. Két fordulóval
+# később: menjen be a boltba élőben. Egyetlen keresés sem futott.
+
+
+def test_koszonesre_bemutatkozas_jon(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "koszones", "parameterek": {}}])
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "helló.", _MOST)
+
+    assert valasz["tipus"] == "koszones"
+    assert [b["nev"] for b in valasz["boltok"]] == ["Ügyifogyi"]
+
+
+def test_katalogus_kerdesre_felsorolas(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "kinalat", "parameterek": {}}])
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "milyenek vannak?", _MOST)
+
+    assert valasz["tipus"] == "kinalat"
+    assert valasz["boltok"][0]["szolgaltatasok"][0]["nev"] == "petárda"
+
+
+def test_a_katalogus_szukitheto_egy_boltra(tmp_path):
+    """Ha a beszélgetésből már tudjuk, hova megy a vásárló, a másik két
+    bolt felsorolása zaj lenne."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "kinalat", "parameterek": {"bolt_id": "ugyifogyi"}}])
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "és itt mi van?", _MOST)
+
+    assert len(valasz["boltok"]) == 1
+
+
+def test_a_koszones_nem_mozditja_az_allapotot(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "koszones", "parameterek": {}}])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    orch.fordulo("s1", "szia", _MOST)
+
+    assert orch._allapot("s1").allapot == allapotgep.AJANLAT_VAR
+
+
+def test_kiut_helyett_bemutatkozas_ha_meg_nem_volt_kereses(tmp_path):
+    """A kiút azoké, akik tudják, mit akarnak, és nem sikerül — nem
+    azoké, akik még nem tudják, mit lehet."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()] * 2)
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    orch.fordulo("s1", "hova is menjek", _MOST)
+    masodik = orch.fordulo("s1", "hát nem tudom", _MOST)
+
+    assert masodik["tipus"] == "kinalat", "kiút helyett a katalógus"
+    assert masodik["ok"] == "ismetles"
+
+
+def test_a_bemutatkozas_nem_szamit_kiutnak(tmp_path):
+    """A `kiut_ajanlva` NEM nő tőle: ha a vásárló ezután is elakad, az
+    ELSŐ kiút jár neki, nem rögtön a második (ami már embert ajánl)."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()] * 2)
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    orch.fordulo("s1", "hova is menjek", _MOST)
+    orch.fordulo("s1", "hát nem tudom", _MOST)
+
+    assert orch._allapot("s1").frusztracio.kiut_ajanlva == 0
+
+
+def test_a_bemutatkozas_csak_EGYSZER_all_a_kiut_helyebe(tmp_path):
+    """A FEJ NÉLKÜLI VÉGIGJÁTSZÁS találta meg: enélkül az „ismétlés →
+    kiút" beszélgetés második ÉS harmadik fordulójára szó szerint
+    ugyanaz a felsorolás ment ki.
+
+    Ha a vásárló a katalógus után SEM választ boltot, a lista
+    megismétlése nem segítség, hanem pontosan az a körbe-körbe, amit
+    el akartunk kerülni — onnantól a rendes kiút jön."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()] * 3)
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    orch.fordulo("s1", "hova is menjek", _MOST)
+    masodik = orch.fordulo("s1", "hát nem tudom", _MOST)
+    harmadik = orch.fordulo("s1", "tényleg nem tudom", _MOST)
+
+    assert masodik["tipus"] == "kinalat"
+    assert harmadik["tipus"] == "kiut", "másodszor már nem a lista"
+    # ...és az ELSŐ kiút, nem az emberhez irányítás: a bemutatkozás
+    # továbbra sem számít kiútnak.
+    assert harmadik["emberhez"] is False
+    assert harmadik["valaszthato_dimenziok"] == [], "keresés nélkül nincs mit szűkíteni"
+
+
+def test_a_zart_kerdes_leirast_ad_nem_azonositot(tmp_path):
+    """„Szundi — altató", nem „szundi": a slug annak szól, aki már
+    ismeri a boltokat."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz(), _visszakerdez_valasz()])
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    orch.fordulo("s1", "időpontot kérek", _MOST)
+    masodik = orch.fordulo("s1", "hát nem is tudom", _MOST)
+
+    leirasok = (masodik if masodik["tipus"] == "visszakerdezes" else {}).get(
+        "valaszthato_leirasok"
+    ) or orch._bolt_leirasok(["ugyifogyi"])
+    assert leirasok["ugyifogyi"] == "Ügyifogyi — petárda"
+    assert orch._bolt_leirasok(["ugyifogyi"], mondva=True)["ugyifogyi"] == (
+        "az Ügyifogyiba petárdáért"
+    )
 
 
 # --- META-KÉRDÉS és „VÁLASSZ TE" (2026-09-05, éles próba) ------------

@@ -281,6 +281,8 @@ _ENGEDELYEZETT_ESZKOZOK = _VALODI_ESZKOZOK | {
     "jelolt_valasztas",
     "dontsd_el_te",
     "meta_valasz",
+    "koszones",
+    "kinalat",
 }
 
 # Minden mezőnév, ami egyáltalán előfordulhat egy értelmező-kimenetben:

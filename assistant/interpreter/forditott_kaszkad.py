@@ -229,6 +229,28 @@ class ForditottKaszkadErtelmezo:
         # meg, miért kell — a „csak a választ beszéled?" mondatból
         # keresés lett, és a rendszer újra felajánlotta ugyanazokat az
         # időpontokat.
+        # KÖSZÖNÉS és KÍNÁLAT-KÉRDÉS (ADR-032) — mindkettő rövidzár,
+        # nulla modellhívással. Az első idegen próbában ezekre a
+        # mondatokra visszakérdezés, majd kiút jött: a rendszer olyat
+        # kérdezett vissza („melyik boltba?"), amit a vásárló épp nem
+        # tudhatott.
+        if kapuor_dontes.kategoria == kapuor.KOSZONES:
+            self.utolso_reteg = RETEG_KAPUOR
+            self.utolso_normalizalt = normalizal(mondat)
+            self.utolso_kapuor = kapuor_dontes
+            return {"eszkoz": "koszones", "parameterek": {}, "bizonyossag": {"eszkoz": 1.0}}
+
+        if kapuor_dontes.ok == kapuor.OK_KINALAT:
+            self.utolso_reteg = RETEG_KAPUOR
+            self.utolso_normalizalt = normalizal(mondat)
+            self.utolso_kapuor = kapuor_dontes
+            # A BOLT SZŰKÍTÉSE, ha a mondatból vagy a beszélgetésből
+            # kiderül: „és a Szundinál mi van?" — ilyenkor a másik két
+            # bolt felsorolása zaj lenne.
+            bolt_id = rule_based.bolt_feloldas(mondat) or self._tartalek(kontextus, "bolt_id")
+            parameterek = {"bolt_id": bolt_id} if bolt_id else {}
+            return {"eszkoz": "kinalat", "parameterek": parameterek, "bizonyossag": {"eszkoz": 1.0}}
+
         if kapuor_dontes.kategoria == kapuor.META_KERDES:
             self.utolso_reteg = RETEG_KAPUOR
             self.utolso_normalizalt = normalizal(mondat)
