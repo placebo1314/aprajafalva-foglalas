@@ -19,6 +19,18 @@
 # A szolgáltatás- és boltazonosítóknak egyezniük kell a seed/betolt.py
 # értékeivel.
 
+# BŐVÍTÉS 2026-09-12: a halmaz 55 → 85 esetre nőtt. A három leggyengébb
+# réteg kapott tíz-tíz új esetet (elengedés 5→15, tájszólás 4→14,
+# töredékes 4→14), MÁS beszédhelyzetekből — nem a meglévők
+# átfogalmazásaiból.
+#
+# **Miért a méret, és nem az esetek nehézsége.** A mérés futásról
+# futásra 1-2 esetnyit ingadozik (`temperature: 0` mellett is), és öt
+# eses rétegnél egyetlen billenő eset 20 százalékpont — a réteg száma
+# ilyenkor többet mond a szerencséről, mint a rendszerről. Tizenöt
+# esetnél ugyanez 6,7 pont. A bővítés célja tehát az, hogy a rétegek
+# száma STABIL legyen, nem az, hogy alacsonyabb.
+
 meta:
   verzio: 1
   most_alapertelmezett: "2026-08-17T09:00:00Z"   # hétfő
@@ -236,6 +248,356 @@ esetek:
       A töltelékszavak ("izé", "hogy is mondjam") nem hordoznak jelentést,
       de nem is szabad elakadni rajtuk. "A héten" = mától vasárnapig.
     cimkek: [toredekes, toltelekszo]
+
+  # ---------------------------------------------------------------------
+  # TÁJSZÓLÁS — bővítés (2026-09-12). Tíz új eset, MÁS beszédhelyzetből.
+  #
+  # Nem a meglévő négy átfogalmazásai: itt a nyelvjárási alak MÁS
+  # helyzetben jelenik meg (kísérő, panasz, alkudozás, ténykérdés,
+  # lemondás), és más nyelvjárási jelenségeket használ — í-zés
+  # („kík", „níz"), ö-zés („mögyök", „köll"), régies szóhasználat
+  # („dílelőtt", „napszámra"), és a „hun/hunnan" kérdőszavak.
+  #
+  # A determinisztikus normalizáló (`assistant/interpreter/
+  # normalizalo.py`) egy részüket ismeri; ami nincs a szótárában, azt a
+  # modellnek kell értenie — épp ezért ér valamit a réteg.
+  # ---------------------------------------------------------------------
+
+  - id: tajszolas-05-mogyok-a-torpillaho
+    bemenet: "Csütörtökön mögyök a Törpilláho, ha lehetne."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-20T00:00:00Z"
+        datum_ig: "2026-08-20T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Ö-ZÉS („mögyök") és rövidült helyhatározó („Törpilláho"). A kérés
+      egyébként teljesen szokásos — a nehézség kizárólag a hangalak.
+    cimkek: [tajszolas, o_zes]
+
+  - id: tajszolas-06-koll-a-nagy-petarda
+    bemenet: "Kőne egy nagy petárda szombaton dílelőtt."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: nagy_petarda
+        datum_tol: "2026-08-22T00:00:00Z"
+        datum_ig: "2026-08-22T11:59:59Z"
+        napszak: delelott
+    megjegyzes: >
+      A „kőne" (kellene) és a „dílelőtt" (délelőtt) együtt: az í-zés a
+      napszakot is érinti, tehát nem elég a bolt felismerése — a napszak
+      is a nyelvjárási alakból jön.
+    cimkek: [tajszolas, i_zes, napszak]
+
+  - id: tajszolas-07-hun-van-az-uzlet
+    bemenet: "Hun van az altatós bót?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: szundi
+        mit: cim
+    megjegyzes: >
+      TÉNYKÉRDÉS nyelvjárási alakban: „hun" (hol) és „bót" (bolt). A
+      helyes válasz a cím — nem foglalás. Ez a réteg eddig csak
+      foglalási kéréseket tartalmazott; a tényválasz-ág legalább annyira
+      érintett a hangalakoktól.
+    cimkek: [tajszolas, tenyvalasz, azonositas_nelkul]
+
+  - id: tajszolas-08-mikor-nyitnak-ki
+    bemenet: "Oszt mikor nyitnak ki a petárdásék?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: bolt_info
+      parameterek:
+        bolt_id: ugyifogyi
+        mit: nyitvatartas
+    megjegyzes: >
+      Az „oszt" (aztán) mondatkezdő töltelék, a „petárdásék" pedig
+      népies többes-birtokos alak a boltra. A kérdés nyitvatartásra
+      vonatkozik.
+    cimkek: [tajszolas, tenyvalasz, toltelekszo]
+
+  - id: tajszolas-09-lemondanam-a-kodot
+    bemenet: "Lemondanám aztat az idõpontot, a kód B4T7R2WQ."
+    varhato:
+      eszkoz: foglalas_lemondas
+      parameterek:
+        foglalasi_kod: "B4T7R2WQ"
+    megjegyzes: >
+      LEMONDÁS nyelvjárási alakban: „aztat" (azt) és ékezet nélküli
+      „idõpontot" (a magyar billentyűzet leggyakoribb elgépelése).
+      A foglalási kód a mondatból jön, tehát a determinisztikus réteg is
+      megoldja — a réteg attól nem lesz értéktelen: a lemondás a
+      leggyakoribb, ahol elgépelés is jön a nyelvjárás mellé.
+    cimkek: [tajszolas, lemondas, foglalasi_kod]
+
+  - id: tajszolas-10-mikor-ernek-ra
+    bemenet: "Mikor érnek rá maguk a jövõ hétön a boldogságosnál?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-24T00:00:00Z"
+        datum_ig: "2026-08-30T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A kérdés a RENDSZER felől van megfogalmazva („mikor érnek rá
+      maguk"), nem a vásárló felől — miközben ugyanaz a kérés. Az
+      ö-zés a dátumot érinti („hétön"), és a boltot körülírás azonosítja
+      („boldogságosnál").
+    cimkek: [tajszolas, o_zes, korulirt_bolt]
+
+  - id: tajszolas-11-nizzik-mar-meg
+    bemenet: "Nízzék mán meg, van-e hely holnap a Szundinál."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Í-ZÉS felszólító módban („nízzék"), és a „mán" (már) töltelék.
+      Udvariassági többes szám — a rendszert magázza.
+    cimkek: [tajszolas, i_zes, felszolito]
+
+  - id: tajszolas-12-ha-mar-arra-jarok
+    bemenet: "Ha mán arra járok, beníznék az ügyifogyisokhó pénteken."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-21T00:00:00Z"
+        datum_ig: "2026-08-21T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Feltételes bevezetés („ha mán arra járok") + í-zés („beníznék") +
+      rövidült helyhatározó („ügyifogyisokhó"). A szolgáltatás NEM
+      tölthető ki: az Ügyifogyihoz két méret tartozik.
+    cimkek: [tajszolas, i_zes, toltelekszo]
+
+  - id: tajszolas-13-elkelne-egy-kis-alvas
+    bemenet: "Elkéne mán egy kis alvás, szerda este ha van hely."
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-19T00:00:00Z"
+        datum_ig: "2026-08-19T22:59:59Z"
+        napszak: este
+    megjegyzes: >
+      A boltot nem néven, hanem a KÍVÁNSÁGGAL azonosítja („elkéne egy
+      kis alvás" → altató → Szundi), nyelvjárási alakban („elkéne",
+      „mán"). A napszak („este") a mondatból jön, és az ablakot is
+      szűkíti.
+    cimkek: [tajszolas, korulirt_bolt, napszak]
+
+  - id: tajszolas-14-ellenproba-koznyelvi
+    bemenet: "Kedden délelőtt szeretnék menni a Szundiba."
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T11:59:59Z"
+        napszak: delelott
+    megjegyzes: >
+      ELLENPRÓBA: ugyanaz a kérés TISZTA köznyelven. Ha egy jövőbeli
+      normalizáló túl agresszívan „javítana" (pl. minden „í"-t „é"-vé),
+      ez az eset marad a horgony, hogy a köznyelvi alak sem sérülhet.
+    cimkek: [tajszolas, ellenproba]
+
+  # ---------------------------------------------------------------------
+  # TÖREDÉKES — bővítés (2026-09-12). Tíz új eset, MÁS beszédhelyzetből.
+  #
+  # A töredékesség itt nem egyféle: (a) TÁVIRATSTÍLUS (csak kulcsszavak),
+  # (b) FÉLBEHAGYOTT mondat, (c) JAVÍTGATÁS menet közben („nem, mégis"),
+  # (d) EGYSZAVAS válasz egy előző fordulóra, (e) ÍRÁSJEL nélküli
+  # folyam. Mindegyik valódi gépelési/beszéd-alakzat, nem stilizált zaj —
+  # a robusztussági halmaz méri a zajt, ez a réteg a HIÁNYOS, de
+  # értelmezhető mondatot.
+  # ---------------------------------------------------------------------
+
+  - id: toredekes-05-tavirat-harom-szo
+    bemenet: "szundi holnap este"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T22:59:59Z"
+        napszak: este
+    megjegyzes: >
+      TÁVIRATSTÍLUS, három szó, nulla mondattan — bolt, nap, napszak.
+      Igét nem tartalmaz, tehát a „foglalási szándék" nem szóból, hanem
+      a HELYZETBŐL következik.
+    cimkek: [toredekes, tavirat]
+
+  - id: toredekes-06-tavirat-ket-szo
+    bemenet: "petárda pénteken?"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-21T00:00:00Z"
+        datum_ig: "2026-08-21T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Két szó és egy kérdőjel. A méret nem tölthető ki (két slug
+      tartozik a bolthoz), a nap viszont igen.
+    cimkek: [toredekes, tavirat]
+
+  - id: toredekes-07-felbehagyott-mondat
+    bemenet: "Szeretnék egy időpontot a Törpi… szóval hát"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      FÉLBEHAGYOTT mondat: a bolt neve is csonka („Törpi"), és a
+      folytatás töltelékbe fullad. A bolt így is azonosítható, a nap
+      viszont nincs — az általános ablak a helyes, nem a visszakérdezés:
+      a mondat megmondta, hova.
+    cimkek: [toredekes, felbehagyott, tartalek_ablak]
+
+  - id: toredekes-08-javitgatas-menet-kozben
+    bemenet: "Kedden… nem, mégis inkább szerdán, a petárdáshoz"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-19T00:00:00Z"
+        datum_ig: "2026-08-19T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      JAVÍTGATÁS egy mondaton belül: a „kedden" ELVETVE, a „szerdán" az
+      érvényes. Ez nem többfordulós visszavonás — egyetlen mondatban
+      történik, és a mintaillesztés a hun-date-parser ELSŐ találatát
+      venné (keddet).
+    cimkek: [toredekes, javitgatas]
+
+  - id: toredekes-09-egyszavas-valasz
+    bemenet:
+      - "Szeretnék időpontot."
+      - "torpilla"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      EGYSZAVAS válasz egy zárt kérdésre: az első forduló
+      visszakérdezéshez vezet, a második egyetlen szóból áll. Ez a
+      leggyakoribb valódi alak — a felület gombja is ezt küldi be —, és
+      a rendszernek nem szabad újra rákérdeznie.
+    cimkek: [toredekes, egyszavas, tobbfordulos]
+
+  - id: toredekes-10-irasjel-nelkul
+    bemenet: "jó napot szeretnék időpontot a szundihoz holnapra köszönöm"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      ÍRÁSJEL NÉLKÜLI folyam, kisbetűvel, udvariassági kerettel az
+      elején és a végén. A tartalom teljes — csak a tagolás hiányzik.
+    cimkek: [toredekes, irasjel_nelkul]
+
+  - id: toredekes-11-csak-a-nap
+    bemenet:
+      - "Petárdázni szeretnék."
+      - "csütörtök"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        datum_tol: "2026-08-20T00:00:00Z"
+        datum_ig: "2026-08-20T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Egyszavas válasz, ami a NAPOT adja meg — a bolt az előző
+      fordulóból jön (kemény rész). A `toredekes-09` párja: ott a szó a
+      boltot adta, itt a napot.
+    cimkek: [toredekes, egyszavas, tobbfordulos]
+
+  - id: toredekes-12-ismetelt-szo
+    bemenet: "időpont időpont kellene szundi holnap"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-18T00:00:00Z"
+        datum_ig: "2026-08-18T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      ISMÉTELT szó a mondat elején — gépelési vagy beszédbeli
+      újrakezdés. A robusztussági halmaz az ÖTSZÖRÖS ismétlést méri
+      (zaj); ez itt még értelmezhető mondat, csak döcög.
+    cimkek: [toredekes, ismetles]
+
+  - id: toredekes-13-kerdojel-nelkuli-kerdes
+    bemenet: "van hely ma a törpillánál"
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: torpilla
+        szolgaltatas_id: nagy_orom
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-17T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Kérdés kérdőjel nélkül, kisbetűvel. A „ma" a MOST-hoz horgonyzott
+      naptári nap — a keresés a mai maradék napra megy, nem a teljes
+      napra (a `most` 09:00).
+    cimkek: [toredekes, irasjel_nelkul]
+
+  - id: toredekes-14-ellenproba-ures
+    bemenet: "izé"
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    tilos:
+      - kitalalt_datum
+      - kitalalt_bolt
+    megjegyzes: >
+      ELLENPRÓBA: egyetlen töltelékszó, NULLA tartalommal. A töredékes
+      réteg határa — innentől nincs mit értelmezni, és a helyes válasz a
+      kérdés, nem a találgatás. (A robusztussági halmaz a teljesen üres
+      és a zajos bemenetet méri; ez a kettő közötti eset.)
+    cimkek: [toredekes, ellenproba, ures_szandek]
 
   # ---------------------------------------------------------------------
   # 4. réteg — szleng (3 eset)
@@ -629,6 +991,217 @@ esetek:
       Az „ugyanez" a KEMÉNY részre mutat vissza (nagy petárda), a nap
       viszont új. A helyes válasz a szolgáltatás megtartása — az
       `elengedes-03` tükre, ahol ugyanez a mező esik ki.
+    cimkek: [elengedes, ellenproba, tobbfordulos]
+
+  # ---------------------------------------------------------------------
+  # ELENGEDÉS — bővítés (2026-09-12). Tíz új eset, MÁS beszédhelyzetből:
+  # nem a meglévők átfogalmazásai. A cél nem a réteg megnehezítése,
+  # hanem az, hogy elég nagy legyen a futásonkénti szóráshoz: öt esetnél
+  # egyetlen billenő eset 20 százalékpont, tizenötnél 6,7.
+  #
+  # Négy alakzatot mérnek, mindegyikből több megfogalmazás:
+  # (a) a bolt elengedése MÁS szituációban (ajándék, kísérő, telefonáló);
+  # (b) a szolgáltatás elengedése és VISSZAVONÁSA (ADR-031);
+  # (c) VISSZAUTALÁS az előző fordulóra („ugyanez", „ugyanoda");
+  # (d) ellenpróbák: mikor NEM szabad elengedni.
+  # ---------------------------------------------------------------------
+
+  - id: elengedes-06-ajandekba-barhova
+    bemenet:
+      - "Ajándékba szeretnék valamit, a Törpillánál nézelődnék pénteken."
+      - "igazából bárhol jó, ahol van hely"
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    megjegyzes: >
+      A bolt elengedése AJÁNDÉK-helyzetben: a vásárló nem magának keres,
+      és ezért nem is ragaszkodik a bolthoz. A „bárhol jó" itt a boltot
+      engedi el — a helyes válasz a zárt kérdés, mert a három bolt három
+      különböző termék (ADR-024), és ajándékot sem lehet „bármelyikből"
+      venni.
+    cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]
+
+  - id: elengedes-07-kiserokent-mindegy
+    bemenet:
+      - "A nagymamámat kísérem a Szundihoz szerdán."
+      - "őszintén szólva nekem tök mindegy, melyik üzlet"
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    megjegyzes: >
+      Ugyanaz az elengedés KÍSÉRŐ szerepben, laza regiszterben („tök
+      mindegy"), és a bolt helyett „üzlet" szóval. A mondat eleje
+      („őszintén szólva") töltelék — nem szabad tőle elakadni.
+    cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]
+
+  - id: elengedes-08-nem-tudja-melyikbe
+    bemenet:
+      - "A szomszédnak foglalnék a petárdásnál hétfőn."
+      - "de nem tudom, melyik boltba akart menni, mindegy melyikbe"
+    igenyel_llm: true
+    varhato:
+      eszkoz: visszakerdez
+      hianyzo_mezo: bolt_id
+      varhato_kerdes_tipusa: zart
+      valaszthato_ertekek: [szundi, torpilla, ugyifogyi]
+    megjegyzes: >
+      Az elengedés oka itt TUDÁSHIÁNY, nem közöny: a hívó nem tudja,
+      hova akart menni a szomszéd. A helyes válasz ugyanaz — a rendszer
+      nem találgathat helyette —, de a mondat szerkezete más: a „nem
+      tudom" és a „mindegy" egyszerre van benne.
+    cimkek: [elengedes, kemeny_resz_elengedes, tobbfordulos]
+
+  - id: elengedes-09-meret-ami-van
+    bemenet:
+      - "Kis petárdát kérnék szerdán."
+      - "különben tényleg nem érdekel a méret, ami van"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: MINDEGY
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      A SZOLGÁLTATÁS elengedése, „ami van" alakban. A bolt marad
+      (a petárda az Ügyifogyi), a méret MINDEGY lesz — nem üres mező, és
+      nem is az eredeti „kis" méret. A dátum a második fordulóban nincs
+      megismételve, ezért az általános ablakra esik vissza.
+    cimkek: [elengedes, mindegy_szentinel, tobbfordulos]
+
+  - id: elengedes-10-visszavonas-nagyot
+    bemenet:
+      - "Bármelyik petárda jó, csak csütörtökön legyen."
+      - "mégis inkább a nagyot kérem"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: nagy_petarda
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      AZ ELENGEDÉS VISSZAVONÁSA (ADR-031). A három állapot (nem tudjuk /
+      elengedve / tudjuk) között ODA-VISSZA kell tudni mozogni: aki azt
+      mondta, „bármelyik jó", később mondhat konkrétat. A
+      determinisztikus kapu (`forditott_kaszkad._mindegy_visszavonva`)
+      ezt kikényszeríti — a mondatban kimondott konkrét érték felülírja
+      a MINDEGY-et.
+    cimkek: [elengedes, elengedes_visszavonasa, tobbfordulos]
+
+  - id: elengedes-11-visszavonas-kicsire
+    bemenet:
+      - "Mindegy milyen petárda, csak legyen kedden."
+      - "na jó, akkor a kicsit"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: kis_petarda
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Ugyanaz a visszavonás a MÁSIK irányba (kicsi), rövidebb
+      megfogalmazásban. Azért kell mindkettő, mert a méret-felismerés
+      TOLDALÉKOS alakokon dől el („a nagyot", „a kicsit"), és egy
+      irányból nem derülne ki, hogy a minta tényleg morfológiát ismer-e.
+    cimkek: [elengedes, elengedes_visszavonasa, tobbfordulos]
+
+  - id: elengedes-12-visszautalas-ugyanez
+    bemenet:
+      - "Nagy petárdát szeretnék kedden."
+      - "és csütörtökön ugyanez?"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: ugyifogyi
+        szolgaltatas_id: nagy_petarda
+        datum_tol: "2026-08-20T00:00:00Z"
+        datum_ig: "2026-08-20T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      VISSZAUTALÁS az előző fordulóra (ADR-031): az „ugyanez" névmás
+      KIMONDOTTAN a korábbi tartalomra mutat, tehát a méret átjön — a nap
+      viszont új. Az `elengedes-05` párja: ott a mérés azt mutatta, hogy
+      a bolt átjön, a méret nem.
+    cimkek: [elengedes, visszautalas, tobbfordulos]
+
+  - id: elengedes-13-visszautalas-ugyanoda
+    bemenet:
+      - "A Szundiba szeretnék menni pénteken."
+      - "a feleségemnek is ugyanoda, szombaton"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-22T00:00:00Z"
+        datum_ig: "2026-08-22T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      Visszautalás a BOLTRA („ugyanoda"), új nappal és MÁSIK személlyel.
+      A kemény rész átjön, a puha (nap) frissen dől el — pontosan a
+      szándék-rétegzés szabálya szerint.
+    cimkek: [elengedes, visszautalas, tobbfordulos]
+
+  - id: elengedes-14-ellenproba-uj-boltot-nevez
+    bemenet:
+      - "Petárdázni szeretnék kedden."
+      - "vagy inkább a Szundiba mennék"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: barmikor
+    megjegyzes: >
+      ELLENPRÓBA: a vásárló elveti a boltot, DE megnevez egy újat — ez
+      nem elengedés, hanem CSERE. A helyes válasz nem visszakérdezés,
+      hanem keresés az új boltban; és a régi bolt szolgáltatása nem
+      ragadhat rá (a Szundi altatót ad, nem petárdát).
+    cimkek: [elengedes, ellenproba, tobbfordulos]
+
+  - id: elengedes-15-ellenproba-a-nap-esik-ki
+    bemenet:
+      - "Szundihoz mennék kedden délelőtt."
+      - "a nap mindegy, csak délelőtt legyen"
+    igenyel_llm: true
+    varhato:
+      eszkoz: szabad_idopontok
+      parameterek:
+        bolt_id: szundi
+        szolgaltatas_id: altato
+        datum_tol: "2026-08-17T09:00:00Z"
+        datum_ig: "2026-08-23T23:59:59Z"
+        napszak: delelott
+    megjegyzes: >
+      ELLENPRÓBA a másik irányból: a „mindegy" itt a NAPRA vonatkozik,
+      nem a boltra és nem a szolgáltatásra. A bolt marad, a napszak
+      marad (a mondat kimondja), a nap pedig az általános ablakra nyílik
+      ki. A hibás válasz az lenne, ha a „mindegy" szóra a rendszer a
+      boltot engedné el.
+
+      A `datum_ig` szándékosan 23:59:59: a napszak-vágás csak EGYNAPOS
+      ablakot szűkít (`rule_based.napszak_ablak_vagas`) — egy hétnyi
+      ablakot délelőttre vágni azt jelentené, hogy csak az utolsó nap
+      délelőttjéig keresünk.
     cimkek: [elengedes, ellenproba, tobbfordulos]
 
 # -----------------------------------------------------------------------

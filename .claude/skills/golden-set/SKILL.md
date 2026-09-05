@@ -137,6 +137,26 @@ valamit mégis csinálunk.
 
 Első mérés (2026-08-31): `docs/BESZEDHELYZETEK_MERES.md`.
 
+## Ismételt mérés — mikor hatás, és mikor csak szórás
+
+**Egy futás különbsége nem eredmény.** Ugyanaz a kód, ugyanaz a modell,
+`temperature: 0` mellett is 1-2 esetnyit ingadozik futásról futásra
+(mérve: `docs/NUM_CTX_ES_VRAM.md`, `docs/ELES_PROBA_20260905.md`).
+
+```
+python feladat.py golden --ertelmezo forditott --ismetles 2      # tartomány
+python feladat.py golden --ertelmezo forditott --elozo elozo.json # ítélet
+```
+
+A futtató kiírja a futásonkénti tartományt, és összehasonlításkor
+ítéletet mond. A zajküszöb `SZORAS_KUSZOB_SZAZALEKPONT` (3 pont) VAGY a
+mért tartomány — amelyik nagyobb. **A tartományon belüli különbségre nem
+szabad javulást vagy romlást állítani**, sem jelentésben, sem ADR-ben.
+
+Ha egy réteg száma ingadozik: nem a futásszámot kell növelni, hanem a
+RÉTEGET. Öt esetnél egyetlen billenő eset 20 százalékpont; tizenötnél
+6,7.
+
 ## A kiértékelő
 
 ```

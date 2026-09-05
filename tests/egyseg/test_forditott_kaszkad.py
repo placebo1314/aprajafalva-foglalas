@@ -872,3 +872,114 @@ def test_dontsd_el_te_atmegy_a_kapun():
 
     assert eredmeny["eszkoz"] == "dontsd_el_te"
     assert eredmeny["parameterek"] == {}, "nincs paramétere — a vásárló épp lemondott a döntésről"
+
+
+# --- MINDEGY-VISSZAVONÁS és VISSZAUTALÁS (ADR-031) -------------------
+#
+# Két MÉRT bukás javítása: (1) az elengedés egyirányú ajtó volt — aki azt
+# mondta, „bármelyik jó", nem tudott konkrétat kérni; (2) az „és
+# csütörtökön ugyanez?" mondatnál a bolt átjött, a méret nem.
+
+
+def _kontextus(megorzott: dict) -> ErtelmezesKontextus:
+    """Kontextus NEM ÜRES előzménnyel: enélkül az ADR-019 tartaléka
+    amúgy is kitöltené a mezőket, és a kapukat nem mérnénk."""
+    return ErtelmezesKontextus(
+        megorzott_parameterek=megorzott,
+        elozmenyek=[(KI_VASARLO, "Nagy petárdát szeretnék kedden.")],
+    )
+
+
+def test_mindegy_visszavonhato_a_mondatbeli_ertekkel():
+    kaszkad = _kaszkad(
+        _FakeLLM(
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {"bolt_id": "ugyifogyi", "szolgaltatas_id": "MINDEGY"},
+            }
+        )
+    )
+
+    eredmeny = kaszkad.ertelmez(
+        "mégis inkább a nagyot kérem",
+        most=_MOST,
+        kontextus=_kontextus({"bolt_id": "ugyifogyi", "szolgaltatas_id": "MINDEGY"}),
+    )
+
+    assert eredmeny["parameterek"]["szolgaltatas_id"] == "nagy_petarda"
+
+
+def test_a_mindegy_marad_ha_a_mondat_nem_mond_konkretat():
+    """ELLENPRÓBA: az elengedés nem szűnik meg attól, hogy a vásárló
+    beszél — csak attól, ha KIMOND egy értéket."""
+    kaszkad = _kaszkad(
+        _FakeLLM(
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {"bolt_id": "ugyifogyi", "szolgaltatas_id": "MINDEGY"},
+            }
+        )
+    )
+
+    eredmeny = kaszkad.ertelmez(
+        "és csütörtökön?",
+        most=_MOST,
+        kontextus=_kontextus({"bolt_id": "ugyifogyi", "szolgaltatas_id": "MINDEGY"}),
+    )
+
+    assert eredmeny["parameterek"]["szolgaltatas_id"] == "MINDEGY"
+
+
+def test_visszautalas_athozza_a_szolgaltatast():
+    """„és csütörtökön UGYANEZ?" — a névmás kimondottan a korábbi
+    tartalomra mutat, tehát a méret átjön; a nap viszont új."""
+    kaszkad = _kaszkad(
+        _FakeLLM(
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {"bolt_id": "ugyifogyi", "datum_kifejezes": "csütörtökön"},
+            }
+        )
+    )
+
+    eredmeny = kaszkad.ertelmez(
+        "és csütörtökön ugyanez?",
+        most=_MOST,
+        kontextus=_kontextus({"bolt_id": "ugyifogyi", "szolgaltatas_id": "nagy_petarda"}),
+    )
+
+    assert eredmeny["parameterek"]["szolgaltatas_id"] == "nagy_petarda"
+    assert eredmeny["parameterek"]["datum_tol"].startswith("2026-08-20")
+
+
+def test_visszautalas_nelkul_a_megorzott_nem_jon_at():
+    """ELLENPRÓBA — az ADR-019 szabálya változatlan: ha a modell LÁTTA a
+    beszélgetést és üresen hagyta a mezőt, az a döntése."""
+    kaszkad = _kaszkad(
+        _FakeLLM(
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {"bolt_id": "ugyifogyi", "datum_kifejezes": "csütörtökön"},
+            }
+        )
+    )
+
+    eredmeny = kaszkad.ertelmez(
+        "és csütörtökön?",
+        most=_MOST,
+        kontextus=_kontextus({"bolt_id": "ugyifogyi", "szolgaltatas_id": "nagy_petarda"}),
+    )
+
+    assert "szolgaltatas_id" not in eredmeny["parameterek"]
+
+
+def test_a_visszautalas_a_boltot_is_athozza():
+    kaszkad = _kaszkad(_FakeLLM({"eszkoz": "szabad_idopontok", "parameterek": {}}))
+
+    eredmeny = kaszkad.ertelmez(
+        "a feleségemnek is ugyanoda, szombaton",
+        most=_MOST,
+        kontextus=_kontextus({"bolt_id": "szundi", "szolgaltatas_id": "altato"}),
+    )
+
+    assert eredmeny["parameterek"]["bolt_id"] == "szundi"

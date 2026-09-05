@@ -86,6 +86,23 @@ GOLDEN_UTVONAL = GYOKER / "tests" / "golden" / "nyelvi_alap.yaml"
 ROBUSZTUS_UTVONAL = GYOKER / "tests" / "golden" / "robusztus.yaml"
 BESZEDHELYZETEK_UTVONAL = GYOKER / "tests" / "golden" / "beszedhelyzetek.yaml"
 
+# ISMÉTELT MÉRÉS — a szórás küszöbe (2026-09-12).
+#
+# Mért tapasztalat (`docs/ELES_PROBA_20260905.md`, `docs/NUM_CTX_ES_VRAM.md`):
+# ugyanaz a kód, ugyanaz a modell, `temperature: 0` mellett is 1-2
+# esetnyit ingadozik futásról futásra — az 55 eses nyelvi halmazon ez
+# 2-4 százalékpont. Ezért:
+#
+# **Ha egy változtatás után a szám 3 SZÁZALÉKPONTNÁL kevesebbet mozdul,
+# az szórás, nem hatás.** A futtató ezt kiírja, és a jelentés nem
+# állíthat javulást vagy romlást a tartományon belül.
+#
+# A 3 pont nem elmélet: a 2026-09-05-i két futás 82,7% és 83,6% volt
+# ugyanazon a kódon, a 09-01-i pár pedig 90,2% és 91,2% — mindkét
+# tartomány 1 pont körüli, és a napon belüli szélső értékek 3,7 pontot
+# fogtak át.
+SZORAS_KUSZOB_SZAZALEKPONT = 3.0
+
 HALMAZOK = {
     "nyelvi": GOLDEN_UTVONAL,
     "robusztus": ROBUSZTUS_UTVONAL,
@@ -1007,6 +1024,66 @@ def jelent(cimke: str, meta: dict, eredmenyek: list[EsetEredmeny]) -> dict:
     }
 
 
+def _atlag_pontszam(eredmenyek: list[EsetEredmeny]) -> float:
+    return sum(er.pontszam for er in eredmenyek) / len(eredmenyek) if eredmenyek else 0.0
+
+
+def szoras_jelentes(pontszamok: list[float], elozo_json: Path | None = None) -> dict:
+    """A FUTÁSONKÉNTI TARTOMÁNY és az előző futáshoz mért különbség
+    kiírása — plusz az ítélet: hatás-e vagy szórás.
+
+    **Miért kell ez a futtatóba, és nem a jelentésbe.** Egy szám
+    önmagában nem mond semmit arról, mekkora a zaja; aki két mérést
+    összehasonlít, óhatatlanul hatásnak olvassa a különbséget. Ez a
+    blokk elveszi ezt a lehetőséget: kiírja a tartományt, és ha a
+    különbség azon belül van, ki is mondja, hogy NEM állítható javulás
+    vagy romlás.
+
+    A küszöb `SZORAS_KUSZOB_SZAZALEKPONT` (3 pont) VAGY a ténylegesen
+    mért tartomány — amelyik nagyobb. Két futás tartománya alsó becslés
+    a zajra, tehát nem szabad vele alálicitálni a mért tapasztalatnak."""
+    jelentes: dict = {"futasok": [round(p, 4) for p in pontszamok]}
+    print("\n=== ISMÉTELHETŐSÉG ===\n")
+
+    tartomany = 0.0
+    if len(pontszamok) > 1:
+        tartomany = (max(pontszamok) - min(pontszamok)) * 100
+        for i, pont in enumerate(pontszamok, start=1):
+            print(f"  {i}. futás: {pont:.1%}")
+        print(f"  tartomány: {tartomany:.1f} százalékpont")
+    else:
+        print("  Egy futás — a szórásról ez semmit nem mond. Két futáshoz: --ismetles 2")
+    jelentes["tartomany_szazalekpont"] = round(tartomany, 2)
+
+    kuszob = max(SZORAS_KUSZOB_SZAZALEKPONT, tartomany)
+    jelentes["kuszob_szazalekpont"] = round(kuszob, 2)
+    print(
+        f"  Zajküszöb: {kuszob:.1f} százalékpont "
+        f"(a {SZORAS_KUSZOB_SZAZALEKPONT:.0f} pontos alapérték és a mért tartomány közül a nagyobb)"
+    )
+
+    if elozo_json is not None:
+        if not elozo_json.exists():
+            print(f"  (az előző futás JSON-ja nem található: {elozo_json})")
+            return jelentes
+        elozo = json.loads(elozo_json.read_text(encoding="utf-8"))["osszefoglalo"]["osszesitett"]
+        kulonbseg = (pontszamok[0] - elozo) * 100
+        jelentes["elozo"] = round(elozo, 4)
+        jelentes["kulonbseg_szazalekpont"] = round(kulonbseg, 2)
+        print(f"  Előző futás: {elozo:.1%}  →  most: {pontszamok[0]:.1%}  ({kulonbseg:+.1f} pont)")
+        if abs(kulonbseg) < kuszob:
+            jelentes["itelet"] = "szoras"
+            print(
+                "  ÍTÉLET: a különbség a zajküszöbön BELÜL van — ez SZÓRÁS, nem hatás.\n"
+                "  A jelentés ne állítson se javulást, se romlást."
+            )
+        else:
+            jelentes["itelet"] = "javulas" if kulonbseg > 0 else "romlas"
+            irany = "JAVULÁS" if kulonbseg > 0 else "ROMLÁS"
+            print(f"  ÍTÉLET: {irany} — a különbség meghaladja a zajküszöböt.")
+    return jelentes
+
+
 def main(argv: list[str] | None = None) -> int:
     """`python feladat.py golden` belépési pontja. Alapértelmezetten
     (`--ertelmezo szabaly`) a determinisztikus értelmezőt futtatja —
@@ -1046,6 +1123,27 @@ def main(argv: list[str] | None = None) -> int:
             "Az értelmező HÁROMSZOR fut, a JSON eszközhívások pontos "
             "egyenlőségvizsgálatával (ADR-021, blueprint 10.). Ezzel mérhető, "
             "mennyit javít és mennyivel lassít. Élesben alapból ki van kapcsolva."
+        ),
+    )
+    parser.add_argument(
+        "--ismetles",
+        type=int,
+        default=1,
+        metavar="N",
+        help=(
+            "a halmaz N-szeri lefuttatása, és a FUTÁSONKÉNTI TARTOMÁNY kiírása. "
+            "Kettőtől felfelé van értelme: egy futásból nem derül ki, hogy egy "
+            "különbség hatás-e vagy szórás (l. SZORAS_KUSZOB_SZAZALEKPONT)."
+        ),
+    )
+    parser.add_argument(
+        "--elozo",
+        type=Path,
+        default=None,
+        metavar="JSON",
+        help=(
+            "korábbi futás JSON-ja — a futtató kiírja a különbséget, és megmondja, "
+            "hogy az a szóráson BELÜL van-e (akkor nem hatás)"
         ),
     )
     parser.add_argument("--json", type=Path, default=None, help="Eredmény mentése JSON-ba")
@@ -1130,6 +1228,15 @@ def main(argv: list[str] | None = None) -> int:
 
     eredmenyek = fut(meta, esetek, hivo)
 
+    # ISMÉTELT MÉRÉS — a szórás láthatóvá tétele. A további futások
+    # eredményét NEM átlagoljuk bele a jelentésbe: az ELSŐ futás marad a
+    # jelentés alapja (különben nem lenne összehasonlítható a korábbi,
+    # egyszeres mérésekkel), a többi a TARTOMÁNYT adja.
+    ismetelt_pontszamok = [_atlag_pontszam(eredmenyek)]
+    for i in range(2, max(args.ismetles, 1) + 1):
+        print(f"\n--- {i}. futás (ismétlés a szórás méréséhez) ---")
+        ismetelt_pontszamok.append(_atlag_pontszam(fut(meta, esetek, hivo)))
+
     # A BIZTONSÁGI blokk a pontosság ELŐTT megy ki — a robusztussági
     # halmaz elfogadási elve szerint a pontosság másodlagos.
     biztonsagi_szamok: dict[str, int] = {}
@@ -1157,6 +1264,8 @@ def main(argv: list[str] | None = None) -> int:
             + ", ".join(f"{k}: {n}" for k, n in sorted(egyetertes_szamlalo.items()))
         )
         osszefoglalo["onkonzisztencia"] = dict(egyetertes_szamlalo)
+
+    osszefoglalo["ismetelhetoseg"] = szoras_jelentes(ismetelt_pontszamok, args.elozo)
 
     if args.json:
         args.json.write_text(

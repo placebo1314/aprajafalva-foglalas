@@ -23,6 +23,13 @@ _SZOTAR: list[tuple[str, str]] = [
     (r"\bvóna\b", "volna"),
     (r"\bkéretnék\b", "kérnék"),
     (r"\bhun\b", "hol"),
+    # Í-ZŐ NAPSZAKOK. Miért kell külön bejegyzés: a napszak-kaput
+    # (`forditott_kaszkad._mondatbeli_napszak`) az AKTUÁLIS mondatból
+    # kell igazolni — ha a mondatban „dílelőtt" áll, a kapu nem ismeri
+    # fel, és ELDOBJA a modell egyébként helyes napszakát. Nem a modell
+    # hibázik ilyenkor, hanem mi vétózzuk meg.
+    (r"\bd[íi]lel[őo]tt\w*", "délelőtt"),
+    (r"\bd[íi]lut[áa]n\w*", "délután"),
     (r"\bahun\b", "ahol"),
     (r"\bárullyák\b", "árulják"),
     # Szinonima, nem tájszólás: a `hun_date_parser` a "jövő" jelzőt

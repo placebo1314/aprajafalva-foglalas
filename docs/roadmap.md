@@ -180,10 +180,17 @@ másik csatornára hivatkozás). Együtt **151 eset**. A bővítés azonnal
 két hibát talált (`docs/ALTALANOSITAS.md` 2.9c–2.9d) — ez a golden set
 tulajdonképpeni haszna: nem a zöld szám, hanem a talált bukás.
 
-**Kilépési feltétel:** 150-200 eset (ma **151**, ebből NYELVI 55 — a
-feltétel a nyelvi halmazra vonatkozik, tehát MÉG nem teljesült),
-futtatható értékelő (**kész**), két modell összehasonlítható
-(**kész** — 2026-09-05-re öt modell van megmérve ugyanazon a halmazon).
+**2026-09-12:** a nyelvi halmaz **85 esetre** nőtt — a három
+leggyengébb réteg tíz-tíz új esetet kapott, más beszédhelyzetekből
+(`docs/HALMAZ_BOVITES_20260912.md`). Együtt **184 eset**. A futtató
+mostantól ISMÉTELT mérést is tud (`--ismetles`), és kimondja, ha egy
+különbség a szóráson belül van.
+
+**Kilépési feltétel:** 150-200 eset — **teljesült** (184, ebből nyelvi
+85); futtatható értékelő — **kész**; két modell összehasonlítható —
+**kész** (2026-09-05-re öt modell van megmérve ugyanazon a halmazon).
+Ami a lezáráshoz még hiányzik: SZITUÁCIÓS esetek (naptárállapot →
+ajánlás), azokból ma egy sincs.
 
 ---
 

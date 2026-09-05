@@ -97,6 +97,7 @@ determinisztikusak, és a modell nem kerülheti meg őket:
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 from assistant import kapuor
@@ -467,6 +468,64 @@ class ForditottKaszkadErtelmezo:
                 return jelolt
         return None
 
+    # -- MINDEGY-VISSZAVONÁS és VISSZAUTALÁS ---------------------------
+
+    @staticmethod
+    def _mindegy_visszavonva(mezo_ertek, mondatbeli):
+        """Az elengedett mező VISSZAVONVA, ha a mondat konkrét értéket
+        mond ki.
+
+        **Az elengedés nem egyirányú ajtó.** A három állapot (nem tudjuk
+        / elengedve / tudjuk) között oda-vissza kell tudni mozogni: aki
+        azt mondta, „bármelyik petárda jó", később mondhatja azt, hogy
+        „mégis inkább a nagyot". Ez a kapu ezt kikényszeríti — nem a
+        modellre bízza.
+
+        **Miért kapu, és miért nem prompt.** Prompttal MEGPRÓBÁLTUK
+        (2026-09-05, két futáson mérve): a célzott eset továbbra is
+        bukott, az összesített szám nem javult. A modell a beszélgetésben
+        látott „mindegy"-et viszi tovább — a mondatban kimondott konkrét
+        érték viszont determinisztikusan kinyerhető, tehát nem kell
+        találgatni."""
+        if mezo_ertek == MINDEGY and mondatbeli:
+            _LOG.info("kaszkád: a MINDEGY visszavonva a mondatbeli értékkel (%s)", mondatbeli)
+            return mondatbeli
+        return mezo_ertek
+
+    # VISSZAUTALÁS az előző fordulóra: „és csütörtökön UGYANEZ?", „ugyanaz
+    # a méret", „ugyanoda". Zárt, szűk lista — a névmási visszautalás
+    # nyelvtanilag zárt osztály, nem bővülő szókincs.
+    _VISSZAUTALAS_MINTA = re.compile(
+        r"\bugyan(ez|az|azt|ezt|olyan|abban|oda|onnan|akkor)\b|\b(az|ugyanaz) a (méret|fajta)\b"
+    )
+
+    @classmethod
+    def _visszautalas_e(cls, mondat: str) -> bool:
+        """Visszautal-e a mondat az ELŐZŐ fordulóra?
+
+        Ez az egyetlen hely, ahol a megőrzött kemény rész akkor is
+        kitölt, ha a modell LÁTTA a beszélgetést és mégis üresen hagyta
+        (ADR-019: „a None erősebb"). A kivétel indoka nyelvi, nem
+        kényelmi: a „ugyanez" névmás KIMONDOTTAN az előző tartalomra
+        mutat — a vásárló nem elhagyta az adatot, hanem hivatkozott rá.
+
+        Mért bukás, amit megszüntet (2026-09-05, `elengedes-05`): a
+        „Nagy petárdát szeretnék kedden." / „és csütörtökön ugyanez?"
+        menetben a bolt átjött, a MÉRET nem — a keresés csendben
+        kitágult minden petárdára."""
+        return bool(cls._VISSZAUTALAS_MINTA.search(normalizal(mondat).lower()))
+
+    @staticmethod
+    def _visszautalasos_tartalek(kontextus: ErtelmezesKontextus, mezo: str, mondat: str):
+        """A megőrzött érték, HA a mondat visszautal az előző fordulóra.
+        Egyébként `None` — az ADR-019 szabálya változatlan."""
+        if not ForditottKaszkadErtelmezo._visszautalas_e(mondat):
+            return None
+        ertek = kontextus.megorzott_parameterek.get(mezo)
+        if ertek:
+            _LOG.info("kaszkád: visszautalás — a megőrzött %s átjön (%s)", mezo, ertek)
+        return ertek
+
     # -- dátum-kapu ----------------------------------------------------
 
     @staticmethod
@@ -653,7 +712,11 @@ class ForditottKaszkadErtelmezo:
         kontextus: ErtelmezesKontextus,
         bizonyossag: dict,
     ) -> dict:
-        bolt_id = parameterek.get("bolt_id") or self._tartalek(kontextus, "bolt_id")
+        bolt_id = (
+            self._mindegy_visszavonva(parameterek.get("bolt_id"), rule_based.bolt_feloldas(mondat))
+            or self._tartalek(kontextus, "bolt_id")
+            or self._visszautalasos_tartalek(kontextus, "bolt_id", mondat)
+        )
         if bolt_id is None:
             return self._visszakerdez(
                 "bolt_id",
@@ -707,12 +770,19 @@ class ForditottKaszkadErtelmezo:
         # A MINDEGY MEGELŐZI a pótlást: ha a vásárló elengedte a
         # szolgáltatást, nem tölthetjük ki helyette a bolt
         # alapértelmezésével — az épp az ellenkezője annak, amit kért.
-        if parameterek.get("szolgaltatas_id") == MINDEGY:
+        mondatbeli_szolgaltatas = rule_based.szolgaltatas_feloldas(mondat, bolt_id)
+        modell_szolgaltatas = self._mindegy_visszavonva(
+            parameterek.get("szolgaltatas_id"), mondatbeli_szolgaltatas
+        )
+        if modell_szolgaltatas == MINDEGY:
             szolgaltatas = MINDEGY
         else:
             szolgaltatas = (
-                parameterek.get("szolgaltatas_id")
-                or rule_based.szolgaltatas_feloldas(mondat, bolt_id)
+                modell_szolgaltatas
+                or mondatbeli_szolgaltatas
+                # VISSZAUTALÁS („és csütörtökön ugyanez?") — a megőrzött
+                # szolgáltatás átjön, mert a mondat KIMONDOTTAN rá mutat.
+                or self._visszautalasos_tartalek(kontextus, "szolgaltatas_id", mondat)
                 or BOLT_EGYERTELMU_SZOLGALTATAS.get(bolt_id)
             )
         if szolgaltatas:
@@ -720,10 +790,16 @@ class ForditottKaszkadErtelmezo:
             forras["szolgaltatas_id"] = (
                 "modell"
                 if parameterek.get("szolgaltatas_id")
+                and szolgaltatas == parameterek.get("szolgaltatas_id")
                 else (
                     "szabály-alapú kinyerés"
-                    if rule_based.szolgaltatas_feloldas(mondat, bolt_id)
-                    else "a bolt egyértelmű szolgáltatása"
+                    if mondatbeli_szolgaltatas == szolgaltatas
+                    else (
+                        "visszautalás (megőrzött kontextus)"
+                        if szolgaltatas
+                        == self._visszautalasos_tartalek(kontextus, "szolgaltatas_id", mondat)
+                        else "a bolt egyértelmű szolgáltatása"
+                    )
                 )
             )
         # A preferált óra ("kb 10 körül") ugyanúgy determinisztikusan

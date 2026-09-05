@@ -365,56 +365,29 @@ amire nincs szava** — és ilyenkor nem hibázik, hanem a legközelebbi
 meglévő szót használja. A javítás ezért sosem prompt-fegyelem: új szó
 kell a szerződésbe.
 
-### 2.9d A MINDEGY RAGADÓS — az elengedés nem vonható vissza (2026-09-05)
+### 2.9d A MINDEGY ragadóssága — MEGOLDVA (2026-09-12, ADR-031)
 
-**A bukás** (`mindegy-07-elengedes-utan-uj-ertek`, mérve `qwen3.5:9b` ÉS
-`gemma4:e4b` esetén is): a vásárló előbb elenged egy mezőt („Bármelyik
-petárda jó"), majd meggondolja magát („mégis inkább a nagyot kérem") —
-és a rendszer marad a `MINDEGY`-nél.
+**A bukás** (`mindegy-07`, `elengedes-10/11`): aki elengedett egy mezőt
+(„Bármelyik petárda jó"), nem tudta visszavonni („mégis inkább a nagyot
+kérem").
 
-```
-1. forduló: "Bármelyik petárda jó, csak csütörtökön legyen."
-            -> szolgaltatas_id: MINDEGY        (helyes)
-2. forduló: "mégis inkább a nagyot kérem"
-            -> szolgaltatas_id: MINDEGY        (HIBÁS, nagy_petarda kellene)
-```
+**Két javítási kísérlet, egy megbukott.** A prompt-szabály nem
+segített (2026-09-05, két futáson mérve). Ami megoldotta: egy
+DETERMINISZTIKUS KAPU — ha a mondat kimond egy konkrét értéket, az
+felülírja a MINDEGY-et —, plusz a méret-melléknév toldalékolt alakjai a
+szabály-alapú rétegben. A megkülönböztetés fontos: az első kísérlet a
+modelltől kért valamit, a második a modell UTÁN dönt.
 
-**Miért fontos:** a három állapot (nem tudjuk / elengedve / tudjuk)
-között ODA-VISSZA kellene mozogni. Ma az elengedés EGYIRÁNYÚ ajtó — aki
-egyszer azt mondta, mindegy, az ebben a beszélgetésben nem tud
-konkrétat kérni. Ez rosszabb, mint ha meg sem kérdeztük volna.
+### 2.9e A szolgáltatás átmentése — MEGOLDVA a visszautalásra (2026-09-12, ADR-031)
 
-**A javítást MEGPRÓBÁLTUK, és megbukott.** A rendszerprompt kapott egy
-mondatot („Az elengedés VISSZAVONHATÓ: … FELÜLÍRJA a korábbi
-MINDEGY-et"), és két futáson mérve: a célzott eset **továbbra is
-bukott**, az összesített szám nem javult (86,4% → 85,5% / 83,6%). A
-szabály ezért nincs a promptban — a saját szabályunk szerint (ha nem
-javít, ne vezesd be).
+**A bukás** (`elengedes-05/12`): az „és csütörtökön ugyanez?" mondatnál
+a bolt átjött, a szolgáltatás nem.
 
-**A determinisztikus javítás sem járható ma.** Az kellene hozzá, hogy a
-szabály-alapú réteg felismerje a mondatban a konkrét értéket („a
-nagyot") — de a minta (`nagy` szóhatárral) a toldalékolt alakra nem
-illeszkedik, kitágítva viszont a „nagyon sietek" mondatból is
-petárdaméret lenne. Ez ráigazítás lenne, nem javítás — a bukás ezért
-marad KORLÁT, dokumentálva.
-
-### 2.9c A szolgáltatás nem él túl egy fordulót (2026-09-05)
-
-**A bukás** (`elengedes-05-szolgaltatas-ellenproba`, mindkét mért
-modellen): a KEMÉNY rész (bolt + szolgáltatás) az ADR-019 szerint
-végigkíséri a beszélgetést, de a gyakorlatban csak a BOLT teszi.
-
-```
-1. forduló: "Nagy petárdát szeretnék kedden."   -> ugyifogyi + nagy_petarda
-2. forduló: "és csütörtökön ugyanez?"           -> ugyifogyi, szolgáltatás NÉLKÜL
-```
-
-A modell látja a beszélgetést, mégsem tölti ki a szolgáltatást — és az
-ADR-019 döntése szerint ilyenkor a `None` erősebb a megőrzött értéknél,
-tehát a rendszer nem is pótolja. A kimenet így nem hibás foglalás, csak
-tágabb keresés (minden petárdaméretre) — ezért ez KORLÁT, nem invariáns-
-sértés. Az „ugyanez" névmás feloldása a következő lépés természetes
-helye.
+**Megoldva, de SZŰKEN**: csak akkor, ha a mondat NÉVMÁSSAL utal vissza
+(„ugyanez", „ugyanoda"). Névmás nélkül („és csütörtökön?") továbbra sem
+jön át — és ez tudatos: ott tényleg nem tudjuk, hogy a méret még
+érdekli-e a vásárlót. A `elengedes-05` eset épp ezt az ellenpróbát
+őrzi.
 
 ### 2.9b A MINDEGY átszivárog a szomszéd mezőre
 

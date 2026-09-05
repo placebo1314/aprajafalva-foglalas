@@ -128,13 +128,38 @@ def _bolt_azonositas(also: str) -> str | None:
     return None
 
 
+# A MÉRET melléknév TOLDALÉKOLT alakjai. A szóhatár önmagában kevés:
+# a „nagyot", „nagyra", „kicsit" ugyanazt jelenti, mint a „nagy", de a
+# `\bnagy\b` nem illeszkedik rájuk — az első éles próbából származó
+# `mindegy-07` eset épp ezen bukott el („mégis inkább a nagyot kérem").
+#
+# **Ez morfológia, nem kulcsszó-toldozás.** A toldalékkészlet ZÁRT
+# (tárgy-, ható-, részes- és -ból/-ért ragok), és a két leggyakoribb
+# HAMIS barát szándékosan kimarad: a „nagyon" (fokhatározó — „nagyon
+# sietek") és a „nagyobb" (középfok — az összehasonlítás nem méretkérés).
+_MERET_MINTAK: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bnagy(ot|at|ra|hoz|ból|ért|ja)?\b"), "nagy_petarda"),
+    # A „kicsit" HAMIS BARÁT is: a „kicsit később mennék" mondatban
+    # fokhatározó, nem méret. A negatív előretekintés egy ZÁRT listát zár
+    # ki — időbeli és fokozó folytatásokat —, mert a méret-jelentésben a
+    # szó után nem ilyen szó jön („a kicsit kérem", „a kicsire gondoltam").
+    (
+        re.compile(
+            r"\bkis(et|t|ebbet)?\b|"
+            r"\bkicsi(t|re|hez|ből)?\b(?!\s*(kés[őo]bb|kor[áa]bban|hamarabb|m[úu]lva|"
+            r"var|v[áa]rok|t[öo]bbet|jobban|nehezebben))"
+        ),
+        "kis_petarda",
+    ),
+]
+
+
 def _szolgaltatas_azonositas(also: str, bolt_id: str | None) -> str | None:
     if bolt_id != "ugyifogyi":
         return None
-    if re.search(r"\bnagy\b", also):
-        return "nagy_petarda"
-    if re.search(r"\bkis\b", also):
-        return "kis_petarda"
+    for minta, szolgaltatas in _MERET_MINTAK:
+        if minta.search(also):
+            return szolgaltatas
     return None
 
 

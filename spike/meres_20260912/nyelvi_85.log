@@ -1,0 +1,299 @@
+Betöltve: 85 eset (nyelvi halmaz), meta.most = 2026-08-17T09:00:00Z
+Értelmező: forditott (modell=qwen3.5:9b)
+
+Előmelegítés (a modell betöltése)… kész
+  koznyelvi-01                     1.0  OK
+  koznyelvi-02                     1.0  OK
+  koznyelvi-03                     1.0  OK
+  koznyelvi-04                     1.0  OK
+  koznyelvi-05                     0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  tajszolas-01                     1.0  OK
+  tajszolas-02                     1.0  OK
+  tajszolas-03                     1.0  OK
+  tajszolas-04                     1.0  OK
+  toredekes-01                     1.0  OK
+  toredekes-02                     1.0  OK
+  toredekes-03                     1.0  OK
+  toredekes-04                     1.0  OK
+  tajszolas-05-mogyok-a-torpillaho 1.0  OK
+  tajszolas-06-koll-a-nagy-petarda 1.0  OK
+  tajszolas-07-hun-van-az-uzlet    1.0  OK
+  tajszolas-08-mikor-nyitnak-ki    1.0  OK
+  tajszolas-09-lemondanam-a-kodot  1.0  OK
+  tajszolas-10-mikor-ernek-ra      0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  tajszolas-11-nizzik-mar-meg      1.0  OK
+  tajszolas-12-ha-mar-arra-jarok   1.0  OK
+  tajszolas-13-elkelne-egy-kis-alvas 1.0  OK
+  tajszolas-14-ellenproba-koznyelvi 1.0  OK
+  toredekes-05-tavirat-harom-szo   1.0  OK
+  toredekes-06-tavirat-ket-szo     1.0  OK
+  toredekes-07-felbehagyott-mondat 1.0  OK
+  toredekes-08-javitgatas-menet-kozben 1.0  OK
+  toredekes-09-egyszavas-valasz    1.0  OK
+  toredekes-10-irasjel-nelkul      1.0  OK
+  toredekes-11-csak-a-nap          1.0  OK
+  toredekes-12-ismetelt-szo        1.0  OK
+  toredekes-13-kerdojel-nelkuli-kerdes 1.0  OK
+  toredekes-14-ellenproba-ures     1.0  OK
+  szleng-01                        1.0  OK
+  szleng-02                        1.0  OK
+  szleng-03                        1.0  OK
+  egyszerusitett-01                1.0  OK
+  egyszerusitett-02                1.0  OK
+  egyszerusitett-03                1.0  OK
+  egyszerusitett-04                1.0  OK
+  kapuor-01                        1.0  OK
+  kapuor-02                        1.0  OK
+  alkudozas-01-szukites            1.0  OK
+  alkudozas-02-tagitas             1.0  OK
+  alkudozas-03-visszalepes         1.0  OK
+  alkudozas-04-napszakvaltas       1.0  OK
+  alkudozas-05-boltvaltas          1.0  OK
+  alkudozas-06-elutasitas-utan-alternativa 1.0  OK
+  elengedes-01-bolt                0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-02-bolt-mas-megfogalmazas 0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-03-szolgaltatas        0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  elengedes-04-ellenproba-megtartja-a-boltot 1.0  OK
+  elengedes-05-szolgaltatas-ellenproba 1.0  OK
+  elengedes-06-ajandekba-barhova   0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-07-kiserokent-mindegy  0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-08-nem-tudja-melyikbe  0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-09-meret-ami-van       1.0  OK
+  elengedes-10-visszavonas-nagyot  1.0  OK
+  elengedes-11-visszavonas-kicsire 1.0  OK
+  elengedes-12-visszautalas-ugyanez 1.0  OK
+  elengedes-13-visszautalas-ugyanoda 1.0  OK
+  elengedes-14-ellenproba-uj-boltot-nevez 0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  elengedes-15-ellenproba-a-nap-esik-ki 0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'szundi', 
+  valtozatossag-01-vagylagos       1.0  OK
+  valtozatossag-02-lemondas-minta-nelkul 1.0  OK
+  valtozatossag-03-bolt-termek-szerint 1.0  OK
+  valtozatossag-04-bolt-megjelenes-szerint 0.0  várt 'szabad_idopontok', kapott 'visszakerdez'
+  valtozatossag-05-ures-keres      1.0  OK
+  mintan_tul-01-vagylagos          1.0  OK
+  mintan_tul-02-ures-szandek       1.0  OK
+  mintan_tul-03-felteteles         1.0  OK
+  mintan_tul-04-indoklas           1.0  OK
+  mintan_tul-05-kettos-keres       0.5  részleges elfogadás
+  mintan_tul-06-visszavonas        1.0  OK
+  mintan_tul-07-bizonytalan        1.0  OK
+  mintan_tul-08-koznyelvi-toltelek 1.0  OK
+  mintan_tul-09-indoklas-tukor     1.0  OK
+  mindegy-01-szolgaltatas          1.0  OK
+  mindegy-02-napszak               1.0  OK
+  mindegy-03-pult                  0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  mindegy-04-legkorabbi-elengedessel 1.0  OK
+  mindegy-07-elengedes-utan-uj-ertek 1.0  OK
+  mindegy-08-nem-mindegy-hanem-kerdes 0.0  nem elfogadható: 'szabad_idopontok', várt egyike: ['bolt_inf
+  mindegy-05-ellenproba-mindegyik-lista 1.0  OK
+  mindegy-06-ellenproba-mindegy-nekem-melyik-nap 1.0  OK
+
+--- 2. futás (ismétlés a szórás méréséhez) ---
+  koznyelvi-01                     1.0  OK
+  koznyelvi-02                     1.0  OK
+  koznyelvi-03                     1.0  OK
+  koznyelvi-04                     1.0  OK
+  koznyelvi-05                     1.0  OK
+  tajszolas-01                     1.0  OK
+  tajszolas-02                     1.0  OK
+  tajszolas-03                     1.0  OK
+  tajszolas-04                     1.0  OK
+  toredekes-01                     1.0  OK
+  toredekes-02                     1.0  OK
+  toredekes-03                     1.0  OK
+  toredekes-04                     1.0  OK
+  tajszolas-05-mogyok-a-torpillaho 1.0  OK
+  tajszolas-06-koll-a-nagy-petarda 1.0  OK
+  tajszolas-07-hun-van-az-uzlet    1.0  OK
+  tajszolas-08-mikor-nyitnak-ki    1.0  OK
+  tajszolas-09-lemondanam-a-kodot  1.0  OK
+  tajszolas-10-mikor-ernek-ra      0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'torpilla'
+  tajszolas-11-nizzik-mar-meg      1.0  OK
+  tajszolas-12-ha-mar-arra-jarok   1.0  OK
+  tajszolas-13-elkelne-egy-kis-alvas 1.0  OK
+  tajszolas-14-ellenproba-koznyelvi 1.0  OK
+  toredekes-05-tavirat-harom-szo   1.0  OK
+  toredekes-06-tavirat-ket-szo     1.0  OK
+  toredekes-07-felbehagyott-mondat 1.0  OK
+  toredekes-08-javitgatas-menet-kozben 1.0  OK
+  toredekes-09-egyszavas-valasz    1.0  OK
+  toredekes-10-irasjel-nelkul      1.0  OK
+  toredekes-11-csak-a-nap          1.0  OK
+  toredekes-12-ismetelt-szo        1.0  OK
+  toredekes-13-kerdojel-nelkuli-kerdes 1.0  OK
+  toredekes-14-ellenproba-ures     1.0  OK
+  szleng-01                        1.0  OK
+  szleng-02                        1.0  OK
+  szleng-03                        1.0  OK
+  egyszerusitett-01                1.0  OK
+  egyszerusitett-02                1.0  OK
+  egyszerusitett-03                1.0  OK
+  egyszerusitett-04                1.0  OK
+  kapuor-01                        1.0  OK
+  kapuor-02                        1.0  OK
+  alkudozas-01-szukites            1.0  OK
+  alkudozas-02-tagitas             1.0  OK
+  alkudozas-03-visszalepes         1.0  OK
+  alkudozas-04-napszakvaltas       1.0  OK
+  alkudozas-05-boltvaltas          1.0  OK
+  alkudozas-06-elutasitas-utan-alternativa 1.0  OK
+  elengedes-01-bolt                0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-02-bolt-mas-megfogalmazas 0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-03-szolgaltatas        1.0  OK
+  elengedes-04-ellenproba-megtartja-a-boltot 1.0  OK
+  elengedes-05-szolgaltatas-ellenproba 1.0  OK
+  elengedes-06-ajandekba-barhova   0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-07-kiserokent-mindegy  0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-08-nem-tudja-melyikbe  0.0  várt 'visszakerdez', kapott 'szabad_idopontok'
+  elengedes-09-meret-ami-van       1.0  OK
+  elengedes-10-visszavonas-nagyot  1.0  OK
+  elengedes-11-visszavonas-kicsire 1.0  OK
+  elengedes-12-visszautalas-ugyanez 1.0  OK
+  elengedes-13-visszautalas-ugyanoda 1.0  OK
+  elengedes-14-ellenproba-uj-boltot-nevez 0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  elengedes-15-ellenproba-a-nap-esik-ki 0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'szundi', 
+  valtozatossag-01-vagylagos       1.0  OK
+  valtozatossag-02-lemondas-minta-nelkul 1.0  OK
+  valtozatossag-03-bolt-termek-szerint 1.0  OK
+  valtozatossag-04-bolt-megjelenes-szerint 0.0  várt 'szabad_idopontok', kapott 'visszakerdez'
+  valtozatossag-05-ures-keres      1.0  OK
+  mintan_tul-01-vagylagos          1.0  OK
+  mintan_tul-02-ures-szandek       1.0  OK
+  mintan_tul-03-felteteles         1.0  OK
+  mintan_tul-04-indoklas           1.0  OK
+  mintan_tul-05-kettos-keres       0.5  részleges elfogadás
+  mintan_tul-06-visszavonas        1.0  OK
+  mintan_tul-07-bizonytalan        1.0  OK
+  mintan_tul-08-koznyelvi-toltelek 1.0  OK
+  mintan_tul-09-indoklas-tukor     1.0  OK
+  mindegy-01-szolgaltatas          1.0  OK
+  mindegy-02-napszak               1.0  OK
+  mindegy-03-pult                  0.0  eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi
+  mindegy-04-legkorabbi-elengedessel 1.0  OK
+  mindegy-07-elengedes-utan-uj-ertek 1.0  OK
+  mindegy-08-nem-mindegy-hanem-kerdes 0.0  nem elfogadható: 'szabad_idopontok', várt egyike: ['bolt_inf
+  mindegy-05-ellenproba-mindegyik-lista 1.0  OK
+  mindegy-06-ellenproba-mindegy-nekem-melyik-nap 1.0  OK
+
+=== forditott — összesítés ===
+
+Címkénkénti pontosság:
+  alkudozas                    100.0%  (n=6)
+  athelyezes                     0.0%  (n=1)
+  azonositas_hianya            100.0%  (n=1)
+  azonositas_nelkul            100.0%  (n=2)
+  bizonytalansag               100.0%  (n=1)
+  bizonytalansag_jelzese       100.0%  (n=1)
+  bolt_korulras                100.0%  (n=1)
+  bolt_korulras_szinonimaval   100.0%  (n=1)
+  bolt_megjelenes_szerint        0.0%  (n=1)
+  boltvaltas                   100.0%  (n=1)
+  csapda_szo                   100.0%  (n=2)
+  egyszavas                    100.0%  (n=2)
+  egyszerusitett               100.0%  (n=4)
+  elengedes                     46.7%  (n=15)
+  elengedes_visszavonasa       100.0%  (n=3)
+  elengedett_mezo              100.0%  (n=2)
+  ellenproba                    66.7%  (n=9)
+  elutasitas_utan_alternativa  100.0%  (n=1)
+  felbehagyott                 100.0%  (n=1)
+  felszolito                   100.0%  (n=1)
+  felteteles                   100.0%  (n=1)
+  foglalasi_kod                100.0%  (n=2)
+  hallucinacio_csapda          100.0%  (n=1)
+  harmadik_szemely_kontextus   100.0%  (n=1)
+  hatokoron_kivul              100.0%  (n=2)
+  hianyzo_adat                   0.0%  (n=1)
+  hol_kerdes                   100.0%  (n=1)
+  i_zes                        100.0%  (n=3)
+  indoklas_mellekmondattal     100.0%  (n=2)
+  irasjel_nelkul               100.0%  (n=2)
+  ismetles                     100.0%  (n=2)
+  javitgatas                   100.0%  (n=1)
+  jovo_het_ertelmezes          100.0%  (n=1)
+  kapuor                       100.0%  (n=2)
+  kemeny_resz_elengedes          0.0%  (n=6)
+  kettos_keres                  50.0%  (n=1)
+  korabbi_foglalasra_utalas    100.0%  (n=1)
+  korulirt_bolt                 50.0%  (n=2)
+  koznyelvi                     80.0%  (n=5)
+  legkorabbi                   100.0%  (n=1)
+  legkorabbi_kerdes            100.0%  (n=1)
+  lemondas                     100.0%  (n=2)
+  lemondas_korulras            100.0%  (n=1)
+  ma                           100.0%  (n=1)
+  mindegy                       75.0%  (n=8)
+  mindegy_szentinel            100.0%  (n=1)
+  mintan_tul                    94.4%  (n=9)
+  napszak                      100.0%  (n=2)
+  napszakvaltas                100.0%  (n=1)
+  negativ_kimenet_lehetseges   100.0%  (n=1)
+  nem_letezo_mezo                0.0%  (n=1)
+  nulla_konkretum              100.0%  (n=1)
+  o_zes                         50.0%  (n=2)
+  onmagaval_beszeles           100.0%  (n=1)
+  preferencia                  100.0%  (n=1)
+  redakcio                     100.0%  (n=1)
+  regies                       100.0%  (n=1)
+  relativ_datum                100.0%  (n=1)
+  reszleges_adat               100.0%  (n=1)
+  reszleges_szolgaltatas       100.0%  (n=1)
+  roviditett_nap               100.0%  (n=1)
+  szandek_megorzes             100.0%  (n=1)
+  szleng                       100.0%  (n=3)
+  szolgaltatas_azonositas      100.0%  (n=1)
+  szukites                     100.0%  (n=1)
+  tagitas                      100.0%  (n=1)
+  tajszolas                     92.9%  (n=14)
+  tartalek_ablak               100.0%  (n=1)
+  tavirat                      100.0%  (n=2)
+  tavirat_stilus               100.0%  (n=1)
+  tenyvalasz                   100.0%  (n=4)
+  tobbfordulos                  72.4%  (n=29)
+  toltelekszo                  100.0%  (n=4)
+  toredekes                    100.0%  (n=14)
+  udvariassagi_bevezetes       100.0%  (n=1)
+  ures_keres                   100.0%  (n=1)
+  ures_szandek                 100.0%  (n=2)
+  vagylagos                    100.0%  (n=2)
+  valtozatossag                 80.0%  (n=5)
+  visszalepes                  100.0%  (n=1)
+  visszautalas                 100.0%  (n=2)
+  visszavonas                  100.0%  (n=1)
+  zart_kerdes                  100.0%  (n=1)
+
+Réteg-küszöbök:
+  alkudozas            100.0%  (n= 6)  küszöb 90%  [TARTJA]
+  egyszerusitett       100.0%  (n= 4)  küszöb 90%  [TARTJA]
+  elengedes             46.7%  (n=15)  küszöb 90%  [NEM TARTJA]
+  kapuor               100.0%  (n= 2)  nincs küszöb (pl. kapuőr)  [—]
+  koznyelvi             80.0%  (n= 5)  küszöb 98%  [NEM TARTJA]
+  mindegy               75.0%  (n= 8)  küszöb 90%  [NEM TARTJA]
+  mintan_tul            94.4%  (n= 9)  küszöb 90%  [TARTJA]
+  szleng               100.0%  (n= 3)  küszöb 92%  [TARTJA]
+  tajszolas             92.9%  (n=14)  küszöb 90%  [TARTJA]
+  toredekes            100.0%  (n=14)  küszöb 90%  [TARTJA]
+  valtozatossag         80.0%  (n= 5)  küszöb 90%  [NEM TARTJA]
+
+Összesített pontosság: 84.1%  (n=85)
+Leggyengébb réteg (ez a mérőszám, nem az átlag): elengedes = 46.7%
+
+Válaszidő-eloszlás fordulónként (ezen a futáson, szekvenciálisan, n=116):
+  p50     5.09 s   (elvárás < 10 s)  [TARTJA]
+  p95     5.88 s   (elvárás < 25 s)  [TARTJA]
+  átlag   4.88 s   max   7.26 s
+  tendencia: első fél p50 4.99 s → második fél p50 5.30 s   [stabil, +6%]
+
+Réteg-megoszlás (melyik oldotta meg, utolsó forduló): kapuor=4, llm=154, szabaly:tenyvalasz=10, szabaly:zart_valasz=2
+
+=== ISMÉTELHETŐSÉG ===
+
+  1. futás: 84.1%
+  2. futás: 86.5%
+  tartomány: 2.4 százalékpont
+  Zajküszöb: 3.0 százalékpont (a 3 pontos alapérték és a mért tartomány közül a nagyobb)
+
+JSON mentve: spike\meres_20260912\nyelvi_85.json
+
+Réteg-küszöb alatt: elengedes: 47% < küszöb 90%; koznyelvi: 80% < küszöb 98%; mindegy: 75% < küszöb 90%; valtozatossag: 80% < küszöb 90%
+$ C:\Program Files\Python314\python.exe -m tests.golden.futtato --ertelmezo forditott --halmaz nyelvi --ismetles 2 --json spike/meres_20260912/nyelvi_85.json

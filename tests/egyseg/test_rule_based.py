@@ -448,3 +448,42 @@ def test_tartalek_ablak_pontosan_egy_hetet_fog_at():
     assert ig == "2026-12-27T23:59:59Z"
     napok = (date.fromisoformat(ig[:10]) - date.fromisoformat(tol[:10])).days + 1
     assert napok == 7, "a tartalék ablak pontosan egy hét, a mai napot is beleszámítva"
+
+
+# --- MÉRET-MORFOLÓGIA (ADR-031) --------------------------------------
+#
+# A `nagy` nem illeszkedik a „nagyot" alakra — az első éles próbából
+# származó eset (`mindegy-07`) épp ezen bukott el. A toldalékkészlet
+# ZÁRT, és HÁROM hamis barát szándékosan kimarad: a „nagyon"
+# (fokhatározó), a „nagyobb" (középfok) és a fokhatározói „kicsit"
+# („kicsit később mennék" — az nem méret, hanem idő).
+
+
+@pytest.mark.parametrize(
+    ("mondat", "varhato"),
+    [
+        ("nagy petárdát kérek", "nagy_petarda"),
+        ("mégis inkább a nagyot kérem", "nagy_petarda"),
+        ("a nagyra gondoltam", "nagy_petarda"),
+        ("kis petárdát", "kis_petarda"),
+        ("na jó, akkor a kicsit", "kis_petarda"),
+        ("a kicsire lenne szükségem", "kis_petarda"),
+        # HAMIS BARÁTOK — ezekből nem lehet méret.
+        ("nagyon sietek", None),
+        ("nagyobb helyre lenne szükségem", None),
+        ("kicsit később mennék", None),
+        ("kicsit korábban jó lenne", None),
+    ],
+)
+def test_meret_morfologia(mondat, varhato):
+    from assistant.interpreter.rule_based import szolgaltatas_feloldas
+
+    assert szolgaltatas_feloldas(mondat, "ugyifogyi") == varhato
+
+
+def test_a_meret_csak_az_ugyifogyinal_ertelmes():
+    """A Szundinak és a Törpillának EGY szolgáltatása van — ott a
+    „nagy" szó nem méret, hanem jelző."""
+    from assistant.interpreter.rule_based import szolgaltatas_feloldas
+
+    assert szolgaltatas_feloldas("nagy adag altatót kérek", "szundi") is None
