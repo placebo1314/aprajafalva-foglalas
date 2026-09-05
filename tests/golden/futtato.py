@@ -102,7 +102,11 @@ HALMAZOK = {
 # mondatlista (többfordulós/alkudozás eset) — ugyanaz az alak a
 # determinisztikus és egy jövőbeli LLM-hívónak is (lásd
 # `spike/golden_futtato.py::llm_hivo`).
-HivoFuggveny = Callable[[str | list[str], str], tuple[dict | None, float, int, str | None]]
+# A harmadik, OPCIONÁLIS argumentum a felajánlott időpontok listája
+# (ADR-030) — csak azoknál az eseteknél van értelme, amik a jelöltekre
+# hivatkoznak. A `spike/golden_futtato.py` régi, kétargumentumos hívói
+# emiatt változatlanul működnek.
+HivoFuggveny = Callable[..., tuple[dict | None, float, int, str | None]]
 
 
 @dataclass
@@ -113,6 +117,17 @@ class Eset:
     cimkek: list[str]
     reszleges_elfogadas: dict | None = None
     tilos: list[str] = field(default_factory=list)
+    # FELAJÁNLOTT IDŐPONTOK — az eset kimondja, mit ajánlott fel a
+    # rendszer az UTOLSÓ forduló ELŐTT (pl. `["2026-12-21 07:00–07:20",
+    # …]`). Enélkül a jelöltre hivatkozó mondatok („a hét tizenötös")
+    # mérhetetlenek: a modell nem tudhatja, mire hivatkoznak.
+    #
+    # **Ez NEM kitalált rendszer-válasz** (ADR-019 tiltása): pontosan az
+    # a sor megy a beszélgetésbe, amit a felület is beletesz
+    # (`ui/vasarlo.py::_jeloltek_az_elozmenybe`), és az állapotsor is a
+    # valódi állapotgépből jön (`allapotgep.prompt_sor`). Az eset azt
+    # rögzíti, MIT ajánlottunk — nem azt, hogy a vásárló mit mondott rá.
+    felajanlott: list[str] = field(default_factory=list)
     # Ez az eset olyan képességet mér, amit a determinisztikus réteg
     # nem tud (pl. a szándék kemény részének elengedése) — a
     # determinisztikus regressziós védőháló kihagyja, a mérés nem.
@@ -165,6 +180,7 @@ def betolt(utvonal: Path = GOLDEN_UTVONAL) -> tuple[dict, list[Eset]]:
             cimkek=e.get("cimkek", []),
             reszleges_elfogadas=e.get("reszleges_elfogadas"),
             tilos=e.get("tilos", []),
+            felajanlott=e.get("felajanlott", []),
             igenyel_llm=bool(e.get("igenyel_llm", False)),
         )
         for e in adat["esetek"]
@@ -238,7 +254,17 @@ _VALODI_ESZKOZOK = frozenset(
 
 # A teljes megengedett eszköznév-halmaz: a valódi eszközök plusz a két
 # irányítási érték (`assistant/interpreter/__init__.py` docstring).
-_ENGEDELYEZETT_ESZKOZOK = _VALODI_ESZKOZOK | {"visszakerdez", "nincs"}
+# Az ÉRTELMEZŐ irányítási értékei (nem `assistant/tools/` eszközök):
+# `visszakerdez` (kérdés), `nincs` (nem a miénk), `jelolt_valasztas`
+# (a felajánlott listából választ), `dontsd_el_te` (ránk bízza a
+# választást), `meta_valasz` (a rendszerről kérdez).
+_ENGEDELYEZETT_ESZKOZOK = _VALODI_ESZKOZOK | {
+    "visszakerdez",
+    "nincs",
+    "jelolt_valasztas",
+    "dontsd_el_te",
+    "meta_valasz",
+}
 
 # Minden mezőnév, ami egyáltalán előfordulhat egy értelmező-kimenetben:
 # a hat eszköz sémáinak mezői + a `visszakerdez` irányítási mezői + a
@@ -634,10 +660,14 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
     vasarlo.py`) a rendszer sorait is átadja, tehát a modell OTT többet
     lát, mint itt — a mérés ebben az irányban téved, vagyis konzervatív:
     a mért érték a valós képesség alsó becslése, nem felső."""
-    from assistant.interpreter import KI_VASARLO, ErtelmezesKontextus
+    from assistant import allapotgep
+    from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus
     from assistant.orchestrator import kovetkezo_kontextus
 
-    def hivo(bemenet: str | list[str], most: str) -> tuple[dict | None, float, int, str | None]:
+    def hivo(
+        bemenet: str | list[str], most: str, felajanlott: list[str] | None = None
+    ) -> tuple[dict | None, float, int, str | None]:
+        eset_felajanlott = list(felajanlott or [])
         kezdet = time.monotonic()
         fordulok = bemenet if isinstance(bemenet, list) else [bemenet]
         megorzott: dict = {}
@@ -654,10 +684,25 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
         # fordulónak látszana, és a farkat hamisan nyújtaná meg.
         hivo.fordulo_idok = []
         try:
-            for mondat in fordulok:
+            for sorszam, mondat in enumerate(fordulok, start=1):
                 fordulo_kezdet = time.monotonic()
+                # A FELAJÁNLOTT IDŐPONTOK az UTOLSÓ forduló elé kerülnek
+                # — ugyanabban az alakban, ahogy a felület teszi —, és
+                # velük az állapotsor is (ADR-028). Enélkül a jelöltre
+                # hivatkozó mondat mérhetetlen: a modell nem tudná, mire
+                # hivatkozik a vásárló.
+                allapot_sor = None
+                if eset_felajanlott and sorszam == len(fordulok):
+                    elozmenyek.append(
+                        (KI_RENDSZER, "Felajánlott időpontok: " + "; ".join(eset_felajanlott))
+                    )
+                    allapot_sor = allapotgep.prompt_sor(
+                        allapotgep.AJANLAT_VAR, jeloltek_szama=len(eset_felajanlott)
+                    )
                 kontextus = ErtelmezesKontextus(
-                    megorzott_parameterek=dict(megorzott), elozmenyek=list(elozmenyek)
+                    megorzott_parameterek=dict(megorzott),
+                    elozmenyek=list(elozmenyek),
+                    allapot_sor=allapot_sor,
                 )
                 kimenet = ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
                 hivo.fordulo_idok.append(time.monotonic() - fordulo_kezdet)
@@ -700,8 +745,11 @@ class BurkoltHivo:
         self.fordulo_idok: list[float] = []
         self.utolso_egyetertes: int | None = None
 
-    def __call__(self, bemenet: str | list[str], most: str):
-        eredmeny = self._alap(bemenet, most)
+    def __call__(self, bemenet: str | list[str], most: str, felajanlott: list[str] | None = None):
+        # A `felajanlott` (ADR-030: mit ajánlottunk fel az utolsó forduló
+        # előtt) ugyanúgy átmegy, mint minden más — a burkoló csak a
+        # fordulónkénti adatokat gyűjti, a hívás alakját nem szűkíti.
+        eredmeny = self._alap(bemenet, most, felajanlott)
         self.fordulo_kimenetek = list(getattr(self._alap, "fordulo_kimenetek", []) or [])
         self.fordulo_idok = list(getattr(self._alap, "fordulo_idok", []) or [])
         if self._konyveles is not None:
@@ -714,7 +762,11 @@ def fut(meta: dict, esetek: list[Eset], hivo: HivoFuggveny) -> list[EsetEredmeny
     robusztus = meta.get("fajta") == "robusztus"
     eredmenyek = []
     for eset in esetek:
-        kimenet, telt, tokenszam, hiba = hivo(eset.bemenet, most)
+        kimenet, telt, tokenszam, hiba = (
+            hivo(eset.bemenet, most, eset.felajanlott)
+            if eset.felajanlott
+            else hivo(eset.bemenet, most)
+        )
         pontszam, indoklas = kiertekel(eset, kimenet)
         if hiba:
             indoklas = f"{indoklas} [hívási hiba: {hiba}]"
@@ -1064,6 +1116,17 @@ def main(argv: list[str] | None = None) -> int:
                 return egyetertes
 
             hivo = BurkoltHivo(alap_hivo, konyveles)
+
+    # ELŐMELEGÍTÉS a modell-utakon. Enélkül az ELSŐ eset a betöltés
+    # idejét is viseli (mérve: 13,9 s vs. 3,5 s), és a válaszidő-eloszlás
+    # egy olyan számot mutat, ami sosem fordul elő éles beszélgetés
+    # közepén. Nem a mérést szépíti: a betöltés a felület indításakor
+    # úgyis megtörténik (`ui/vasarlo.py::_elomelegit`).
+    if args.ertelmezo != "szabaly":
+        from assistant.interpreter.llm_based import elomelegit
+
+        print("Előmelegítés (a modell betöltése)…", end=" ", flush=True)
+        print("kész" if elomelegit() else "nem sikerült — a szolgáltatás nem válaszolt")
 
     eredmenyek = fut(meta, esetek, hivo)
 

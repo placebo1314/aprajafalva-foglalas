@@ -50,6 +50,11 @@ python -m tools.vram_meres --modell qwen3.5:9b     # belefér-e a modell a VRAM-
 python feladat.py hangproba                        # felolvasás: megvan-e a Piper és a hang
 ```
 
+A felület indításkor **előmelegíti a modellt** (háttérszálon, egy
+egytokenes hívással): az első éles próbában az első forduló 13,93 s
+volt, a többi 3,5 s — a különbség a betöltés. A mód-sorban látszik,
+mikor lett kész.
+
 **Hangkimenet** (ADR-029): a beszélhető mód 2026-09-01 óta meg is
 szólal, ha van Piper és magyar hangmodell — `python feladat.py
 hangproba` megmondja, van-e, és ha nincs, mit kell telepíteni. Addig a

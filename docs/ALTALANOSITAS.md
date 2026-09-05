@@ -336,6 +336,35 @@ kemény részének elvetése („és bármelyik másik boltban?") a modell
 képessége; mintával reménytelen, mert a mondatban nincs olyan szó,
 amit keresni lehetne.
 
+### 1.11 A rendszerről szóló kérdés nem foglalási kérés (2026-09-05, ADR-030)
+
+**A bukás** (első éles próba, 7. forduló): a „csak a választ beszéled?"
+mondatból KERESÉS lett — a rendszer újra felajánlotta ugyanazokat az
+időpontokat egy olyan kérdésre, aminek semmi köze a foglaláshoz. Ráadásul
+a már LEZÁRT foglalás állapotát (`KESZ`) is visszarántotta
+`AJANLAT_VAR`-ba.
+
+**A tanulság általánosítható:** a kapuőr eddig azt kérdezte, „a miénk-e
+ez a kérés?" — és a rendszerről szóló kérdésre a válasz IGEN, csak épp
+nem foglalási értelemben. Egy zárt osztályozásból hiányzó kategória nem
+semlegesen viselkedik: a mondat a legközelebbi meglévő kategóriába esik,
+és ott kárt okoz. **Ha egy rendszer nem tud magáról beszélni, akkor
+foglalni fog helyette.**
+
+### 1.12 Amit a vásárló ÁTAD, azt el kell venni (2026-09-05, ADR-030)
+
+**A bukás** (első éles próba, 8. forduló): a „nekem mind jó. válasz te."
+mondatra a rendszer ÚJRA felajánlotta ugyanazt a három időpontot —
+visszaadta a döntést annak, aki épp lemondott róla.
+
+**A tanulság általánosítható:** a `{eszkoz, parameterek}` szerződésben
+nem volt olyan érték, ami ezt kifejezné, tehát a modell legjobb tudása
+szerint sem tudott mást tenni. Ugyanaz a fajta hiány, mint a
+`jelolt_valasztas`-nál (ADR-028): **a modell nem tud olyat mondani,
+amire nincs szava** — és ilyenkor nem hibázik, hanem a legközelebbi
+meglévő szót használja. A javítás ezért sosem prompt-fegyelem: új szó
+kell a szerződésbe.
+
 ### 2.9d A MINDEGY RAGADÓS — az elengedés nem vonható vissza (2026-09-05)
 
 **A bukás** (`mindegy-07-elengedes-utan-uj-ertek`, mérve `qwen3.5:9b` ÉS

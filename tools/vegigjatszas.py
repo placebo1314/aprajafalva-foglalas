@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 import tkinter as tk
 from pathlib import Path
 
@@ -217,6 +218,16 @@ def vegigjatszas(
     allapot = indito_ellenorzes()
     if allapot.rendben:
         print(f"Modell: {allapot.modell} (éles út)")
+        # A felület indításkor melegít (`_elomelegit`), de a fej nélküli
+        # végigjátszásban a szálat nem várjuk meg — itt szinkronban
+        # csináljuk, hogy az első próba ne a betöltés idejét mérje.
+        from assistant.interpreter import elomelegites
+
+        kezdet = time.monotonic()
+        print(
+            f"Előmelegítés: {'kész' if elomelegites() else 'nem sikerült'} "
+            f"({time.monotonic() - kezdet:.1f} s)"
+        )
     else:
         print(
             f"FIGYELEM: TARTALÉKÁGON fut ({allapot.hiany}) — ez a végigjátszás NEM a modellt méri."

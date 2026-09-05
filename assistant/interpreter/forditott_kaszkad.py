@@ -221,6 +221,22 @@ class ForditottKaszkadErtelmezo:
                 "bizonyossag": {"eszkoz": 1.0},
                 "kapuor_ok": kapuor_dontes.ok,
             }
+
+        # META-KÉRDÉS: magáról a rendszerről kérdez. Ugyanaz a rövidzár,
+        # mint a hatókörön kívüli ágé (nulla modellhívás), de MÁS a
+        # kimenete: erre van válaszunk. Az éles próba (2026-09-05) mutatta
+        # meg, miért kell — a „csak a választ beszéled?" mondatból
+        # keresés lett, és a rendszer újra felajánlotta ugyanazokat az
+        # időpontokat.
+        if kapuor_dontes.kategoria == kapuor.META_KERDES:
+            self.utolso_reteg = RETEG_KAPUOR
+            self.utolso_normalizalt = normalizal(mondat)
+            self.utolso_kapuor = kapuor_dontes
+            return {
+                "eszkoz": "meta_valasz",
+                "parameterek": {},
+                "bizonyossag": {"eszkoz": 1.0},
+            }
         self.utolso_kapuor = kapuor_dontes
 
         # 1. NORMALIZÁLÓ — determinisztikus szótár a modell ELŐTT
@@ -323,6 +339,16 @@ class ForditottKaszkadErtelmezo:
 
         if eszkoz == "nincs":
             return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
+
+        if eszkoz == "dontsd_el_te":
+            # NINCS paramétere: a vásárló épp azt mondta, hogy neki
+            # mindegy. A tartomány- és állapot-ellenőrzés az
+            # orchestratoré (ő ismeri a jelölteket) — l. ott.
+            return {
+                "eszkoz": "dontsd_el_te",
+                "parameterek": {},
+                "bizonyossag": bizonyossag,
+            }
 
         if eszkoz == "jelolt_valasztas":
             # A SORSZÁM az egyetlen érdemi mező, és egész számnak kell

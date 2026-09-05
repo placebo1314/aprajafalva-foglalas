@@ -289,3 +289,56 @@ def test_a_kivul_eso_dontes_mindig_ad_okot() -> None:
         dontes = kapuor.dontes(bemenet)
         assert dontes.kivul
         assert dontes.ok, bemenet
+
+
+# --- META-KÉRDÉS: a rendszerről szóló kérdés (2026-09-05) -------------
+#
+# ÉLES PRÓBA találata: a „csak a választ beszéled?" mondatból KERESÉS
+# lett — a rendszer újra felajánlotta ugyanazokat az időpontokat egy
+# olyan kérdésre, aminek semmi köze a foglaláshoz.
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    [
+        "csak a választ beszéled?",
+        "te egy robot vagy?",
+        "robot vagy?",
+        "ki vagy te?",
+        "mit tudsz?",
+        "mire vagy képes?",
+        "miben tudsz segíteni?",
+        "hogyan működsz?",
+        "érted amit írok?",
+        "veled beszélek?",
+    ],
+)
+def test_meta_kerdes_felismerese(mondat):
+    assert kapuor.dontes(mondat).kategoria == kapuor.META_KERDES
+
+
+@pytest.mark.parametrize(
+    ("mondat", "varhato"),
+    [
+        # TÉNYKÉRDÉS, nem meta: a tárgy a bolt adata, nem a rendszer.
+        ("mit tudsz mondani a nyitvatartásról?", kapuor.ENGEDELYEZETT_TENYVALASZ),
+        ("Meddig van nyitva a Szundi?", kapuor.ENGEDELYEZETT_TENYVALASZ),
+        ("Hogy néz ki a Törpilla bolt?", kapuor.ENGEDELYEZETT_TENYVALASZ),
+        # FOGLALÁS, nem meta.
+        ("Szeretnék időpontot foglalni kedden.", kapuor.FOGLALASI_SZANDEK),
+        ("a másodikat kérem", kapuor.FOGLALASI_SZANDEK),
+    ],
+)
+def test_a_meta_minta_nem_nyeli_el_a_valodi_kereseket(mondat, varhato):
+    """A minta SZŰK és pozitív (l. modul docstring): csak akkor szólal
+    meg, ha a mondat MAGÁRA A RENDSZERRE mutat."""
+    assert kapuor.dontes(mondat).kategoria == varhato
+
+
+def test_a_meta_kerdes_nem_hatokoron_kivul():
+    """Két különböző dolog: a hatókörön kívüli kérésre azt mondjuk,
+    hogy nem tudunk segíteni; a meta-kérdésre VAN válaszunk."""
+    dontes = kapuor.dontes("te egy robot vagy?")
+
+    assert dontes.kivul is False
+    assert dontes.kategoria in kapuor.KATEGORIAK

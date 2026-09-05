@@ -482,6 +482,13 @@ class Orchestrator:
                 "kapuor_ok": ertelmezes.get("kapuor_ok"),
             }
 
+        # META-KÉRDÉS a rendszerről („te egy robot vagy?", „mit tudsz?").
+        # A kapuőr dönti el, a modell meg sem szólal — itt csak a válasz
+        # típusát adjuk meg. A sikertelen-számlálót NEM növeli: a vásárló
+        # nem rosszul fogalmazott, hanem mást kérdezett.
+        if eszkoz == "meta_valasz":
+            return {"tipus": "meta_valasz"}
+
         if eszkoz == "visszakerdez":
             return self._visszakerdez(allapot, parameterek)
 
@@ -500,6 +507,34 @@ class Orchestrator:
         #     hivatkozni, a „harmadik" bármi lehet;
         # (2) csak a tényleges tartományban — a negyedikre nem
         #     kerekítünk, mert az félreértés, nem elírás.
+        # A VÁSÁRLÓ RÁNK BÍZZA A DÖNTÉST („nekem mind jó, válassz te").
+        #
+        # ÉLES PRÓBA javítása (2026-09-05, 8. forduló): erre a rendszer
+        # újra felajánlotta ugyanazt a három időpontot — visszaadta a
+        # döntést annak, aki épp lemondott róla. A helyes viselkedés: az
+        # AJÁNLAT ELSŐ eleme, mert a jelöltek már a pontozó sorrendjében
+        # állnak (ADR-006) — vagyis az „első" nem önkény, hanem a mi
+        # legjobb ajánlatunk.
+        #
+        # Ha nincs mire hivatkozni (nem `AJANLAT_VAR`), nem találunk ki
+        # foglalást: a szokásos visszakérdezés megy, hiszen a
+        # „foglalj egyet" önmagában nem mondja meg, mikorra és hova.
+        if eszkoz == "dontsd_el_te":
+            if allapot.allapot != allapotgep.AJANLAT_VAR or not allapot.aktualis_jeloltek:
+                _LOG.info(
+                    "dontsd_el_te elutasítva (állapot=%s, jelöltek=%d)",
+                    allapot.allapot,
+                    len(allapot.aktualis_jeloltek),
+                )
+                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+            jelolt = allapot.aktualis_jeloltek[0]
+            valasz = self.valaszt(session_id, jelolt["slot_id"])
+            valasz["valasztott_jelolt"] = jelolt
+            # A felület ebből tudja, hogy MI választottunk — a
+            # megerősítés-kérdés mondata más, ha a vásárló bízta ránk.
+            valasz["rendszer_valasztott"] = True
+            return valasz
+
         if eszkoz == "jelolt_valasztas":
             sorszam = parameterek.get("sorszam")
             ervenyes = (

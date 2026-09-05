@@ -63,6 +63,8 @@ meta:
     # 0,90-es céllal (a mai szintjüket a jelentés írja le, nem a küszöb).
     surgosseg: 0.90
     mas_csatorna: 0.90
+    # ÉLES PRÓBÁBÓL származó esetek (2026-09-05) — l. a réteg fejlécét.
+    elesbol: 0.90
 
 esetek:
 
@@ -614,3 +616,91 @@ esetek:
       továbbra sem tehet a rendszer: úgy tenni, mintha ismerné az
       üzenetet.
     cimkek: [mas_csatorna, nem_ismert_elozmeny]
+
+  # ---------------------------------------------------------------------
+  # 12. réteg — AZ ELSŐ ÉLES PRÓBÁBÓL (3 eset)
+  #
+  # Ezek nem kitalált mondatok: egy valódi, kézi próba naplójából
+  # származnak (`naplo/probak.jsonl`, 2026-09-05), és a golden-set skill
+  # hurkának a második fele („valós beszélgetésben hiba → redaktált
+  # trace → annotálás → golden set").
+  #
+  # **A várt választ EMBER írta be, nem a napló.** Ez fontos: a naplóban
+  # az áll, amit a rendszer AKKOR adott — és a `jelolt_valasztas` esetben
+  # az rossz volt. A helyes válasz eldöntése után lett belőle teszteset.
+  # ---------------------------------------------------------------------
+
+  - id: elesbol-01-a-het-tizenotos
+    bemenet:
+      - "törpilla mégis. A legkorábbi időpontot"
+      - "a hét tizenötös"
+    felajanlott:
+      - "1. 2026-12-21 07:00–07:20 (UTC)"
+      - "2. 2026-12-21 07:00–07:15 (UTC)"
+      - "3. 2026-12-21 07:15–07:30 (UTC)"
+    igenyel_llm: true
+    varhato:
+      eszkoz: jelolt_valasztas
+      parameterek:
+        sorszam: 3
+    megjegyzes: >
+      KIMONDOTT IDŐPONTRA hivatkozás, a felajánlott listából — az első
+      valós példa erre. A „hét tizenötös" a 7:15-kor KEZDŐDŐ időpont,
+      vagyis a harmadik: az emberek a kezdés szerint azonosítanak egy
+      időpontot, és a rendszer saját mondata is így ajánlotta („a
+      legkorábbi hét órakor, de van hét tizenötkor is").
+
+      **Az éles próbában a rendszer a MÁSODIKAT választotta** (07:00–07:15,
+      ami 7:15-kor VÉGZŐDIK), és arra kért megerősítést. Ez pontosan az a
+      hibafajta, amiről a sorszám-modul docstringje beszél: nem
+      visszakérdezés lesz belőle, hanem MÁS IDŐPONT lefoglalása. Az eset
+      tehát ma BUKIK — és épp ezért került be.
+    cimkek: [elesbol, jelolt_hivatkozas, kimondott_idopont, tobbfordulos]
+
+  - id: elesbol-02-meta-kerdes
+    bemenet: "csak a választ beszéled?"
+    varhato:
+      eszkoz: meta_valasz
+      kapuor_dontes: meta_kerdes
+    reszleges_elfogadas:
+      eszkoz: nincs
+      pontszam: 0.5
+    megjegyzes: >
+      A RENDSZERRŐL szóló kérdés, foglalás közben. Az éles próbában
+      KERESÉS lett belőle: a rendszer újra felajánlotta ugyanazt a három
+      időpontot egy olyan kérdésre, aminek semmi köze a foglaláshoz.
+      A kapuőr negyedik kategóriája (`META_KERDES`) ezt fogja meg, a
+      modell előtt.
+
+      **A `nincs` fél pont**: az is helyes annyiban, hogy nem indít
+      keresést és nem talál ki semmit — csak nem válaszol arra, amit a
+      vásárló kérdezett. A teljes pont a `meta_valasz`, mert arra VAN
+      mondatunk.
+
+      **A determinisztikus alapvonalon (`--ertelmezo szabaly`) ez az eset
+      BUKIK**, és ez így helyes: a kapuőr a KASZKÁDBAN fut, a csupasz
+      szabály-réteg nem ismeri. Éles úton (`forditott`) modell nélkül is
+      megvan — a kapuőr a modellhívás előtt dönt.
+    cimkek: [elesbol, meta_kerdes]
+
+  - id: elesbol-03-valassz-te
+    bemenet:
+      - "törpilla mégis. A legkorábbi időpontot"
+      - "nekem mind jó. válassz te."
+    felajanlott:
+      - "1. 2026-12-21 07:00–07:20 (UTC)"
+      - "2. 2026-12-21 07:00–07:15 (UTC)"
+      - "3. 2026-12-21 07:15–07:30 (UTC)"
+    igenyel_llm: true
+    varhato:
+      eszkoz: dontsd_el_te
+      parameterek: {}
+    megjegyzes: >
+      A vásárló ÁTADJA a döntést. Az éles próbában a rendszer újra
+      felajánlotta ugyanazt a három időpontot — visszaadta a döntést
+      annak, aki épp lemondott róla. A helyes viselkedés: a pontozó
+      ELSŐ jelöltje (a jelöltek már abban a sorrendben állnak, ADR-006),
+      és megerősítés-kérés, kimondott időponttal. A paraméterlista
+      üres: nincs mit megadni, a választást az orchestrator hajtja
+      végre.
+    cimkek: [elesbol, dontes_atadasa, tobbfordulos]

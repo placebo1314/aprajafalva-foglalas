@@ -46,6 +46,21 @@ A szöveges fül tetején: **Kimenet: ( ) szöveges ( ) beszélhető
 
 Menet közben átkapcsolható; a következő fordulótól érvényes.
 
+## 2b. Amit az ELSŐ ÉLES PRÓBA után érdemes kipróbálni
+
+Három dolog 2026-09-05 óta megy, és mind a három egy valódi próbában
+bukott meg először (`docs/ELES_PROBA_20260905.md`):
+
+| írd be | mit kell látnod |
+|---|---|
+| „te egy robot vagy?", „mit tudsz?" | rövid bemutatkozás — NEM keresés, és a beszélgetés ott folytatódik, ahol abbamaradt |
+| „nekem mind jó, válassz te" (felajánlott időpontok után) | a rendszer választ, és KIMONDJA, melyiket: „A legjobb, amit találtam: … Lefoglaljam?" |
+| „a hét tizenötös" (felajánlott időpontok után) | a 7:15-kor KEZDŐDŐ időpontra kér megerősítést |
+
+Az első fordulónak már nem kell megvárnia a modell betöltését: az ablak
+indításkor előmelegít, és a „Kimenet:" sor mellett kiírja, mikor lett
+kész.
+
 ## 3. Amit érdemes beírni
 
 **Mindhárom boltban van beosztás**, három különböző ritmusban — ez

@@ -206,6 +206,21 @@ def idopont_kor(ora: int, perc: int = 0) -> str:
     return f"{szam_szoval(ora)} {szam_szoval(perc)}kor"
 
 
+def idopont_rovid(iso: str) -> str:
+    """Teljes ISO-időbélyeg RÖVID, olvasható alakja:
+    `"2026-12-21 07:15 (UTC)"`.
+
+    A SZÖVEGES módé — ott a képernyő a valóság, és a pontos, gépi alak
+    egyértelműbb, mint a kimondott. A beszélhető alak az
+    `ido_iso_szoval` (ott az „UTC" felolvasva csak zavarna).
+
+    Miért kell egyáltalán: amikor MI választunk a vásárló helyett
+    („válassz te"), a jelölt-gombok eltűnnek a képernyőről — a
+    megerősítés-kérdésnek ilyenkor ki kell mondania, melyik időpontról
+    van szó, különben a vásárló vakon nyomna igent."""
+    return f"{iso[:10]} {iso[11:16]} (UTC)"
+
+
 def ido_iso_szoval(iso: str, *, kor: bool = True) -> str:
     """Teljes ISO-időbélyeg (`"2026-12-22T08:00:00Z"`) mondható alakja:
     `"december huszonkettedikén nyolc órakor"`.

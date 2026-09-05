@@ -124,6 +124,7 @@ from assistant.interpreter import (  # noqa: E402
     KI_VASARLO,
     aktiv_modell_neve,
     alapertelmezett_ertelmezo,
+    elomelegites,
     indito_ellenorzes,
 )
 from assistant.orchestrator import Orchestrator  # noqa: E402
@@ -457,6 +458,31 @@ class VasarloApp(tk.Tk):
     # ------------------------------------------------------------------
     # Felépítés
     # ------------------------------------------------------------------
+
+    def _elomelegit(self) -> None:
+        """A modell betöltése a HÁTTÉRBEN, indításkor.
+
+        Az első éles próbában az első forduló 13,93 s volt, a többi
+        3,5 s körül — a különbség a modell betöltése. Épp az első
+        mondatnál a legdrágább: ott a vásárló még azt sem tudja, hogy
+        működik-e a rendszer.
+
+        A szál `daemon`, tehát az ablak bezárását nem várakoztatja, és
+        a hibát elnyeli: ha nincs modell vagy nem fut a szolgáltatás,
+        az indítási ellenőrzés már úgyis szólt róla."""
+        if aktiv_modell_neve() is None:
+            return
+        self.melegites_cimke.config(text="modell: melegítés…", foreground="#7a3b00")
+
+        def dolgozik() -> None:
+            kezdet = time.monotonic()
+            siker = elomelegites()
+            telt = time.monotonic() - kezdet
+            szoveg = f"modell: kész ({telt:.1f} s)" if siker else "modell: nem válaszol"
+            szin = "#2d6a2d" if siker else "#a00"
+            self.after(0, lambda: self.melegites_cimke.config(text=szoveg, foreground=szin))
+
+        threading.Thread(target=dolgozik, daemon=True).start()
 
     def _indito_ellenorzes(self) -> bool:
         """MODÁLIS ellenőrzés indításkor: konfigurálva van-e a modell, és
@@ -831,6 +857,13 @@ class VasarloApp(tk.Tk):
         # merül fel a kérdés. A beszélhető mód eddig CSENDBEN nem
         # szólalt meg: nem volt bekötve TTS, és a felületen ez sehol nem
         # látszott. A csend és a „nincs telepítve" ugyanúgy néz ki.
+        # MODELL-ELŐMELEGÍTÉS (mérés: az első forduló 13,93 s volt, a
+        # többi 3,5 s — a különbség a betöltés). Külön szálon, hogy az
+        # ablak azonnal használható legyen; a címke a szál végén frissül.
+        self.melegites_cimke = ttk.Label(mod_sor, text="")
+        self.melegites_cimke.pack(side="left", padx=(16, 0))
+        self._elomelegit()
+
         self.hang_allapot = hang.allapot()
         ttk.Label(
             mod_sor,
@@ -1247,7 +1280,13 @@ class VasarloApp(tk.Tk):
             )
         elif tipus == "megerositest_ker":
             jelolt = valasz.get("valasztott_jelolt") or {}
-            reszek.append(valasz_szoveg.megerosites_ker_szoveg(jelolt.get("kezdet"), mod=mod))
+            reszek.append(
+                valasz_szoveg.megerosites_ker_szoveg(
+                    jelolt.get("kezdet"),
+                    mod=mod,
+                    rendszer_valasztott=bool(valasz.get("rendszer_valasztott")),
+                )
+            )
         elif valasz.get("uzenet_kulcs"):
             reszek.append(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
         elif valasz.get("sikeres"):
@@ -1321,6 +1360,13 @@ class VasarloApp(tk.Tk):
                     ).pack(side="left", padx=(0, 6))
             return
 
+        if tipus == "meta_valasz":
+            # A RENDSZERRŐL szóló kérdés (kapuőr, negyedik kategória):
+            # rövid bemutatkozás. Nem indít keresést, és nem rajzol
+            # gombokat — a beszélgetés ott folytatódik, ahol abbamaradt.
+            self._rendszer_mondat(valasz_szoveg.meta_szoveg(mod=mod))
+            return
+
         if tipus == "elvetve":
             # ÍRÁSBELI NEM a megerősítés-kérdésre („mégse kell") — az
             # orchestrator elengedte a választott időpontot
@@ -1344,7 +1390,14 @@ class VasarloApp(tk.Tk):
             # koppintás: visszaolvasás, azonosító, megerősítés.
             jelolt = valasz.get("valasztott_jelolt") or {}
             self._rendszer_mondat(
-                valasz_szoveg.megerosites_ker_szoveg(jelolt.get("kezdet"), mod=mod)
+                valasz_szoveg.megerosites_ker_szoveg(
+                    jelolt.get("kezdet"),
+                    mod=mod,
+                    # „VÁLASSZ TE" — ilyenkor a vásárló nem látta, melyik
+                    # időpontot vettük (a jelölt-gombok eltűntek), tehát a
+                    # mondatnak ki kell mondania.
+                    rendszer_valasztott=bool(valasz.get("rendszer_valasztott")),
+                )
             )
             self._megerosites_urlap(self.szo_jelolt_keret, jelolt, self.szo_uzenet)
             return

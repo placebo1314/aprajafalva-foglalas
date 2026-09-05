@@ -117,6 +117,13 @@ SABLONOK: dict[str, dict[str, object]] = {
         # ------------------------------------------------------------
         "visszaigazolas": {
             "megerosites_ker": "Biztosan lefoglaljam ezt az időpontot?",
+            # AMIKOR MI VÁLASZTOTTUNK a vásárló helyett („válassz te"):
+            # az időpontot KI KELL MONDANI, mert ő nem látta, melyiket
+            # vettük. A képernyőn is: a jelölt-gombok ilyenkor eltűnnek,
+            # tehát nincs mire mutatni.
+            "megerosites_ker_rendszer_valasztott": (
+                "A legjobb, amit találtam: {idopont}. Lefoglaljam?"
+            ),
             "sikeres_foglalas": "Foglalás létrejött! Foglalási kód: {foglalasi_kod}",
             "elvetve": "Rendben, nem foglaltuk le. Kereshetsz újra.",
             "ajanlat_bevezetes": "Ezeket az időpontokat találtam — melyik jó?",
@@ -195,6 +202,24 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "datum_tol": "mikorra szeretnél időpontot",
                 "uj_datum": "melyik napra tennéd át",
             },
+        },
+        # ------------------------------------------------------------
+        # meta — a RENDSZERRŐL szóló kérdés válasza (kapuőr negyedik
+        # kategóriája). Nem elhárítás: erre tudunk válaszolni.
+        #
+        # Rövid, és pontosan annyit mond, amennyi IGAZ: mi ez, mit tud,
+        # mit nem. A „gép vagyok" kimondása nem szégyen, hanem
+        # tájékoztatás — a vásárló ebből tudja, mit várhat. Amit NEM
+        # tesz: nem ígér emberi ügyintézőt (ADR-012: értesítés előáll,
+        # de nem megy ki), és nem sorolja fel a technológiát.
+        # ------------------------------------------------------------
+        "meta": {
+            "bemutatkozas": (
+                "Gép vagyok, a három aprajafalvi bolt időpontfoglalója: a Szundié, "
+                "az Ügyifogyié és a Törpilláé. Azt tudom, hogy szabad időpontot keresek, "
+                "lefoglalom, lemondom, és megmondom a nyitvatartást, a címet meg azt, "
+                "meddig tart egy alkalom. Mást nem — és amit nem tudok, azt megmondom."
+            ),
         },
         # ------------------------------------------------------------
         # tenyvalasz — a `bolt_info` sikeres válaszának olvasható
@@ -389,6 +414,9 @@ SABLONOK: dict[str, dict[str, object]] = {
                 # névmás nélküli, rövid alak.
                 "megerosites_ker": "Lefoglaljam?",
                 "megerosites_ker_idoponttal": "{idopont} foglalnám le. Rendben?",
+                "megerosites_ker_rendszer_valasztott": (
+                    "A legjobb, amit találtam: {idopont}. Lefoglaljam?"
+                ),
                 "sikeres_foglalas": "Megvan a foglalás. A kódod {foglalasi_kod}.",
                 "ajanlat_egy": "A legkorábbi {elso}. Jó lesz?",
                 # KETTŐ időpont, nem több — l. `beszelheto.py`, 5.

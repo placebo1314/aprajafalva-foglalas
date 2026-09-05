@@ -1,0 +1,1020 @@
+{
+  "osszefoglalo": {
+    "cimke": "forditott",
+    "osszesitett": 0.8709677419354839,
+    "legrosszabb_reteg": "felteteles",
+    "legrosszabb_ertek": 0.5,
+    "cimkek": {
+      "alanyvaltas": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "azonositas_nelkul": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "bolt_nem_alternativa": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "dontes_atadasa": {
+        "atlag": 0.0,
+        "n": 1
+      },
+      "elesbol": {
+        "atlag": 0.6666666666666666,
+        "n": 3
+      },
+      "felteteles": {
+        "atlag": 0.5,
+        "n": 2
+      },
+      "hallucinacio_csapda": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "hatokoron_kivul": {
+        "atlag": 1.0,
+        "n": 3
+      },
+      "hianyzo_bolt": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "idegen_ige": {
+        "atlag": 1.0,
+        "n": 4
+      },
+      "jelolt_hivatkozas": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "ket_bolt_megnevezve": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "ket_nap": {
+        "atlag": 0.0,
+        "n": 1
+      },
+      "ket_szereplo": {
+        "atlag": 1.0,
+        "n": 2
+      },
+      "kimondott_idopont": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "korabbi_foglalas": {
+        "atlag": 1.0,
+        "n": 2
+      },
+      "kozbevetes": {
+        "atlag": 0.6666666666666666,
+        "n": 3
+      },
+      "legkorabbi": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "mas_csatorna": {
+        "atlag": 1.0,
+        "n": 2
+      },
+      "masnak": {
+        "atlag": 1.0,
+        "n": 3
+      },
+      "meggondolas": {
+        "atlag": 0.5,
+        "n": 2
+      },
+      "meta_kerdes": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "napszak": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "nem_ismert_elozmeny": {
+        "atlag": 1.0,
+        "n": 2
+      },
+      "nem_letezo_kepesseg": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "nem_tamogatott_keres": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "nincs_keres": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "nincs_surgossegi_sav": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "osszehasonlitas": {
+        "atlag": 1.0,
+        "n": 2
+      },
+      "surgosseg": {
+        "atlag": 1.0,
+        "n": 3
+      },
+      "szabaly_kerdes": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "szleng_ige": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "szohasznalat": {
+        "atlag": 1.0,
+        "n": 5
+      },
+      "tartalek_ablak": {
+        "atlag": 1.0,
+        "n": 1
+      },
+      "tenyvalasz": {
+        "atlag": 0.5,
+        "n": 2
+      },
+      "tobb_idopont": {
+        "atlag": 1.0,
+        "n": 2
+      },
+      "tobbfordulos": {
+        "atlag": 0.5714285714285714,
+        "n": 7
+      },
+      "udvariassag": {
+        "atlag": 1.0,
+        "n": 2
+      },
+      "visszavonas": {
+        "atlag": 0.5,
+        "n": 2
+      },
+      "zaras": {
+        "atlag": 1.0,
+        "n": 2
+      }
+    },
+    "retegek": {
+      "elesbol": {
+        "atlag": 0.6666666666666666,
+        "kuszob": 0.9,
+        "n": 3,
+        "allapot": "NEM TARTJA"
+      },
+      "felteteles": {
+        "atlag": 0.5,
+        "kuszob": 0.9,
+        "n": 2,
+        "allapot": "NEM TARTJA"
+      },
+      "korabbi_foglalas": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 2,
+        "allapot": "TARTJA"
+      },
+      "kozbevetes": {
+        "atlag": 0.6666666666666666,
+        "kuszob": 0.9,
+        "n": 3,
+        "allapot": "NEM TARTJA"
+      },
+      "mas_csatorna": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 2,
+        "allapot": "TARTJA"
+      },
+      "masnak": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 3,
+        "allapot": "TARTJA"
+      },
+      "meggondolas": {
+        "atlag": 0.5,
+        "kuszob": 0.9,
+        "n": 2,
+        "allapot": "NEM TARTJA"
+      },
+      "osszehasonlitas": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 2,
+        "allapot": "TARTJA"
+      },
+      "surgosseg": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 3,
+        "allapot": "TARTJA"
+      },
+      "szohasznalat": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 5,
+        "allapot": "TARTJA"
+      },
+      "tobb_idopont": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 2,
+        "allapot": "TARTJA"
+      },
+      "udvariassag": {
+        "atlag": 1.0,
+        "kuszob": 0.9,
+        "n": 2,
+        "allapot": "TARTJA"
+      }
+    },
+    "hibaszam": 0,
+    "valaszido": {
+      "n": 38,
+      "p50": 3.658112000033725,
+      "p95": 3.942553400003817,
+      "atlag": 3.3955170789466997,
+      "max": 3.9602375000249594,
+      "tendencia": {
+        "irany": "stabil",
+        "elso_fele": 3.669506600010209,
+        "masodik_fele": 3.6161968000233173,
+        "valtozas": -0.01452778419494957
+      }
+    },
+    "n": 31,
+    "halmaz": "beszedhelyzetek",
+    "biztonsagi_szamok": {}
+  },
+  "esetek": [
+    {
+      "id": "masnak-01-anyamnak",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.7009937000111677,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "szundi",
+          "datum_tol": "2026-08-18T00:00:00Z",
+          "datum_ig": "2026-08-18T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "altato"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9995,
+          "bolt_id": 0.9998,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "masnak-02-szomszed-nevében",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.682960300007835,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "torpilla",
+          "datum_tol": "2026-08-21T00:00:00Z",
+          "datum_ig": "2026-08-21T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "nagy_orom"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9993,
+          "bolt_id": 0.9999,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "masnak-03-jogosultsag-kerdes",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.8405054000322707,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+          "hianyzo_mezo": "foglalasi_kod",
+          "varhato_kerdes_tipusa": "zart"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.921,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "felteteles-01-ha-esik-akkor-szerdan",
+      "pontszam": 0.0,
+      "indoklas": "eszköz stimmel, paraméterek eltérnek: {'bolt_id': 'ugyifogyi', 'datum_tol': '2026-08-18T00:00:00Z', 'datum_ig': '2026-08-19T23:59:59Z', 'napszak': 'barmikor'} != {'bolt_id': 'torpilla', 'szolgaltatas_id': 'nagy_orom', 'datum_tol': '2026-08-18T00:00:00Z', 'datum_ig': '2026-08-19T23:59:59Z', 'napszak': 'barmikor'}",
+      "telt_masodperc": 3.960243499954231,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "ugyifogyi",
+          "datum_tol": "2026-08-18T00:00:00Z",
+          "datum_ig": "2026-08-19T23:59:59Z",
+          "napszak": "barmikor"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9996,
+          "bolt_id": 0.8547,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "felteteles-02-akkor-nem-megyek",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.0207250000094064,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        "bizonyossag": {
+          "eszkoz": 0.9529,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "osszehasonlitas-01-melyik-boltban-hamarabb",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.6672467999742366,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+          "hianyzo_mezo": "bolt_id",
+          "varhato_kerdes_tipusa": "zart",
+          "valaszthato_ertekek": [
+            "szundi",
+            "torpilla",
+            "ugyifogyi"
+          ]
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9578,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "osszehasonlitas-02-szundi-vagy-torpilla",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.7209548999671824,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+          "hianyzo_mezo": "bolt_id",
+          "varhato_kerdes_tipusa": "zart",
+          "valaszthato_ertekek": [
+            "szundi",
+            "torpilla",
+            "ugyifogyi"
+          ],
+          "datum_tol": "2026-08-18T00:00:00Z",
+          "datum_ig": "2026-08-18T23:59:59Z",
+          "napszak": "MINDEGY"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9694,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": 0.8463
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "korabbi_foglalas-01-ugyanoda-mint-multkor",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.669511199987028,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+          "hianyzo_mezo": "bolt_id",
+          "varhato_kerdes_tipusa": "zart",
+          "valaszthato_ertekek": [
+            "szundi",
+            "torpilla",
+            "ugyifogyi"
+          ]
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9705,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "korabbi_foglalas-02-multkori-megismetlese",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.4550402999739163,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+          "hianyzo_mezo": "bolt_id",
+          "varhato_kerdes_tipusa": "zart",
+          "valaszthato_ertekek": [
+            "szundi",
+            "torpilla",
+            "ugyifogyi"
+          ],
+          "datum_tol": "2026-08-24T00:00:00Z",
+          "datum_ig": "2026-08-30T23:59:59Z"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9925,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "tobb_idopont-01-kettot-egymas-utan",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.7706735000247136,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "ugyifogyi",
+          "datum_tol": "2026-08-20T00:00:00Z",
+          "datum_ig": "2026-08-20T23:59:59Z",
+          "napszak": "barmikor"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9995,
+          "bolt_id": 0.9986,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "tobb_idopont-02-nekem-es-a-felesegemnek",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.6448938000248745,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "szundi",
+          "datum_tol": "2026-08-21T00:00:00Z",
+          "datum_ig": "2026-08-21T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "altato"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9997,
+          "bolt_id": 0.9999,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "udvariassag-01-koszonom-viszlat",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.046956099977251,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        "bizonyossag": {
+          "eszkoz": 0.9856,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "udvariassag-02-koszonom-a-segitseget",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.073440100008156,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        "bizonyossag": {
+          "eszkoz": 0.9885,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "meggondolas-01-megsem-kell",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 6.5599690999952145,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        "bizonyossag": {
+          "eszkoz": 0.8306,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "meggondolas-02-megse-akarok-foglalni",
+      "pontszam": 0.0,
+      "indoklas": "TILTOTT MINTA: kitalalt_datum — a modell dátumot adott meg, ahol nem volt rá elég infó",
+      "telt_masodperc": 7.756466299993917,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "torpilla",
+          "datum_tol": "2026-08-17T09:00:00Z",
+          "datum_ig": "2026-08-23T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "nagy_orom"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9301,
+          "bolt_id": 0.9994,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": 0.9641
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "kozbevetes-01-meddig-tart",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 7.278374699992128,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "bolt_info",
+        "parameterek": {
+          "bolt_id": "ugyifogyi",
+          "mit": "idotartam"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9659,
+          "bolt_id": 0.9978,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "kozbevetes-02-hol-van-a-bolt",
+      "pontszam": 0.0,
+      "indoklas": "várt 'bolt_info', kapott 'szabad_idopontok'",
+      "telt_masodperc": 7.30447189998813,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "szundi",
+          "datum_tol": "2026-08-17T09:00:00Z",
+          "datum_ig": "2026-08-23T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "altato"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.8938,
+          "bolt_id": 0.9998,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "kozbevetes-03-mennyibe-kerul",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.616260599985253,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        "bizonyossag": {
+          "eszkoz": 1.0
+        },
+        "kapuor_ok": "ar"
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "szohasznalat-01-bejelentkeznek",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.552604100026656,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "szundi",
+          "datum_tol": "2026-08-18T00:00:00Z",
+          "datum_ig": "2026-08-18T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "altato"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.999,
+          "bolt_id": 0.9999,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "szohasznalat-02-sorszamot-kernek",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.7191644000122324,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "ugyifogyi",
+          "datum_tol": "2026-08-20T00:00:00Z",
+          "datum_ig": "2026-08-20T23:59:59Z",
+          "napszak": "barmikor"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9917,
+          "bolt_id": 0.9982,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "szohasznalat-03-beugranek",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.7969272000482306,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "torpilla",
+          "datum_tol": "2026-08-21T00:00:00Z",
+          "datum_ig": "2026-08-21T17:59:59Z",
+          "napszak": "delutan",
+          "szolgaltatas_id": "nagy_orom"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9997,
+          "bolt_id": 0.9996,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": 0.9712
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "szohasznalat-04-lestoppolnek",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.7038646999862976,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "szundi",
+          "datum_tol": "2026-08-24T00:00:00Z",
+          "datum_ig": "2026-08-30T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "altato"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9996,
+          "bolt_id": 0.9999,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "szohasznalat-05-foliratkoznek",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.8422059000004083,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "szundi",
+          "datum_tol": "2026-08-17T09:00:00Z",
+          "datum_ig": "2026-08-23T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "altato"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9274,
+          "bolt_id": 0.9786,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": 0.836
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "surgosseg-01-siet",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.5858438999857754,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "ugyifogyi",
+          "datum_tol": "2026-08-17T09:00:00Z",
+          "datum_ig": "2026-08-17T23:59:59Z",
+          "napszak": "barmikor"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9991,
+          "bolt_id": 0.9987,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "surgosseg-02-siet-nap-nelkul",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 3.344461200002115,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "legkozelebbi_idopont",
+        "parameterek": {
+          "bolt_id": "szundi",
+          "szolgaltatas_id": "altato"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9998,
+          "bolt_id": 0.9995,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "surgosseg-03-elore-sorolast-ker",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.0445308000198565,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "nincs",
+        "parameterek": {},
+        "bizonyossag": {
+          "eszkoz": 0.8833,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "mas_csatorna-01-telefonalt",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.733105599996634,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+          "hianyzo_mezo": "bolt_id",
+          "varhato_kerdes_tipusa": "zart",
+          "valaszthato_ertekek": [
+            "szundi",
+            "torpilla",
+            "ugyifogyi"
+          ]
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9209,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "mas_csatorna-02-uzenetet-hagyott",
+      "pontszam": 1.0,
+      "indoklas": "OK (elfogadható viselkedés)",
+      "telt_masodperc": 3.8630612999550067,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "visszakerdez",
+        "parameterek": {
+          "hianyzo_mezo": "bolt_id",
+          "varhato_kerdes_tipusa": "zart",
+          "valaszthato_ertekek": [
+            "szundi",
+            "torpilla",
+            "ugyifogyi"
+          ]
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9109,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "elesbol-01-a-het-tizenotos",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 6.721654799999669,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "jelolt_valasztas",
+        "parameterek": {
+          "sorszam": 3
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9826,
+          "bolt_id": null,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": null
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "elesbol-02-meta-kerdes",
+      "pontszam": 1.0,
+      "indoklas": "OK",
+      "telt_masodperc": 0.00017070001922547817,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "meta_valasz",
+        "parameterek": {},
+        "bizonyossag": {
+          "eszkoz": 1.0
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    },
+    {
+      "id": "elesbol-03-valassz-te",
+      "pontszam": 0.0,
+      "indoklas": "várt 'dontsd_el_te', kapott 'szabad_idopontok'",
+      "telt_masodperc": 7.352667300030589,
+      "hiba": null,
+      "nyers_kimenet": {
+        "eszkoz": "szabad_idopontok",
+        "parameterek": {
+          "bolt_id": "torpilla",
+          "datum_tol": "2026-08-17T09:00:00Z",
+          "datum_ig": "2026-08-23T23:59:59Z",
+          "napszak": "barmikor",
+          "szolgaltatas_id": "nagy_orom"
+        },
+        "bizonyossag": {
+          "eszkoz": 0.9749,
+          "bolt_id": 0.9988,
+          "szolgaltatas_id": null,
+          "datum": null,
+          "napszak": 0.8718
+        }
+      },
+      "biztonsagi_sertesek": [],
+      "egyetertes": null
+    }
+  ]
+}

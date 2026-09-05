@@ -87,6 +87,15 @@ ESZKOZOK = [
     # eddig a modellnek NEM VOLT MIVEL kifejeznie, hogy a vásárló
     # választott: a legjobb, amit tehetett, egy újabb keresés volt.
     "jelolt_valasztas",
+    # A VÁSÁRLÓ ÁTADJA A DÖNTÉST: „nekem mind jó, válassz te", „mindegy,
+    # foglalj egyet". ÉLES PRÓBA találata (2026-09-05, 8. forduló): erre
+    # a rendszer ÚJRA felajánlotta ugyanazt a három időpontot — vagyis
+    # visszaadta a döntést annak, aki épp lemondott róla.
+    #
+    # Ez a MINDEGY rokona, de nem mező-szintű: nem egy paramétert enged
+    # el, hanem magát a VÁLASZTÁST. Ezért nem érték, hanem irányítás —
+    # az orchestrator hajtja végre (a pontozó első jelöltje, ADR-006).
+    "dontsd_el_te",
     "foglalas_lemondas",
     "visszakerdez",
     "nincs",
@@ -217,6 +226,9 @@ Eszközök:
 - jelolt_valasztas: CSAK akkor, ha a beszélgetésben felajánlottunk időpontokat,
   és a vásárló ezek KÖZÜL választ („a fél kilences jó lesz", „a középső") —
   add meg a sorszámot (1-től), ne az időpontot
+- dontsd_el_te: ha a vásárló RÁD BÍZZA a választást („nekem mind jó, válassz
+  te", „amelyik neked jó", „mindegy, foglalj egyet") — ilyenkor NE kérdezz
+  vissza és ne adj listát
 - nincs: ha a kérés nem foglalással/bolttal kapcsolatos
 
 Boltok: szundi (altató), ugyifogyi (petárda), torpilla (boldogság).
@@ -247,6 +259,11 @@ nem érdekli. Ez a bolt_id, a szolgaltatas_id és a napszak mezőre
 használható.
 FIGYELEM, ez NEM mindegy-válasz: "mindegyik érdekel", "mindet kérem",
 "melyek vannak?" — ezek a LISTÁT kérik, nem engednek el semmit.
+AZ SEM MINDEGY-válasz, ha a vásárló a VÁLASZTÁST adja át, miután
+felajánlottunk időpontokat: "nekem mind jó, válassz te", "mindegy,
+foglalj egyet", "amelyik neked jó" — ez dontsd_el_te, nem MINDEGY. A
+különbség: a MINDEGY egy MEZŐT enged el (melyik bolt, melyik méret), a
+dontsd_el_te magát a VÁLASZTÁST.
 - IDŐPONT (datum_kifejezes, napszak): MINDIG csak a vásárló UTOLSÓ
   mondatából veheted. A korábbi fordulókban említett napot vagy napszakot
   NE vidd tovább, és ne is vond össze az újjal — ha az utolsó mondat nem
@@ -313,8 +330,9 @@ KÖTELEZŐ:
 Eszközök: szabad_idopontok (időszakban keres) | legkozelebbi_idopont (CSAK a
 "mikor tudok legkorábban/leghamarabb?" kérdésre) | bolt_info (nyitvatartás,
 cím, termék, időtartam, megjelenés) | jelolt_valasztas (a felajánlott időpontok
-KÖZÜL választ — sorszámmal) | foglalas_lemondas | visszakerdez | nincs (nem
-foglalási kérés).
+KÖZÜL választ — sorszámmal) | dontsd_el_te (a vásárló RÁD BÍZZA a választást:
+"válassz te", "mindegy, foglalj egyet") | foglalas_lemondas | visszakerdez |
+nincs (nem foglalási kérés).
 
 A bemenet a beszélgetés utolsó fordulói; a VÁSÁRLÓ UTOLSÓ mondata a kérés.
 "most" (ehhez képest értendő a holnap, a jövő hét): {most}
@@ -659,6 +677,50 @@ def modell_allapot(url: str | None = None, timeout_masodperc: float = 3.0) -> Mo
             modell=modell, hiany=HIANY_NINCS_LETOLTVE, reszlet=", ".join(sorted(nevek)) or None
         )
     return ModellAllapot(modell=modell)
+
+
+def elomelegit(url: str | None = None, timeout_masodperc: float = 120.0) -> bool:
+    """ELŐMELEGÍTÉS — a modell betöltése MIELŐTT az első vásárlói mondat
+    megérkezik. `True`, ha a szolgáltató válaszolt.
+
+    **Mért indok** (2026-09-05, első éles próba): az első forduló
+    13,93 s volt, a többi 3,5 s körül. A különbség nem a mondat
+    nehézsége, hanem a modell betöltése — és pont az első mondat az,
+    ahol a vásárló még nem tudja, működik-e egyáltalán a rendszer.
+    Hangcsatornán ez a késleltetés nem lesz vállalható.
+
+    Üres prompttal, EGY token kéréssel hívunk: a cél a betöltés, nem a
+    válasz. A `keep_alive` alapértelmezés szerinti (5 perc) — ennél
+    hosszabbat kérni azt jelentené, hogy a felület a saját kedvéért
+    foglalja a VRAM-ot akkor is, ha közben senki nem beszélget.
+
+    **Hibát nem dob**: ha a szolgáltatás nem elérhető, az indítást ez
+    nem akaszthatja meg (a felület enélkül is működik, tartalék ágon).
+    A hívó (`ui/vasarlo.py`) külön szálon futtatja."""
+    try:
+        szolgaltato = LLMSzolgaltato()
+    except ValueError:
+        return False
+
+    payload = {
+        "model": szolgaltato.modell,
+        "messages": [{"role": "user", "content": "."}],
+        "stream": False,
+        "think": False,
+        "options": {"temperature": 0, "num_ctx": kontextus_meret(), "num_predict": 1},
+    }
+    keres = urllib.request.Request(
+        url or szolgaltato.url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(keres, timeout=timeout_masodperc):
+            return True
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        _LOG.info("előmelegítés nem sikerült: %s", exc)
+        return False
 
 
 @dataclass(frozen=True)

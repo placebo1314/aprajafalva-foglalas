@@ -16,6 +16,7 @@ szólal** — nem is hívjuk meg.
 | `FOGLALASI_SZANDEK` | keresés, foglalás, lemondás, áthelyezés | megy a szándékértelmezőhöz |
 | `ENGEDELYEZETT_TENYVALASZ` | a `bolt_info` zárt mezőkészlete | egyenesen a szerkesztett adathoz |
 | `HATOKORON_KIVUL` | egyik sem | `nincs` — elhárítás, modellhívás nélkül |
+| `META_KERDES` | magáról a rendszerről kérdez | rövid bemutatkozás, modellhívás nélkül |
 
 A döntés mellé egy zárt `ok` kulcs is jár. Az `ok` NEM negyedik
 kategória: kizárólag azt választja meg, MELYIK magyar mondat menjen ki
@@ -84,8 +85,19 @@ from assistant.interpreter.normalizalo import normalizal
 FOGLALASI_SZANDEK = "foglalasi_szandek"
 ENGEDELYEZETT_TENYVALASZ = "engedelyezett_tenyvalasz"
 HATOKORON_KIVUL = "hatokoron_kivul"
+# META-KÉRDÉS: magáról a RENDSZERRŐL szól („te egy robot vagy?", „mit
+# tudsz?", „csak a választ beszéled?"). ÉLES PRÓBA találata (2026-09-05,
+# 7. forduló): a „csak a választ beszéled?" mondatból KERESÉS lett — a
+# rendszer újra felajánlotta ugyanazokat az időpontokat egy olyan
+# kérdésre, aminek semmi köze a foglaláshoz.
+#
+# Miért NEGYEDIK kategória, és nem a `HATOKORON_KIVUL` egy oka: a
+# hatókörön kívüli kérésre azt mondjuk, hogy „ebben nem tudok segíteni"
+# — erre viszont TUDUNK válaszolni, és a válasz nem elhárítás, hanem
+# bemutatkozás. Két különböző mondat, két különböző szándék.
+META_KERDES = "meta_kerdes"
 
-KATEGORIAK = (FOGLALASI_SZANDEK, ENGEDELYEZETT_TENYVALASZ, HATOKORON_KIVUL)
+KATEGORIAK = (FOGLALASI_SZANDEK, ENGEDELYEZETT_TENYVALASZ, HATOKORON_KIVUL, META_KERDES)
 
 # -- az `ok` zárt kulcsai ---------------------------------------------
 #
@@ -103,6 +115,43 @@ OK_MATEMATIKA = "matematika"
 OK_KREATIV_KERES = "kreativ_keres"
 OK_ALTALANOS_TUDAS = "altalanos_tudas"
 OK_EGESZSEGUGY = "egeszsegugy"
+
+
+# =====================================================================
+# META-KÉRDÉS — a rendszerről szóló kérdés
+#
+# **Szűk és pozitív**, mint a többi minta (l. modul docstring): csak
+# akkor szólal meg, ha a mondat MAGÁRA A RENDSZERRE mutat. A „mit tudsz
+# mondani a nyitvatartásról?" NEM meta-kérdés — abban a tárgy a
+# nyitvatartás, nem a rendszer.
+#
+# Három alakzat, mind a valódi próbából vagy annak közvetlen
+# rokonságából:
+#
+# 1. MI VAGY: „te egy robot vagy?", „ember vagy?", „ki vagy?"
+# 2. MIT TUDSZ: „mit tudsz?", „mire vagy képes?", „miben tudsz segíteni?"
+# 3. HOGYAN MŰKÖDSZ: „csak a választ beszéled?", „hogy működsz?",
+#    „érted amit írok?"
+_META_MINTAK = (
+    re.compile(
+        r"\b(te|ön|maga)\s+(egy\s+)?(robot|gép|program|bot|mesterséges\s+intelligencia|ai|"
+        r"ember|valódi\s+ember)\b"
+    ),
+    re.compile(r"\b(robot|gép|program|bot|mesterséges intelligencia)\s+vagy\b"),
+    re.compile(r"\bki\s+vagy\s*(te)?\b"),
+    re.compile(r"\bmit\s+tudsz\b(?!\s+(mondani|arról|a\b))"),
+    re.compile(r"\b(mire|mit)\s+vagy\s+képes\b"),
+    re.compile(r"\bmiben\s+(tudsz|tud)\s+segíteni\b"),
+    re.compile(r"\bmi(re|t)?\s+(való|valók)\s+(ez|vagy)\b"),
+    re.compile(r"\b(hogy|hogyan)\s+(működsz|működik ez)\b"),
+    re.compile(r"\b(csak\s+)?a\s+választ\s+(beszéled|mondod|írod)\b"),
+    re.compile(r"\b(érted|értesz)\s+(amit|magyarul)\b"),
+    re.compile(r"\bveled\s+beszélek\b"),
+)
+
+
+def _meta_kerdes_e(also: str) -> bool:
+    return any(minta.search(also) for minta in _META_MINTAK)
 
 
 @dataclass(frozen=True)
@@ -333,6 +382,12 @@ def dontes(mondat: str) -> KapuorDontes:
         return KapuorDontes(HATOKORON_KIVUL, OK_UTASITAS_FELULIRAS, "utasitas_feluliras")
     if _SEMA_KENYSZERITES_MINTA.search(szoveg):
         return KapuorDontes(HATOKORON_KIVUL, OK_SEMA_KENYSZERITES, "sema_kenyszerites")
+
+    # A META-KÉRDÉS a foglalási szándék ELŐTT: a „mit tudsz?" és a „csak
+    # a választ beszéled?" mondatokban lehet foglalásra emlékeztető szó,
+    # és az éles próbában pontosan ez történt (keresés lett belőle).
+    if _meta_kerdes_e(also):
+        return KapuorDontes(META_KERDES, None, "meta_kerdes")
 
     if _FOGLALASI_SZANDEK_MINTA.search(also):
         return KapuorDontes(FOGLALASI_SZANDEK, None, "foglalasi_szandek")

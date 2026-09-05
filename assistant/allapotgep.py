@@ -96,7 +96,12 @@ _VALASZ_ALLAPOT = {
 # marad. Ez a „közbevetett kérdés" esete (beszédhelyzetek golden halmaz,
 # `kozbevetes` réteg): a vásárló megkérdezi, meddig tart, és utána
 # ugyanoda tér vissza.
-_ALLAPOTTARTO = frozenset({"elutasitas", "eszkoz_hiba", "hiba"})
+#
+# A `meta_valasz` (a rendszerről szóló kérdés) ugyanígy: az ÉLES PRÓBA
+# mutatta meg, miért fontos — ott a „csak a választ beszéled?" mondat a
+# KESZ állapotból AJANLAT_VAR-ba rántotta vissza a beszélgetést, egy már
+# lezárt foglalás után.
+_ALLAPOTTARTO = frozenset({"elutasitas", "eszkoz_hiba", "hiba", "meta_valasz"})
 
 _KORNYEZETI_VALTOZO = "APRAJAFALVA_ALLAPOT_SOR"
 

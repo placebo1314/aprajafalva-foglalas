@@ -796,9 +796,7 @@ def test_a_modell_napszak_dontese_megmarad_ha_a_mondat_beszel_rola():
 def test_jelolt_valasztas_atmegy_a_kapun():
     kaszkad = _kaszkad(_FakeLLM({"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": 2}}))
 
-    eredmeny = kaszkad.ertelmez(
-        "a középső legyen", most=_MOST, kontextus=ErtelmezesKontextus()
-    )
+    eredmeny = kaszkad.ertelmez("a középső legyen", most=_MOST, kontextus=ErtelmezesKontextus())
 
     assert eredmeny["eszkoz"] == "jelolt_valasztas"
     assert eredmeny["parameterek"] == {"sorszam": 2}
@@ -836,3 +834,41 @@ def test_jelolt_valasztas_nulla_vagy_negativ_kiesik():
         eredmeny = kaszkad.ertelmez("azt", most=_MOST, kontextus=ErtelmezesKontextus())
 
         assert eredmeny["eszkoz"] == "nincs", f"sorszám={sorszam}"
+
+
+# --- META-KÉRDÉS és „VÁLASSZ TE" (2026-09-05) ------------------------
+
+
+def test_meta_kerdes_a_modell_elott_dol_el():
+    """A kapuőr negyedik kategóriája: a modell MEG SEM SZÓLAL — ugyanaz
+    a rövidzár, mint a hatókörön kívüli ágé, de más a kimenete."""
+    llm = _FakeLLM({"eszkoz": "szabad_idopontok", "parameterek": {"bolt_id": "torpilla"}})
+    kaszkad = _kaszkad(llm)
+
+    eredmeny = kaszkad.ertelmez(
+        "csak a választ beszéled?", most=_MOST, kontextus=ErtelmezesKontextus()
+    )
+
+    assert eredmeny["eszkoz"] == "meta_valasz"
+    assert llm.kapott_mondatok == [], "a modellt meg sem hívtuk"
+
+
+def test_meta_kerdes_modell_nelkul_is_mukodik():
+    """Tartalék ágon (nincs Ollama) ugyanígy: a kapuőr a modelltől
+    függetlenül dönt."""
+    kaszkad = _kaszkad(None)
+
+    eredmeny = kaszkad.ertelmez("te egy robot vagy?", most=_MOST, kontextus=ErtelmezesKontextus())
+
+    assert eredmeny["eszkoz"] == "meta_valasz"
+
+
+def test_dontsd_el_te_atmegy_a_kapun():
+    kaszkad = _kaszkad(_FakeLLM({"eszkoz": "dontsd_el_te", "parameterek": {"sorszam": 9}}))
+
+    eredmeny = kaszkad.ertelmez(
+        "nekem mind jó, válassz te", most=_MOST, kontextus=ErtelmezesKontextus()
+    )
+
+    assert eredmeny["eszkoz"] == "dontsd_el_te"
+    assert eredmeny["parameterek"] == {}, "nincs paramétere — a vásárló épp lemondott a döntésről"

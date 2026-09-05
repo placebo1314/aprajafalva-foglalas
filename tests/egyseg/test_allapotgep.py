@@ -35,7 +35,7 @@ def test_a_valasz_tipusa_hatarozza_meg_az_allapotot(valasz_tipus, varhato):
     assert a.kovetkezo_allapot(a.INDULAS, {"tipus": valasz_tipus}) == varhato
 
 
-@pytest.mark.parametrize("tipus", ["elutasitas", "eszkoz_hiba", "hiba"])
+@pytest.mark.parametrize("tipus", ["elutasitas", "eszkoz_hiba", "hiba", "meta_valasz"])
 def test_az_elharitas_es_a_hiba_nem_mozditja_az_allapotot(tipus):
     """KÖZBEVETETT KÉRDÉS (beszédhelyzetek halmaz, `kozbevetes` réteg):
     a vásárló a foglalás közepén mást kérdez, aztán ugyanoda tér vissza.
@@ -133,3 +133,10 @@ def test_kikapcsolhato_a_meresert(monkeypatch):
 
     monkeypatch.setenv("APRAJAFALVA_ALLAPOT_SOR", "be")
     assert a.bekapcsolva() is True
+
+
+def test_a_meta_valasz_a_lezart_foglalast_sem_rontja_el():
+    """ÉLES PRÓBA (2026-09-05): a „csak a választ beszéled?" mondat a
+    KESZ állapotból AJANLAT_VAR-ba rántotta vissza a beszélgetést, egy
+    már lezárt foglalás után."""
+    assert a.kovetkezo_allapot(a.KESZ, {"tipus": "meta_valasz"}) == a.KESZ

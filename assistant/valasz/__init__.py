@@ -137,6 +137,7 @@ def megerosites_ker_szoveg(
     *,
     nyelv: str = _NYELV_ALAPERTELMEZETT,
     mod: str = MOD_SZOVEGES,
+    rendszer_valasztott: bool = False,
 ) -> str:
     """A megerősítést kérő mondat.
 
@@ -147,6 +148,18 @@ def megerosites_ker_szoveg(
     lefoglaljam EZT?" mutató névmása értelmetlen, mert nincs, amire
     mutasson."""
     sablonok = SABLONOK[nyelv]["visszaigazolas"]
+
+    # AMIKOR MI VÁLASZTOTTUNK a vásárló helyett („válassz te"): az
+    # időpontot MINDKÉT módban ki kell mondani. Szöveges módban is, mert
+    # a jelölt-gombok ilyenkor eltűnnek a képernyőről — nincs mire
+    # mutatnia a „ezt az időpontot" kifejezésnek.
+    if rendszer_valasztott and idopont_iso:
+        kulcs = "megerosites_ker_rendszer_valasztott"
+        if _beszelheto_e(mod):
+            sablon = _beszelheto_sablon(nyelv, "visszaigazolas", kulcs)
+            return kimenet(sablon.format(idopont=szamok.ido_iso_szoval(idopont_iso)), mod)
+        return sablonok[kulcs].format(idopont=szamok.idopont_rovid(idopont_iso))
+
     if _beszelheto_e(mod):
         if idopont_iso:
             sablon = _beszelheto_sablon(nyelv, "visszaigazolas", "megerosites_ker_idoponttal")
@@ -552,6 +565,17 @@ def hang_allapot_szoveg(
     }
     felsorolas = ", ".join(nevek.get(h, h) for h in hianyok)
     return sablonok["hang_hianyzik"].format(hianyok=felsorolas)
+
+
+def meta_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES) -> str:
+    """A RENDSZERRŐL szóló kérdés válasza — rövid bemutatkozás
+    (kapuőr `META_KERDES`).
+
+    Sablonból jön, mint minden más mondat: a felület nem fogalmaz, és a
+    modell meg sem szólal ezen az ágon (a kapuőr a modell előtt dönt).
+    Így az, amit a rendszer magáról állít, SZERKESZTETT adat — nem a
+    modell aznapi kedve."""
+    return kimenet(SABLONOK[nyelv]["meta"]["bemutatkozas"], mod)
 
 
 def nyugtazo_szoveg(

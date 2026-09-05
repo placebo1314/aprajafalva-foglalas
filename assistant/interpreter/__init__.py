@@ -116,6 +116,18 @@ def aktiv_modell_neve() -> str | None:
         return None
 
 
+def elomelegites() -> bool:
+    """A modell ELŐMELEGÍTÉSE (`llm_based.elomelegit`) — a felület
+    indításkor hívja, külön szálon.
+
+    Itt van, a csomag `__init__`-jében, ugyanazért, amiért az
+    `indito_ellenorzes()`: a felület nem importálhat modell-specifikus
+    modult (CLAUDE.md, „Modulhatárok")."""
+    from assistant.interpreter.llm_based import elomelegit
+
+    return elomelegit()
+
+
 def indito_ellenorzes():
     """Az éles út INDÍTÁSI ellenőrzése — `ModellAllapot`
     (`llm_based.modell_allapot`): konfigurálva van-e a modell, válaszol-e

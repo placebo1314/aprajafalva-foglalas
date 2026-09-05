@@ -1392,6 +1392,94 @@ def test_jelolt_valasztas_tartomanyon_kivul_nem_kerekit(tmp_path):
     assert valasz["tipus"] == "visszakerdezes"
 
 
+# --- META-KÉRDÉS és „VÁLASSZ TE" (2026-09-05, éles próba) ------------
+
+
+def test_meta_kerdes_nem_indit_keresest(tmp_path):
+    """ÉLES PRÓBA javítása: a „csak a választ beszéled?" mondatból
+    keresés lett."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "meta_valasz", "parameterek": {}}])
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    valasz = orch.fordulo("s1", "csak a választ beszéled?", _MOST)
+
+    assert valasz == {"tipus": "meta_valasz"}
+
+
+def test_a_meta_kerdes_nem_rontja_el_az_allapotot(tmp_path):
+    """A lezárt foglalás (`KESZ`) UTÁN feltett kérdés nem ránthatja
+    vissza a beszélgetést ajánlat-várásba — az éles próbában pontosan ez
+    történt (KESZ -> AJANLAT_VAR)."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "meta_valasz", "parameterek": {}}])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    orch.fordulo("s1", "az elsőt kérem", _MOST)
+    orch.megerosit("s1", "a" * 64)
+    assert orch._allapot("s1").allapot == allapotgep.KESZ
+
+    orch.fordulo("s1", "te egy robot vagy?", _MOST)
+
+    assert orch._allapot("s1").allapot == allapotgep.KESZ
+
+
+def test_valassz_te_a_pontozo_elso_jeloltjet_veszi(tmp_path):
+    """A jelöltek a pontozó sorrendjében állnak (ADR-006), tehát az
+    „első" nem önkény, hanem a legjobb ajánlatunk."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "dontsd_el_te", "parameterek": {}}])
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "nekem mind jó, válassz te", _MOST)
+
+    assert valasz["tipus"] == "megerositest_ker"
+    assert valasz["slot_id"] == ajanlat["jeloltek"][0]["slot_id"]
+    assert valasz["rendszer_valasztott"] is True
+    assert valasz["valasztott_jelolt"]["slot_id"] == ajanlat["jeloltek"][0]["slot_id"]
+
+
+def test_valassz_te_nem_ad_ujra_listat(tmp_path):
+    """ÉLES PRÓBA javítása: a rendszer újra felajánlotta ugyanazt a
+    három időpontot — visszaadta a döntést annak, aki épp lemondott
+    róla."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "dontsd_el_te", "parameterek": {}}])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "mindegy, foglalj egyet", _MOST)
+
+    assert valasz["tipus"] != "ajanlat"
+
+
+def test_valassz_te_ajanlat_nelkul_kerdez(tmp_path):
+    """Ha nincs mire hivatkozni, nem találunk ki foglalást: a „foglalj
+    egyet" önmagában nem mondja meg, mikorra és hova."""
+    conn = _conn(tmp_path)
+    _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "dontsd_el_te", "parameterek": {}}])
+    orch = Orchestrator(conn, ertelmezo, org_id="bármi")
+
+    valasz = orch.fordulo("s1", "mindegy, foglalj egyet", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes"
+
+
+def test_valassz_te_utan_a_foglalas_befejezheto(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "dontsd_el_te", "parameterek": {}}])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    orch.fordulo("s1", "válassz te", _MOST)
+
+    vegleges = orch.megerosit("s1", "a" * 64)
+
+    assert vegleges["tipus"] == "visszaigazolas"
+
+
 # --- ÍRÁSBELI IGEN / NEM a megerősítés-kérdésre ----------------------
 #
 # MÉRT HIBA javítása (2026-08-31, `vegigjatszas` modellel ÉS
