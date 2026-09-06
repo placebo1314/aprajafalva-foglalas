@@ -400,6 +400,47 @@ itt a kínálatról szólónak. Mindkét esetben a hiányzó kategória nem
 semlegesen viselkedett, hanem a legközelebbi meglévőbe esett — ott
 keresés lett belőle, itt kiút.
 
+### 1.14 A megjelenítés is számol — a helyi idő nem formázás (2026-09-20, ADR-033)
+
+**A bukás** (kézi próba): a rendszer minden időpontot a tárolt UTC-ben
+mutatott és mondott ki. A demóadat boltjai 8 órakor nyitnak, a vásárló
+7 órát látott a gombon és hallott a felolvasótól — télen egy, nyáron
+két óra tévedés, MINDEN időponton, a megerősítés-kérdésben is.
+
+**A tanulság általánosítható:** az invariáns két mondatból állt („UTC-ben
+tárolódik" ÉS „helyi idő csak a megjelenítésnél keletkezik"), és
+másfél évig csak az elsőt tartottuk be — mert az elsőnek volt
+BIZONYÍTÉKA (tesztek, séma), a másodiknak nem volt gazdája. A rendszer
+minden más ponton helyesen számolt: az ajánlatpontozó a napszakot már
+eddig is helyi órára váltotta. **Egy invariáns második fele nem tartja
+magát attól, hogy le van írva.** Ami nem mérhető helyben, azt valaki
+elfelejti.
+
+A hiba azért élt meg ennyi kört, mert **minden réteg önmagában
+konzisztens volt**: a gomb ugyanazt mutatta, mint amit a mondat mondott,
+és amit az előzmény-sor a modellnek átadott. Egy belsőleg
+ellentmondásmentes rendszer is lehet egészében téves — a végigjátszás,
+a golden set és az egységtesztek EGYIKE sem foghatta meg, mert
+mindegyik a rendszert hasonlította önmagához. Ehhez a való világ
+kellett: valaki, aki tudja, hogy a bolt nyolckor nyit.
+
+### 1.15 Ami csak gombon van, az hangon nincs (2026-09-20, ADR-033)
+
+**A bukás**: a szöveges ajánlat-mondat csak BEVEZETTE a jelölteket
+(„Ezeket az időpontokat találtam — melyik jó?"), az időpont maga
+kizárólag gombfeliratként létezett.
+
+**A tanulság általánosítható:** a gombfelirat nem része a
+beszélgetésnek. Nem olvasható vissza, nem kerül az előzménybe, nem
+naplózható mondatként, és aki felolvastatja a képernyőt, annak
+egyszerűen nincs ott. **A koppintás kényelmi réteg a mondat FÖLÖTT, nem
+helyette** — ha a mondat nélküle hiányos, akkor a csatorna, ahol nincs
+koppintás, nem is működik.
+
+Ez adta a végigjátszás új ellenőrzését is: beszélhető módban minden
+forduló, ami gombot rajzol, KÉRDEZZEN is a kimondott szövegben. Gomb
+önmagában néma.
+
 ### 2.9d A MINDEGY ragadóssága — MEGOLDVA (2026-09-12, ADR-031)
 
 **A bukás** (`mindegy-07`, `elengedes-10/11`): aki elengedett egy mezőt

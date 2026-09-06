@@ -1,6 +1,37 @@
-# Állapot — 2026-09-19 (frissítve: A BEVEZETÉSI RÉS — köszönés,
-katalógus, és a kiút kapuja — ADR-032. Előzőleg: a nyelvi halmaz 85
-esetre nőtt, ADR-031)
+# Állapot — 2026-09-20 (frissítve: A RENDSZER ROSSZ ÓRÁT MONDOTT —
+helyi idő a megjelenítésben, és a felolvasó három hibája — ADR-033.
+Előzőleg: a bevezetési rés, ADR-032)
+
+**A 2026-09-20-i kör négy mondata** (kézi próba,
+`docs/HELYI_IDO_ES_FELOLVASO_20260920.md`):
+
+1. **Minden időpontot egy órával korábbinak mondtunk, mint ahogy van**
+   (nyáron kettővel). A bolt 8-kor nyit, a gombon `07:00 (UTC)` állt, a
+   felolvasó „hét órakor"-t mondott. A 4. invariáns két mondat, és
+   másfél évig csak az elsőt tartottuk be: az elsőnek volt bizonyítéka
+   (séma, tesztek), a másodiknak — „helyi idő csak a megjelenítésnél
+   keletkezik" — nem volt gazdája.
+2. **Ezt semmilyen mérésünk nem foghatta meg**, mert minden réteg
+   önmagában konzisztens volt: a gomb ugyanazt mutatta, amit a mondat
+   mondott, és amit az előzmény a modellnek átadott. A golden set, a
+   végigjátszás és az egységtesztek mind a rendszert hasonlították
+   önmagához. Ehhez a való világ kellett.
+3. **A gombfelirat nem része a beszélgetésnek.** Az időpont eddig
+   kizárólag gombon létezett; mostantól a mondat is kimondja („Ezeket
+   az időpontokat találtam: 9:20, 9:40 vagy 10:20."). A koppintás
+   kényelmi réteg a mondat FÖLÖTT, nem helyette.
+4. **A felolvasó mondatonként 2,07 s-ot hallgatott** — nem a szintézis
+   miatt, hanem mert minden megszólalásnál új folyamat töltötte be a 60
+   MB-os hangmodellt. Betöltve tartva **0,09-0,23 s**. Mellette: az új
+   megszólalás elhallgattatja a régit, és minden mondat saját fájlba
+   megy.
+
+**Mérve:** egységtesztek 1076 zöld, beszédhelyzetek 92,3% (39 eset),
+`hangproba --meres` 2,07 s → 0,2 s. A végigjátszás beszélhető módban
+mostantól ELLENŐRIZ is (HANG-KIFOGÁS): formai kapu fordulónként, és
+„ha gomb van, a mondat kérdezzen" — ma egy kifogás sincs. Egy golden
+eset (`elesbol-03`) flippelt, de a COMMITTELT fán is bukik, tehát nem
+ettől a körtől.
 
 **A 2026-09-19-i kör négy mondata** (első IDEGEN próba,
 `docs/BEVEZETES_20260919.md`):

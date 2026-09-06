@@ -206,19 +206,39 @@ def idopont_kor(ora: int, perc: int = 0) -> str:
     return f"{szam_szoval(ora)} {szam_szoval(perc)}kor"
 
 
+def ora_perc_rovid(iso: str) -> str:
+    """HELYI idejű ISO → `"8:00"` — a szöveges csatorna óraalakja.
+
+    Vezető nulla nélkül, mert a magyar szövegben `08:00` gépies (a
+    menetrendek írásmódja), és a mondatba illesztve („8:00, 8:20 vagy
+    9:00") a nullák csak zajt adnak. A GOMBOKON marad a kétjegyű alak,
+    mert ott oszlopba rendeződnek.
+
+    **Amit KAP, azt írja ki**: a helyi időre váltás a hívó dolga
+    (`helyi_ido.helyi_iso`), nem ezé a formázóé."""
+    ora, perc = int(iso[11:13]), int(iso[14:16])
+    return f"{ora}:{perc:02d}"
+
+
 def idopont_rovid(iso: str) -> str:
-    """Teljes ISO-időbélyeg RÖVID, olvasható alakja:
-    `"2026-12-21 07:15 (UTC)"`.
+    """HELYI idejű ISO-időbélyeg RÖVID, olvasható alakja:
+    `"2026-12-21 8:15"`.
 
     A SZÖVEGES módé — ott a képernyő a valóság, és a pontos, gépi alak
     egyértelműbb, mint a kimondott. A beszélhető alak az
-    `ido_iso_szoval` (ott az „UTC" felolvasva csak zavarna).
+    `ido_iso_szoval`.
+
+    **Az „(UTC)" toldat 2026-09-20-án tűnt el innen**, a helyi időre
+    váltással együtt (`helyi_ido.py`). Nem formázási kérdés volt: a
+    vásárló a tárolt UTC-időt látta, tehát télen egy, nyáron két órával
+    korábbit a valóságosnál. Egy vásárlónak nincs dolga az időzónákkal
+    — az ő ideje a falióra.
 
     Miért kell egyáltalán: amikor MI választunk a vásárló helyett
     („válassz te"), a jelölt-gombok eltűnnek a képernyőről — a
     megerősítés-kérdésnek ilyenkor ki kell mondania, melyik időpontról
     van szó, különben a vásárló vakon nyomna igent."""
-    return f"{iso[:10]} {iso[11:16]} (UTC)"
+    return f"{iso[:10]} {ora_perc_rovid(iso)}"
 
 
 def ido_iso_szoval(iso: str, *, kor: bool = True) -> str:

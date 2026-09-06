@@ -228,10 +228,38 @@ def test_a_nyugtazo_sor_is_beszelheto() -> None:
     assert "a Törpilla" in valasz.nyugtazo_szoveg({"bolt_id": "torpilla"}, mod=BESZELHETO)
 
 
-def test_ajanlat_szoveges_modban_valtozatlan() -> None:
-    """A szöveges út viselkedése NEM változhat: ott a jelöltek
-    koppintható gombok, a mondat csak bevezeti őket."""
-    assert valasz.ajanlat_mondat(JELOLTEK, mod=SZOVEGES) == valasz.ajanlat_bevezetes_szoveg()
+def test_ajanlat_szovegesen_is_KIMONDJA_az_idopontokat() -> None:
+    """A szöveges mondat 2026-09-20-ig csak BEVEZETTE a gombokat
+    („Ezeket az időpontokat találtam — melyik jó?"), és az időpont
+    kizárólag gombfeliratként létezett.
+
+    **Egy gombfelirat nem része a beszélgetésnek**: nem olvasható
+    vissza, nem kerül az előzménybe, és aki felolvastatja a képernyőt,
+    annak egyszerűen nincs ott. A gombok megmaradtak — a mondat nem
+    helyettük szól, hanem mellettük."""
+    szoveg = valasz.ajanlat_mondat(JELOLTEK, mod=SZOVEGES)
+
+    for jelolt in JELOLTEK:
+        ora = int(jelolt["kezdet"][11:13])
+        perc = int(jelolt["kezdet"][14:16])
+        assert f"{ora}:{perc:02d}" in szoveg, szoveg
+    assert szoveg.endswith("?"), "választani kell — tehát kérdés"
+
+
+def test_ajanlat_szovegesen_az_AZONOS_kezdet_egyszer_hangzik_el() -> None:
+    """A pontozó egy időpontra több jelöltet is adhat (más hosszúságú
+    szolgáltatásokra). A gombokon a HOSSZ megkülönbözteti őket, a
+    mondatban nem — „8:00, 8:00 vagy 8:20" lenne belőle."""
+    ketto = [
+        {"kezdet": "2026-12-22T08:00:00Z", "veg": "2026-12-22T08:10:00Z"},
+        {"kezdet": "2026-12-22T08:00:00Z", "veg": "2026-12-22T08:20:00Z"},
+    ]
+    assert valasz.ajanlat_mondat(ketto, mod=SZOVEGES).count("8:00") == 1
+
+
+def test_ajanlat_ures_jeloltlistara_a_regi_bevezeto() -> None:
+    """Nincs mit felsorolni — de a mondat nem maradhat el."""
+    assert valasz.ajanlat_mondat([], mod=SZOVEGES) == valasz.ajanlat_bevezetes_szoveg()
 
 
 def test_legkozelebbi_idopont_egy_mondatban() -> None:

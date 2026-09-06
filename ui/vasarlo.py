@@ -129,6 +129,7 @@ from assistant.interpreter import (  # noqa: E402
 )
 from assistant.orchestrator import Orchestrator  # noqa: E402
 from assistant.tools import katalogus  # noqa: E402
+from assistant.valasz import helyi_ido  # noqa: E402
 from core.azonosito import new_uuid  # noqa: E402
 from core.repo import migracio, muszak_repo, torzsadat_repo  # noqa: E402
 from privacy.hash_ideiglenes import ideiglenes_hash  # noqa: E402
@@ -209,10 +210,21 @@ def horgony_most(idoszak: dict | None, valodi_most: str) -> str:
     return f"{idoszak['elso_nap']}T00:00:00Z"
 
 
-def _idopont_cimke(kezdet_iso: str, veg_iso: str) -> str:
-    kezdet = datetime.fromisoformat(kezdet_iso.replace("Z", "+00:00"))
-    veg = datetime.fromisoformat(veg_iso.replace("Z", "+00:00"))
-    return f"{kezdet.strftime('%Y-%m-%d %H:%M')}–{veg.strftime('%H:%M')} (UTC)"
+def _idopont_cimke(kezdet_iso: str, veg_iso: str, zona: str | None) -> str:
+    """Egy jelölt gombfelirata — HELYI idővel, időzóna-jelölés nélkül.
+
+    2026-09-20-ig ez állt a gombon: `2026-12-21 07:00–07:10 (UTC)`. A
+    demóadat boltjai 8 órakor nyitnak, tehát a vásárló minden időpontot
+    egy órával korábbinak látott a valóságosnál (nyáron kettővel), és a
+    felolvasó is így mondta. Nem formázási hiba volt: **rossz időpontot
+    mondtunk** (`assistant/valasz/helyi_ido.py`).
+
+    A dátum marad ISO-alakban: a gombok egymás alatt állnak, ott az
+    azonos szélesség segít. A ZÓNA nem jelenik meg — a vásárlónak nincs
+    dolga az időzónákkal, az ő ideje a falióra."""
+    kezdet = helyi_ido.helyi_iso(kezdet_iso, zona)
+    veg = helyi_ido.helyi_iso(veg_iso, zona)
+    return f"{kezdet[:10]} {kezdet[11:16]}–{veg[11:16]}"
 
 
 def _proba_naplo_ir(
@@ -418,6 +430,12 @@ class VasarloApp(tk.Tk):
 
         orgs = torzsadat_repo.orgs_list(self.conn)
         self.org_id = orgs[0]["id"] if orgs else None
+        # A SZERVEZET IDŐZÓNÁJA — minden képernyőre kerülő és minden
+        # felolvasott időpont ezen megy át (`helyi_ido.py`). A tárolás
+        # UTC marad (CLAUDE.md 4. invariáns); helyi idő csak itt, a
+        # megjelenítésnél keletkezik.
+        org = torzsadat_repo.org_load(self.conn, self.org_id) if self.org_id else None
+        self.zona = org["idozona"] if org else None
         self.session_id = new_uuid()
         # A beszélgetés eddigi sorai (ki, mit) — ezt kapja meg az
         # értelmező (ADR-019). A felület vezeti, mert csak ő ismeri a
@@ -700,7 +718,7 @@ class VasarloApp(tk.Tk):
         # A koppintós úton a felismert ablak megegyezik a gombokkal
         # kiválasztott paraméterekkel — nincs szükség parszolásra, de a
         # nyugtázó sor elve ugyanaz, mint a szöveges úton.
-        self.kop_nyugtazo.config(text=valasz_szoveg.nyugtazo_szoveg(parameterek))
+        self.kop_nyugtazo.config(text=valasz_szoveg.nyugtazo_szoveg(parameterek, zona=self.zona))
         self.update_idletasks()
 
         valasz = self.orchestrator.kereses_strukturaltan(self.session_id, parameterek)
@@ -714,7 +732,7 @@ class VasarloApp(tk.Tk):
         self.kop_uzenet.config(text="")
 
         parameterek = {"bolt_id": bolt_slug}
-        self.kop_nyugtazo.config(text=valasz_szoveg.nyugtazo_szoveg(parameterek))
+        self.kop_nyugtazo.config(text=valasz_szoveg.nyugtazo_szoveg(parameterek, zona=self.zona))
         self.update_idletasks()
 
         valasz = self.orchestrator.legkozelebbi_strukturaltan(
@@ -734,7 +752,7 @@ class VasarloApp(tk.Tk):
             for jelolt in valasz["jeloltek"]:
                 ttk.Button(
                     keret,
-                    text=_idopont_cimke(jelolt["kezdet"], jelolt["veg"]),
+                    text=_idopont_cimke(jelolt["kezdet"], jelolt["veg"], self.zona),
                     # A TELJES jelölt megy tovább, nem csak az azonosító:
                     # a megerősítés visszaolvasásához (blueprint 7.)
                     # kell a kezdés időpontja is — hangon a „biztosan
@@ -784,7 +802,9 @@ class VasarloApp(tk.Tk):
 
         ttk.Label(
             keret,
-            text=valasz_szoveg.megerosites_ker_szoveg(jelolt.get("kezdet"), mod=self._mod()),
+            text=valasz_szoveg.megerosites_ker_szoveg(
+                jelolt.get("kezdet"), mod=self._mod(), zona=self.zona
+            ),
             wraplength=680,
         ).pack(anchor="w")
         ttk.Label(keret, text="Azonosító (számsor):").pack(anchor="w", pady=(6, 0))
@@ -874,6 +894,8 @@ class VasarloApp(tk.Tk):
             foreground=("#7a3b00" if self.hang_allapot.hianyok else "#2d6a2d"),
             wraplength=520,
         ).pack(side="left", padx=(16, 0))
+
+        self._hang_elomelegit()
 
         self.szo_naplo = tk.Text(tab, height=18, wrap="word", state="disabled")
         self.szo_naplo.pack(fill="both", expand=True)
@@ -1074,6 +1096,22 @@ class VasarloApp(tk.Tk):
                 command=lambda b=bolt["bolt_id"]: self._szo_kuldes(b),
             ).pack(side="left", padx=(0, 6))
 
+    def _hang_elomelegit(self) -> None:
+        """A HANGMODELL betöltése a háttérben, indításkor.
+
+        Ugyanaz az indok, mint a modell-előmelegítésnél: MÉRVE
+        (2026-09-20) a hangmodell betöltése 1,54 s, és ez különben az
+        ELSŐ megszólalás elejére kerülne — épp oda, ahol a vásárló még
+        azt sem tudja, megszólal-e egyáltalán a rendszer.
+
+        Akkor is lefut, ha a felület épp szöveges módban indul: a
+        kapcsoló egy kattintás, és onnantól már ne kelljen várni. A
+        szál `daemon`, a hibát pedig a `hang.elomelegit()` nyeli el —
+        egy kényelmi lépés nem akadályozhatja meg az indulást."""
+        if not self.hang_allapot.rendben:
+            return
+        threading.Thread(target=lambda: hang.elomelegit(self.hang_allapot), daemon=True).start()
+
     def _felolvas(self, szoveg: str) -> None:
         """A megszólalás FELOLVASÁSA, ha van mivel (ADR-029).
 
@@ -1082,15 +1120,29 @@ class VasarloApp(tk.Tk):
         el — az állapotsor a kapcsoló mellett kiírja, mi hiányzik, és
         egy hiba az üzenetsorba kerül, nem a semmibe.
 
+        **Az ÚJ megszólalás elhallgattatja a régit** (`hang.leallit()`).
+        A vásárló gyorsabban ír, mint ahogy a hang elhangzik; enélkül a
+        két mondat egymásra csúszik, és egyik sem érthető. A vásárló
+        kérdése fontosabb, mint az előző válasz vége.
+
         **Külön szálon**, mert a lejátszás blokkol: az eseményhurkon
         futtatva a felület a mondat végéig megfagyna. A szál `daemon`,
-        tehát az ablak bezárása nem várja meg a mondat végét."""
+        tehát az ablak bezárása nem várja meg a mondat végét.
+
+        **A DIAGNÓZIST nem futtatjuk újra** minden mondatnál: az
+        `allapot()` fájlrendszert olvas (`shutil.which`, útvonalak), és
+        az indulás óta nem változott. A gyorsítás mérhető része nem is
+        itt van, hanem abban, hogy a hangmodell betöltve marad
+        (`assistant/hang.py`) — mondatonként 2,07 s helyett 0,2."""
         if self._mod() != valasz_szoveg.MOD_BESZELHETO or not self.hang_allapot.rendben:
             return
 
+        hang.leallit()
+        allapot = self.hang_allapot
+
         def dolgozik() -> None:
             try:
-                hang.felolvas(szoveg)
+                hang.lejatszik(hang.szintetizal(szoveg, allapot_=allapot), allapot_=allapot)
             except (RuntimeError, OSError) as exc:
                 # A hibaszöveget MOST kell kinyerni: a Python az
                 # `except ... as exc` nevet a blokk végén törli, tehát a
@@ -1130,7 +1182,7 @@ class VasarloApp(tk.Tk):
         if not jeloltek:
             return
         sorok = [
-            f"{i}. {_idopont_cimke(j['kezdet'], j['veg'])}"
+            f"{i}. {_idopont_cimke(j['kezdet'], j['veg'], self.zona)}"
             for i, j in enumerate(jeloltek, start=1)
             if j.get("kezdet") and j.get("veg")
         ]
@@ -1166,7 +1218,9 @@ class VasarloApp(tk.Tk):
                 widget.destroy()
         self.szo_uzenet.config(text="")
 
-        self.szo_allapot.config(text=valasz_szoveg.nyugtazo_szoveg({}, mod=self._mod()))
+        self.szo_allapot.config(
+            text=valasz_szoveg.nyugtazo_szoveg({}, mod=self._mod(), zona=self.zona)
+        )
         self.update_idletasks()
 
         # A válaszidő a TELJES fordulót méri (értelmezés + eszközhívás),
@@ -1297,12 +1351,17 @@ class VasarloApp(tk.Tk):
                 )
             )
         elif tipus == "ajanlat":
-            reszek.append(valasz_szoveg.nyugtazo_szoveg(valasz.get("felismert_ablak", {}), mod=mod))
+            reszek.append(
+                valasz_szoveg.nyugtazo_szoveg(
+                    valasz.get("felismert_ablak", {}), mod=mod, zona=self.zona
+                )
+            )
             reszek.append(
                 valasz_szoveg.ajanlat_mondat(
                     valasz.get("jeloltek") or [],
                     legkozelebbi=bool(valasz.get("legkozelebbi")),
                     mod=mod,
+                    zona=self.zona,
                 )
             )
         elif tipus == "megerositest_ker":
@@ -1312,6 +1371,7 @@ class VasarloApp(tk.Tk):
                     jelolt.get("kezdet"),
                     mod=mod,
                     rendszer_valasztott=bool(valasz.get("rendszer_valasztott")),
+                    zona=self.zona,
                 )
             )
         elif valasz.get("uzenet_kulcs"):
@@ -1449,7 +1509,9 @@ class VasarloApp(tk.Tk):
             self._rendszer_mondat(valasz_szoveg.elvetve_szoveg(mod=mod))
             jeloltek = valasz.get("jeloltek") or []
             if jeloltek:
-                self._rendszer_mondat(valasz_szoveg.ajanlat_mondat(jeloltek, mod=mod))
+                self._rendszer_mondat(
+                    valasz_szoveg.ajanlat_mondat(jeloltek, mod=mod, zona=self.zona)
+                )
                 self._eredmeny_render(
                     self.szo_jelolt_keret,
                     {"tipus": "ajanlat", "jeloltek": jeloltek},
@@ -1470,6 +1532,7 @@ class VasarloApp(tk.Tk):
                     # időpontot vettük (a jelölt-gombok eltűntek), tehát a
                     # mondatnak ki kell mondania.
                     rendszer_valasztott=bool(valasz.get("rendszer_valasztott")),
+                    zona=self.zona,
                 )
             )
             self._megerosites_urlap(self.szo_jelolt_keret, jelolt, self.szo_uzenet)
@@ -1480,7 +1543,9 @@ class VasarloApp(tk.Tk):
             # próbája (docs/blueprint.md 7. szakasz) — külön naplósorban,
             # MIELŐTT a tényleges (tartalmi) eredmény megjelenik.
             self._rendszer_mondat(
-                valasz_szoveg.nyugtazo_szoveg(valasz.get("felismert_ablak", {}), mod=mod),
+                valasz_szoveg.nyugtazo_szoveg(
+                    valasz.get("felismert_ablak", {}), mod=mod, zona=self.zona
+                ),
                 kulon_megszolalas=True,
             )
             # Beszélhető módban a jelölteket maga a MONDAT hordozza (a
@@ -1491,6 +1556,7 @@ class VasarloApp(tk.Tk):
                     valasz.get("jeloltek") or [],
                     legkozelebbi=bool(valasz.get("legkozelebbi")),
                     mod=mod,
+                    zona=self.zona,
                 )
             )
             self._eredmeny_render(self.szo_jelolt_keret, valasz, self.szo_uzenet)
@@ -1500,7 +1566,9 @@ class VasarloApp(tk.Tk):
         if tipus == "eszkoz_hiba" or not valasz.get("sikeres", True):
             if valasz.get("felismert_ablak"):
                 self._rendszer_mondat(
-                    valasz_szoveg.nyugtazo_szoveg(valasz["felismert_ablak"], mod=mod),
+                    valasz_szoveg.nyugtazo_szoveg(
+                        valasz["felismert_ablak"], mod=mod, zona=self.zona
+                    ),
                     kulon_megszolalas=True,
                 )
             kulcs = valasz.get("uzenet_kulcs", "")

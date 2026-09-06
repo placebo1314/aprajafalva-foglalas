@@ -632,14 +632,14 @@ esetek:
   # az rossz volt. A helyes válasz eldöntése után lett belőle teszteset.
   # ---------------------------------------------------------------------
 
-  - id: elesbol-01-a-het-tizenotos
+  - id: elesbol-01-a-nyolc-tizenotos
     bemenet:
       - "törpilla mégis. A legkorábbi időpontot"
-      - "a hét tizenötös"
+      - "a nyolc tizenötös"
     felajanlott:
-      - "1. 2026-12-21 07:00–07:20 (UTC)"
-      - "2. 2026-12-21 07:00–07:15 (UTC)"
-      - "3. 2026-12-21 07:15–07:30 (UTC)"
+      - "1. 2026-12-21 08:00–08:20"
+      - "2. 2026-12-21 08:00–08:15"
+      - "3. 2026-12-21 08:15–08:30"
     igenyel_llm: true
     varhato:
       eszkoz: jelolt_valasztas
@@ -647,16 +647,22 @@ esetek:
         sorszam: 3
     megjegyzes: >
       KIMONDOTT IDŐPONTRA hivatkozás, a felajánlott listából — az első
-      valós példa erre. A „hét tizenötös" a 7:15-kor KEZDŐDŐ időpont,
+      valós példa erre. A „nyolc tizenötös" a 8:15-kor KEZDŐDŐ időpont,
       vagyis a harmadik: az emberek a kezdés szerint azonosítanak egy
       időpontot, és a rendszer saját mondata is így ajánlotta („a
-      legkorábbi hét órakor, de van hét tizenötkor is").
+      legkorábbi nyolc órakor, de van nyolc tizenötkor is").
 
-      **Az éles próbában a rendszer a MÁSODIKAT választotta** (07:00–07:15,
-      ami 7:15-kor VÉGZŐDIK), és arra kért megerősítést. Ez pontosan az a
+      **Az éles próbában a rendszer a MÁSODIKAT választotta** (08:00–08:15,
+      ami 8:15-kor VÉGZŐDIK), és arra kért megerősítést. Ez pontosan az a
       hibafajta, amiről a sorszám-modul docstringje beszél: nem
-      visszakérdezés lesz belőle, hanem MÁS IDŐPONT lefoglalása. Az eset
-      tehát ma BUKIK — és épp ezért került be.
+      visszakérdezés lesz belőle, hanem MÁS IDŐPONT lefoglalása.
+
+      **AZ ÓRÁK EGGYEL NAGYOBBAK, MINT A NAPLÓBAN** (ADR-033): a próba
+      idején a felület a tárolt UTC-t mutatta, tehát a barátunk „a hét
+      tizenötös"-t mondta arra, amit ma 8:15-ként lát. A mondat szerkezete
+      — ez az, amit az eset mér — betűre ugyanaz; ha az órákat hagynánk
+      a régi alakban, olyan képernyőre hivatkozna az eset, ami már nem
+      létezik.
     cimkek: [elesbol, jelolt_hivatkozas, kimondott_idopont, tobbfordulos]
 
   - id: elesbol-02-meta-kerdes
@@ -690,9 +696,9 @@ esetek:
       - "törpilla mégis. A legkorábbi időpontot"
       - "nekem mind jó. válassz te."
     felajanlott:
-      - "1. 2026-12-21 07:00–07:20 (UTC)"
-      - "2. 2026-12-21 07:00–07:15 (UTC)"
-      - "3. 2026-12-21 07:15–07:30 (UTC)"
+      - "1. 2026-12-21 08:00–08:20"
+      - "2. 2026-12-21 08:00–08:15"
+      - "3. 2026-12-21 08:15–08:30"
     igenyel_llm: true
     varhato:
       eszkoz: dontsd_el_te

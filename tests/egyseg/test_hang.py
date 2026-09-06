@@ -12,7 +12,12 @@ volt bekötve), és a csend ugyanúgy néz ki, mint a „nincs telepítve".
 
 from __future__ import annotations
 
+import threading
+import time
+import wave
 from pathlib import Path
+
+import pytest
 
 from assistant import hang
 from assistant.valasz import hang_allapot_szoveg
@@ -117,3 +122,97 @@ def test_a_felulet_sora_a_kesz_allapotot_is_kimondja():
     szoveg = hang_allapot_szoveg((), "hu_HU-anna-medium")
 
     assert "hu_HU-anna-medium" in szoveg
+
+
+# =====================================================================
+# A FELOLVASÓ HASZNÁLHATÓSÁGA (ADR-033)
+#
+# Nem a hangot mérik (azt fül nélkül nem lehet), hanem azt a három
+# dolgot, ami a felolvasót a próbán használhatatlanná tette:
+#
+# 1. mondatonként 2 másodperc csend, mert minden megszólalás új
+#    folyamatot indított és újra betöltötte a 60 MB-os hangmodellt;
+# 2. két forduló hangja egymásra csúszott, mert a régi mondatot semmi
+#    nem hallgattatta el;
+# 3. minden szintézis UGYANARRA a fájlra írt — arra, amit a lejátszó
+#    épp olvasott.
+#
+# A Piper JELENLÉTÉT egyik teszt sem igényli — a Piper nem függősége a
+# projektnek (ADR-029), tehát a tesztkészletnek sem lehet az.
+# =====================================================================
+
+
+def _wav_ir(cel: Path, masodperc: float = 1.0) -> Path:
+    """Néma WAV — a lejátszás IDŐZÍTÉSÉT méri, nem a hangot."""
+    with wave.open(str(cel), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(22050)
+        f.writeframes(b"\x00\x00" * int(22050 * masodperc))
+    return cel
+
+
+def test_a_wav_utvonal_egyedi():
+    """Fix névvel a következő mondat szintézise arra a fájlra írna,
+    amit a lejátszó épp olvas."""
+    egy, ketto = hang._uj_wav_utvonal(), hang._uj_wav_utvonal()
+
+    assert egy != ketto
+    assert egy.suffix == ".wav"
+    assert "aprajafalva" in egy.name, "felismerhető marad a temp-könyvtárban"
+
+
+def test_a_wav_hossz_a_fajlbol_jon(tmp_path):
+    assert hang._wav_hossz(_wav_ir(tmp_path / "n.wav", 2.0)) == pytest.approx(2.0, abs=0.05)
+
+
+def test_a_serult_wav_nem_ragasztja_be_a_szalat(tmp_path):
+    """Hibás fájlnál inkább ne várjunk, mint hogy a felolvasó szál a
+    végtelenségig álljon."""
+    rossz = tmp_path / "rossz.wav"
+    rossz.write_bytes(b"ez nem wav")
+
+    assert hang._wav_hossz(rossz) == 0.0
+
+
+def test_a_var_megszakithato():
+    """Ez a megszakíthatóság MAGVA: a lejátszás nem egy szinkron hívás,
+    amit megvárunk, hanem egy várakozás, amit félbe lehet szakítani.
+
+    Windowson MÉRVE (2026-09-20): a szinkron `PlaySound`-ot egy másik
+    szálból küldött `SND_PURGE` NEM szakítja meg — ezért lett aszinkron
+    lejátszás plusz megszakítható várakozás."""
+    hang._leallitas.clear()
+    threading.Timer(0.1, hang._leallitas.set).start()
+
+    kezdet = time.monotonic()
+    hang._var(5.0)
+    telt = time.monotonic() - kezdet
+
+    assert telt < 1.0, f"a várakozás nem szakadt meg ({telt:.2f}s)"
+
+
+def test_a_var_kivarja_a_hangot_ha_nincs_leallitas():
+    hang._leallitas.clear()
+
+    kezdet = time.monotonic()
+    hang._var(0.3)
+
+    assert time.monotonic() - kezdet >= 0.25
+
+
+def test_az_elomelegites_hiany_eseten_nem_dob():
+    """Az előmelegítés kényelmi lépés — egy hibája nem akadályozhatja
+    meg az indulást."""
+    ures = hang.HangAllapot(hianyok=(hang.HIANY_NINCS_PIPER,))
+
+    assert hang.elomelegit(ures) is False
+
+
+def test_szintetizal_hiany_eseten_MEGMONDJA_mi_hianyzik():
+    """A csend és a „nincs telepítve" ugyanúgy néz ki — a kivétel
+    üzenete választja szét őket."""
+    ures = hang.HangAllapot(hianyok=(hang.HIANY_NINCS_HANG,))
+
+    with pytest.raises(RuntimeError, match=hang.HIANY_NINCS_HANG):
+        hang.szintetizal("bármi", allapot_=ures)

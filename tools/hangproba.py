@@ -5,6 +5,7 @@ PONTOS megmondása, hogy miért (`python feladat.py hangproba`).
 python feladat.py hangproba
 python feladat.py hangproba --mondat "Holnap kilenc órakor foglaltam."
 python feladat.py hangproba --csak-diagnozis      # nem játszik le semmit
+python feladat.py hangproba --meres               # mennyi a csend a mondat előtt
 ```
 
 **Miért van erre külön parancs.** A felolvasás eddig CSENDBEN maradt el:
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 GYOKER = Path(__file__).resolve().parents[1]
@@ -33,11 +35,23 @@ from assistant.hang import (  # noqa: E402
     HIANY_NINCS_PIPER,
     MAGYAR_HANGOK,
     allapot,
+    elomelegit,
     lejatszik,
     szintetizal,
 )
 
 ALAP_MONDAT = "December huszonkettedikén kilenc órakor foglaltam időpontot a Törpillához."
+
+# A `--meres` mondatai: pontosan azok a fajták, amiket a rendszer
+# ténylegesen kimond — nyugtázó sor, ajánlat, visszaolvasás, kód. A
+# hosszuk azért különbözik, hogy látszódjon: a késleltetés NEM a
+# hosszal nő.
+MERES_MONDATOK = [
+    "Egy pillanat, körülnézek.",
+    "A legkorábbi december huszonkettedikén nyolc órakor, de van nyolc negyvenkor is. Melyik jó?",
+    "December huszonkettedikén nyolc negyvenkor foglalnám le. Rendben?",
+    "Foglalás létrejött. A kódod: kettő, nyolc, sierra, foxtrot.",
+]
 
 # HIÁNY -> mit kell tenni. Három ok, három teendő — összevonva
 # haszontalan lenne (ugyanaz az elv, mint az indítási
@@ -88,6 +102,46 @@ def diagnozis(a) -> None:
         print()
 
 
+def meres(a, mondatok: list[str]) -> int:
+    """A FELOLVASÁS KÉSLELTETÉSE, mondatonként — `--meres`.
+
+    Amit mér: mennyi idő telik el a mondat átadása és a hang kezdete
+    között. Ez az, amit a vásárló csendként él meg, a modell 3,5
+    másodperce UTÁN.
+
+    Miért kellett: a Piper külön PROGRAMKÉNT hívva mondatonként ~2,07 s
+    volt, a mondat hosszától FÜGGETLENÜL — vagyis nem a szintézis
+    lassú, hanem az indulás (új folyamat + 60 MB hangmodell újra és
+    újra). Betöltve tartva 0,2 s. A mérés ezt a különbséget mutatja meg
+    a saját gépen, nem a mi számainkat kell elhinni.
+
+    A lejátszás ideje NEM késleltetés — az maga a mondat. Külön
+    oszlopban áll, hogy ne keveredjen a kettő."""
+    print("\n=== KÉSLELTETÉS-MÉRÉS ===\n")
+    print("  A hangmodell betöltése (egyszer)…", end=" ", flush=True)
+    kezdet = time.perf_counter()
+    betoltve = elomelegit(a)
+    print(f"{time.perf_counter() - kezdet:.2f} s" + ("" if betoltve else "  (nincs mit betölteni)"))
+    if not betoltve:
+        print(
+            "  A Piper külön PROGRAMKÉNT fut, nem Python-csomagként — ott minden\n"
+            "  mondat új folyamat, és a hangmodell újra betöltődik. A `pip install\n"
+            "  piper-tts` változat mérhetően gyorsabb."
+        )
+
+    print(f"\n  {'mondat':<44}{'szintézis':>11}{'lejátszás':>11}")
+    for mondat in mondatok:
+        kezdet = time.perf_counter()
+        wav = szintetizal(mondat, allapot_=a)
+        szintezis = time.perf_counter() - kezdet
+        kezdet = time.perf_counter()
+        lejatszik(wav, allapot_=a)
+        lejatszas = time.perf_counter() - kezdet
+        rovid = mondat if len(mondat) <= 42 else mondat[:41] + "…"
+        print(f"  {rovid:<44}{szintezis:>10.2f}s{lejatszas:>10.2f}s")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Egy mondat felolvasása, diagnózissal.")
     parser.add_argument("--mondat", default=ALAP_MONDAT, help="a felolvasandó mondat")
@@ -97,6 +151,11 @@ def main(argv: list[str] | None = None) -> int:
         help="csak a helyzetet írja ki, nem szintetizál és nem játszik le",
     )
     parser.add_argument("--ki", type=Path, default=None, help="a WAV mentése ide")
+    parser.add_argument(
+        "--meres",
+        action="store_true",
+        help="a felolvasás KÉSLELTETÉSE mondatonként (szintézis és lejátszás külön)",
+    )
     args = parser.parse_args(argv)
 
     a = allapot()
@@ -110,6 +169,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.csak_diagnozis:
         return 0
+    if args.meres:
+        return meres(a, MERES_MONDATOK)
 
     print(f"\nSzintetizálás: {args.mondat!r}")
     try:

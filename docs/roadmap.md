@@ -195,6 +195,14 @@ láthatatlan, mert a halmaz minden esete olyan emberé volt, aki már
 tudta, mit akar.** Egy halmaz nem tudja mérni azt a beszédhelyzetet,
 amit nem tartalmaz.
 
+**2026-09-20:** a végigjátszás beszélhető módban **ELLENŐRIZ**, nem csak
+kiír (`--mod beszelheto`): fordulónként átmegy-e a megszólalás a formai
+kapun, és ha a forduló gombot rajzol, kérdez-e a kimondott szöveg —
+gomb önmagában néma (ADR-033). A kifogások a végén egyben is
+megjelennek, és a kilépőkód is jelzi őket. Ez az első ellenőrzés, ami
+nem az ÉRTELMEZÉST méri, hanem azt, hogy **mit kap meg az, aki nem
+látja a képernyőt.**
+
 **Kilépési feltétel:** 150-200 eset — **teljesült** (192, ebből nyelvi
 85); futtatható értékelő — **kész**; két modell összehasonlítható —
 **kész** (2026-09-05-re öt modell van megmérve ugyanazon a halmazon).

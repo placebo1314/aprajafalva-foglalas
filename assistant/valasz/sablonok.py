@@ -127,6 +127,13 @@ SABLONOK: dict[str, dict[str, object]] = {
             "sikeres_foglalas": "Foglalás létrejött! Foglalási kód: {foglalasi_kod}",
             "elvetve": "Rendben, nem foglaltuk le. Kereshetsz újra.",
             "ajanlat_bevezetes": "Ezeket az időpontokat találtam — melyik jó?",
+            # A GOMBOK NEM MONDANAK MEG MINDENT. A mondat kimondja az
+            # időpontokat is, nem csak bevezeti őket (2026-09-20): egy
+            # gombfelirat nem kerül bele a beszélgetés menetébe, nem
+            # olvasható vissza, és a képernyőolvasónak sem magától
+            # értetődő. A gombok megmaradnak — a kettő nem egymás
+            # helyett van.
+            "ajanlat_bevezetes_idokkel": "Ezeket az időpontokat találtam: {idok}. Melyik jó?",
             # A `legkozelebbi_idopont` eszköz válasza: EGY időpont,
             # a feltett kérdésre adott közvetlen felelet. Külön
             # mondat, mert a "melyik jó?" itt félrevezető lenne —

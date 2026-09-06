@@ -55,7 +55,7 @@ import random
 
 from assistant.tools import katalogus
 from assistant.valasz import beszelheto as beszelheto_modul
-from assistant.valasz import ragozas, szamok
+from assistant.valasz import helyi_ido, ragozas, szamok
 from assistant.valasz.sablonok import SABLONOK
 
 _NYELV_ALAPERTELMEZETT = "hu"
@@ -138,16 +138,24 @@ def megerosites_ker_szoveg(
     nyelv: str = _NYELV_ALAPERTELMEZETT,
     mod: str = MOD_SZOVEGES,
     rendszer_valasztott: bool = False,
+    zona: str | None = None,
 ) -> str:
     """A megerősítést kérő mondat.
 
-    `idopont_iso`: a választott slot kezdete. Szöveges módban nem
-    használjuk (a képernyőn ott áll a kiválasztott gomb felirata),
+    `idopont_iso`: a választott slot kezdete, UTC-ben. Szöveges módban
+    nem használjuk (a képernyőn ott áll a kiválasztott gomb felirata),
     **beszélhető módban viszont ez a visszaolvasás** (blueprint 7.,
     „Visszaolvasásos megerősítés mindig"): hangon a „biztosan
     lefoglaljam EZT?" mutató névmása értelmetlen, mert nincs, amire
-    mutasson."""
+    mutasson.
+
+    `zona`: a szervezet időzónája — a kimondott óra HELYI idő
+    (`helyi_ido.py`). Enélkül a visszaolvasás télen egy, nyáron két
+    órával téved, és épp abban a mondatban, amire a vásárló igent
+    mond."""
     sablonok = SABLONOK[nyelv]["visszaigazolas"]
+    if idopont_iso:
+        idopont_iso = helyi_ido.helyi_iso(idopont_iso, zona)
 
     # AMIKOR MI VÁLASZTOTTUNK a vásárló helyett („válassz te"): az
     # időpontot MINDKÉT módban ki kell mondani. Szöveges módban is, mert
@@ -195,30 +203,54 @@ def ajanlat_mondat(
     legkozelebbi: bool = False,
     nyelv: str = _NYELV_ALAPERTELMEZETT,
     mod: str = MOD_SZOVEGES,
+    zona: str | None = None,
 ) -> str:
     """Az ajánlat mondata.
 
-    **A két mód itt tér el a legjobban, és ez a lényeg.** Szöveges
-    csatornán a jelöltek KOPPINTHATÓ gombok, a mondat csak bevezeti
-    őket („Ezeket az időpontokat találtam — melyik jó?"). Hangon nincs
-    gomb, és nincs listázás sem: három felolvasott időpont
-    megjegyezhetetlen. Ezért beszélhető módban **a legkorábbi és EGY
-    alternatíva** hangzik el, kimondott órákkal, egyetlen kérdéssel:
+    **Mindkét mód KIMONDJA az időpontokat**, csak másképp. Ez 2026-09-20
+    óta van így: addig a szöveges mondat csak bevezette a gombokat
+    („Ezeket az időpontokat találtam — melyik jó?"), és az időpont
+    kizárólag gombfeliratként létezett. Egy gombfelirat viszont nem
+    része a beszélgetésnek: nem olvasható vissza, nem kerül az
+    előzménybe, és aki felolvastatja a képernyőt, annak egyszerűen
+    nincs ott. A gombok megmaradtak — a mondat nem helyettük szól,
+    hanem mellettük.
+
+    Szöveges csatornán MINDEN jelölt kezdete elhangzik, `8:00`
+    alakban; a gombokon ugyanaz áll, plusz a hossz. Hangon viszont
+    nincs listázás: három felolvasott időpont megjegyezhetetlen, ezért
+    **a legkorábbi és EGY alternatíva** hangzik el, kimondott órákkal:
 
         „A legkorábbi nyolc órakor van, de van kilenc harminckor is.
          Melyik jó?"
 
-    A többi jelölt nem vész el — a következő fordulóban kérhető
+    A többi jelölt ott sem vész el — a következő fordulóban kérhető
     („valami későbbit"), és a képernyőn ott is marad. Amit a hang nem
-    bír el, azt nem mondjuk ki, nem pedig gyorsabban mondjuk el."""
+    bír el, azt nem mondjuk ki, nem pedig gyorsabban mondjuk el.
+
+    `zona`: a szervezet időzónája. **Az órák HELYI időben hangzanak el**
+    (`helyi_ido.py`) — enélkül a rendszer a tárolt UTC-t mondaná, ami
+    télen egy, nyáron két órával téves időpont."""
+    kezdetek = [helyi_ido.helyi_iso(j["kezdet"], zona) for j in jeloltek if j.get("kezdet")]
+
     if not _beszelheto_e(mod):
-        return (
-            ajanlat_bevezetes_legkozelebbi_szoveg(nyelv=nyelv)
-            if legkozelebbi
-            else ajanlat_bevezetes_szoveg(nyelv=nyelv)
+        if legkozelebbi:
+            return ajanlat_bevezetes_legkozelebbi_szoveg(nyelv=nyelv)
+        if not kezdetek:
+            return ajanlat_bevezetes_szoveg(nyelv=nyelv)
+        # AZONOS KEZDET csak egyszer: a pontozó egy időpontra több
+        # jelöltet is adhat (más hosszúságú szolgáltatásokra). A
+        # gombokon a hossz megkülönbözteti őket, a mondatban nem —
+        # „8:00, 8:00 vagy 8:20" felsorolás lenne belőle.
+        egyediek: list[str] = []
+        for kezdet in kezdetek:
+            ora_perc = szamok.ora_perc_rovid(kezdet)
+            if ora_perc not in egyediek:
+                egyediek.append(ora_perc)
+        return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_bevezetes_idokkel"].format(
+            idok=_felsorolas(egyediek)
         )
 
-    kezdetek = [j["kezdet"] for j in jeloltek if j.get("kezdet")]
     if not kezdetek:
         # Nem hallgatunk el egy üres ajánlatot, de nem is találunk ki
         # időpontot hozzá: a bevezető mondat megy át a kimeneti kapun.
@@ -444,12 +476,17 @@ def tenyvalasz_szoveg(
     return str(mezok)
 
 
-def _ablak_datum_szoveg(datum_tol: str, datum_ig: str, napszak: str) -> str:
+def _ablak_datum_szoveg(
+    datum_tol: str, datum_ig: str, napszak: str, zona: str | None = None
+) -> str:
+    """A felismert ablak dátumrésze, HELYI naptár szerint.
+
+    A `[:10]` vágás önmagában nem elég: egy `23:30Z` kezdetű ablak
+    Budapesten már a KÖVETKEZŐ napon kezdődik (`helyi_ido.py`)."""
     nap_resz = _NAPSZAK_SZOVEG.get(napszak, "")
-    if datum_tol[:10] == datum_ig[:10]:
-        alap = datum_tol[:10]
-    else:
-        alap = f"{datum_tol[:10]} és {datum_ig[:10]} között"
+    tol = helyi_ido.helyi_datum(datum_tol, zona)
+    ig = helyi_ido.helyi_datum(datum_ig, zona)
+    alap = tol if tol == ig else f"{tol} és {ig} között"
     return f"{alap} {nap_resz}".strip()
 
 
@@ -663,6 +700,7 @@ def nyugtazo_szoveg(
     nyelv: str = _NYELV_ALAPERTELMEZETT,
     veletlen: random.Random | None = None,
     mod: str = MOD_SZOVEGES,
+    zona: str | None = None,
 ) -> str:
     """A keresés elindítása UTÁN, az eredmény megérkezése ELŐTT
     felolvasható sor — a hangcsatorna töltelékmondatának próbája (docs/
@@ -704,7 +742,9 @@ def nyugtazo_szoveg(
     datum_ig = felismert_ablak.get("datum_ig")
     if datum_tol and datum_ig:
         reszek.append(
-            _ablak_datum_szoveg(datum_tol, datum_ig, felismert_ablak.get("napszak", "barmikor"))
+            _ablak_datum_szoveg(
+                datum_tol, datum_ig, felismert_ablak.get("napszak", "barmikor"), zona
+            )
         )
 
     if not reszek:

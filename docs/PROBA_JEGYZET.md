@@ -84,6 +84,33 @@ beszélgetésben, amiben keresés még nem futott. Írd be háromszor, hogy
 katalógus → „Kezdjük a legelején: melyik boltba szeretnél menni?". A
 negyedikre jön csak az emberhez irányítás.
 
+## 2d. A felolvasó — mit kell hallani
+
+```
+python feladat.py hangproba          # megszólal-e egyáltalán
+python feladat.py hangproba --meres  # mennyi a csend a mondat előtt
+```
+
+A `--meres` a lényeges szám: **mondatonként 0,2 s körül** kell lennie.
+Ha 2 másodperc, akkor a Piper külön PROGRAMKÉNT fut, és minden
+megszólalásnál újratölti a hangmodellt — `pip install piper-tts`
+megoldja (ADR-033).
+
+A felületen, beszélhető módra kapcsolva:
+
+| próba | mit kell tapasztalnod |
+|---|---|
+| az első megszólalás | nem lassabb a többinél — az ablak indításkor betölti a hangot |
+| írj be egy új mondatot, amíg még beszél | az előző hang ELHALLGAT, nem csúszik egymásra a kettő |
+| időpont-ajánlat | a kimondott óra UGYANAZ, mint a gombon (helyi idő, nem UTC) |
+| bármelyik forduló, ahol gomb van | a mondat KÉRDEZ is — hangon nincs mire koppintani |
+
+Az utolsó kettőt a végigjátszás automatikusan is nézi:
+
+```
+python feladat.py vegigjatszas --mod beszelheto     # HANG-KIFOGÁS sorok
+```
+
 ## 3. Amit érdemes beírni
 
 **Mindhárom boltban van beosztás**, három különböző ritmusban — ez

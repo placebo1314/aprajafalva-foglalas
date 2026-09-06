@@ -48,6 +48,7 @@ python feladat.py naplo --archival                 # a próba-napló lezárása,
 python -m tools.ablak_meres                        # az előzmény-ablak hosszmérése
 python -m tools.vram_meres --modell qwen3.5:9b     # belefér-e a modell a VRAM-ba
 python feladat.py hangproba                        # felolvasás: megvan-e a Piper és a hang
+python feladat.py hangproba --meres                # mennyi a csend a mondat előtt
 ```
 
 A felület indításkor **előmelegíti a modellt** (háttérszálon, egy
@@ -60,6 +61,19 @@ szólal, ha van Piper és magyar hangmodell — `python feladat.py
 hangproba` megmondja, van-e, és ha nincs, mit kell telepíteni. Addig a
 mód a képernyőn olvasható marad, és a felület ezt ki is írja: a csend és
 a „nincs telepítve" korábban ugyanúgy nézett ki.
+
+A hangmodell **betöltve marad, és indításkor melegszik** (ADR-033):
+enélkül minden megszólalás új folyamatot indított és újratöltötte a
+60 MB-os hangot — mondatonként 2,07 s csend a mondat hosszától
+függetlenül. Betöltve tartva 0,2 s; `hangproba --meres` méri a saját
+gépen. Az új megszólalás elhallgattatja a régit, tehát két forduló
+hangja nem csúszik egymásra.
+
+**Minden képernyőre kerülő és minden felolvasott időpont HELYI idő**
+(ADR-033). A tárolás UTC marad (4. invariáns), a váltás egyetlen
+ponton történik (`assistant/valasz/helyi_ido.py`), a szervezet
+időzónája szerint. 2026-09-20 előtt a felület a nyers UTC-t mutatta,
+`(UTC)` felirattal — a 8 órakor nyitó bolt időpontjai 7 óraként.
 
 A szöveges fülön **kimeneti mód-kapcsoló** van (M6, hang-előkészítés): a
 `szöveges` a képernyőé, a `beszélhető` az, amit egy felolvasó kapna —

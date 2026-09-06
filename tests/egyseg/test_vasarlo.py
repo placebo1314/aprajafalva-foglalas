@@ -27,9 +27,27 @@ from ui.vasarlo import (
 _IDOSZAK = {"elso_nap": "2026-12-21", "utolso_nap": "2026-12-27", "boltok": ["Törpilla"]}
 
 
-def test_idopont_cimke_formazas():
-    cimke = _idopont_cimke("2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z")
-    assert cimke == "2026-08-18 08:00–08:30 (UTC)"
+def test_idopont_cimke_HELYI_idot_mutat():
+    """A tárolás UTC (CLAUDE.md 4. invariáns), a gomb a faliórát mutatja.
+
+    2026-09-20-ig `(UTC)` állt a gombon, nyers UTC órával: a demóadat
+    boltjai 8-kor nyitnak, a vásárló mégis 7 órát látott. Nem a formázás
+    volt csúnya — rossz időpontot mondtunk."""
+    cimke = _idopont_cimke("2026-08-18T08:00:00Z", "2026-08-18T08:30:00Z", "Europe/Budapest")
+    assert cimke == "2026-08-18 10:00–10:30", "nyáron +2 óra (CEST)"
+    assert "UTC" not in cimke
+
+
+def test_idopont_cimke_telen_egy_orat_told():
+    cimke = _idopont_cimke("2026-12-21T07:00:00Z", "2026-12-21T07:10:00Z", "Europe/Budapest")
+    assert cimke == "2026-12-21 08:00–08:10"
+
+
+def test_idopont_cimke_zona_nelkul_a_nyers_ertek():
+    """Zóna nélkül (nincs szervezet az adatbázisban) nincs mihez
+    igazítani — a nyers érték megy ki, de az „(UTC)" toldat akkor sem."""
+    cimke = _idopont_cimke("2026-12-21T07:00:00Z", "2026-12-21T07:10:00Z", None)
+    assert cimke == "2026-12-21 07:00–07:10"
 
 
 # --- horgony_most: a felület a beosztáshoz igazodik ------------------
@@ -249,6 +267,10 @@ def test_elozmeny_a_legutobbi_sorokra_vagodik():
 
 
 class _ModGazda:
+    # A megjelenítés helyi időt mutat (ADR-033) — a mód-gazdának is
+    # kell zóna, különben a mondatot építő metódusok elhasalnak rajta.
+    zona = "Europe/Budapest"
+
     # A felolvasás (ADR-029) a flush végén szólal meg; ez a duplum a
     # PUFFERELÉST méri, nem a hangot — ezért itt nem csinál semmit.
     def _felolvas(self, szoveg: str) -> None:
@@ -326,6 +348,8 @@ class _NyomGazda:
     _modellhivasok_szama = vasarlo_modul.VasarloApp._modellhivasok_szama
     _nyomkovetes = vasarlo_modul.VasarloApp._nyomkovetes
     _valasz_mondatok = vasarlo_modul.VasarloApp._valasz_mondatok
+
+    zona = "Europe/Budapest"
 
     def __init__(self, ertelmezo):
         self.orchestrator = type("Orch", (), {"ertelmezo": ertelmezo})()
@@ -417,7 +441,10 @@ def test_a_megerositest_ker_valasztipust_a_szoveges_ag_is_ismeri():
         gazda, valasz, vasarlo_modul.valasz_szoveg.MOD_BESZELHETO
     )
 
-    assert "December huszonkettedikén kilenc órakor" in mondat
+    # A tárolt idő 09:00Z, a kimondott HELYI: decemberben CET, tehát
+    # tíz óra (ADR-033). A visszaolvasás az a mondat, amire a vásárló
+    # igent mond — itt a legdrágább egy órát tévedni.
+    assert "December huszonkettedikén tíz órakor" in mondat
     assert mondat.endswith("?")
     assert "Nem értettem" not in mondat
 

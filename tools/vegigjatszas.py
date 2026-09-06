@@ -62,6 +62,7 @@ GYOKER = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(GYOKER))
 
 import ui.vasarlo as ui_vasarlo  # noqa: E402
+from assistant.valasz import beszelheto  # noqa: E402
 from seed.betolt import ALAP_DB_PATH  # noqa: E402
 
 # A végigjátszott beszélgetések. Az első nyolc a golden set `mintan_tul`
@@ -277,8 +278,9 @@ def vegigjatszas(
     print(f'"most" a szöveges úton: {app._most_iso()}\n')
 
     kilepokod = 0
+    hang_kifogasok: list[str] = []
     if not csak_robusztus:
-        _sajat_probak(app)
+        hang_kifogasok = _sajat_probak(app)
         _foglalasi_menet(app)
         _foglalasi_menet_irasban(app)
         _allapotsor_probak(app)
@@ -286,15 +288,40 @@ def vegigjatszas(
     if robusztus or csak_robusztus:
         kilepokod = _robusztus_halmaz(app)
 
+    # A HANG-KIFOGÁSOK a végén EGYBEN is — fordulónként könnyű elnézni
+    # őket egy több száz soros kimenetben. A kilépőkód is jelzi: a
+    # beszélhető mód hibája nem "kozmetikai", mert ott a képernyő nem
+    # segít ki.
+    if hang_kifogasok:
+        print()
+        print("!" * 72)
+        print(f"HANG-KIFOGÁSOK ({len(hang_kifogasok)}) — amit egy felolvasó mellett ülő")
+        print("vásárló nem kapna meg:")
+        for kifogas in hang_kifogasok:
+            print(f"  * {kifogas}")
+        print("!" * 72)
+        kilepokod = max(kilepokod, 1)
+    elif app.kimeneti_mod.get() != "szoveges":
+        print()
+        print("HANG-KIFOGÁS nincs: minden megszólalás átment a formai kapun,")
+        print("és ahol gomb volt, ott a kimondott szöveg is kérdezett.")
+
     app._close()
     return kilepokod
 
 
-def _sajat_probak(app) -> None:
+def _sajat_probak(app) -> list[str]:
+    """Végigjátssza a beszélgetéseket, és visszaadja a HANG-KIFOGÁSOKAT
+    (beszélhető módban; szöveges módban mindig üres) — l.
+    `_hang_kifogasok`."""
+    from assistant import valasz as valasz_szoveg
+
+    beszelheto_mod = app.kimeneti_mod.get() == valasz_szoveg.MOD_BESZELHETO
+    kifogasok: list[str] = []
     naplo_hossz = 0
-    for cimke, mondatok in BESZELGETESEK:
+    for cim, mondatok in BESZELGETESEK:
         print("=" * 72)
-        print(f"# {cimke}")
+        print(f"# {cim}")
         # Friss session ÉS friss előzmény — az `_uj_beszelgetes` mindkettőt
         # elintézi (ADR-019: az előzmény a beszélgetés bemenete, nem
         # szabad átcsordulnia a következő próbába).
@@ -322,7 +349,43 @@ def _sajat_probak(app) -> None:
             gombok = _gombfeliratok(app) + _jelolt_gombok(app)
             if gombok:
                 print(f"    gombok:      {gombok}")
+            for kifogas in _hang_kifogasok(uj_sorok, gombok) if beszelheto_mod else []:
+                print(f"    HANG-KIFOGÁS: {kifogas}")
+                kifogasok.append(f"{cim} / {mondat!r}: {kifogas}")
         print()
+    return kifogasok
+
+
+def _hang_kifogasok(uj_sorok: list[str], gombok: list[str]) -> list[str]:
+    """Amit egy FELOLVASÓ mellett ülő vásárló nem kapna meg — beszélhető
+    módban, fordulónként.
+
+    A végigjátszás eddig kiírta a mondatokat, de nem ELLENŐRIZTE őket.
+    Pedig a beszélhető mód épp arról szól, hogy a képernyő NEM elérhető:
+    ami csak gombon van, az ott nincs sehol.
+
+    Két dolgot néz:
+
+    1. **Formai kapu** (`beszelheto.tiltott_jelek`): zárójel, ISO-dátum,
+       kettőspontos felsorolás — az egységtesztek minden EGYES
+       sablonra futtatják, de az ÖSSZERAKOTT fordulóra eddig senki.
+    2. **Néma választás**: ha a forduló gombokat rajzol, a kimondott
+       szövegnek KÉRDÉSNEK kell lennie. Gomb önmagában néma; ha a
+       mondat nem kérdez, a vásárló nem tudja, hogy rajta a sor.
+
+    Amit szándékosan NEM néz: hogy MINDEN gomb elhangzik-e. A hangon
+    három időpont felsorolása megjegyezhetetlen, ezért az ajánlat
+    kettőt mond (`ajanlat_mondat` docstring) — a teljesség itt nem cél,
+    az ELINDÍTHATÓSÁG igen."""
+    rendszer_sorok = [s.split(": ", 1)[1] for s in uj_sorok if s.startswith("Rendszer: ")]
+    kifogasok = []
+    for sor in rendszer_sorok:
+        jelek = beszelheto.tiltott_jelek(sor)
+        if jelek:
+            kifogasok.append(f"tiltott jel ({', '.join(jelek)}): {sor[:60]}")
+    if gombok and not any("?" in sor for sor in rendszer_sorok):
+        kifogasok.append(f"{len(gombok)} gomb, de a kimondott szöveg nem kérdez")
+    return kifogasok
 
 
 def _robusztus_halmaz(app) -> int:
