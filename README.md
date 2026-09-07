@@ -45,6 +45,7 @@ python feladat.py vegigjatszas  # ugyanaz fej nélkül, végigjátszva
 python feladat.py vegigjatszas --mod beszelheto   # …felolvasásra szánt kimenettel
 python feladat.py golden --halmaz beszedhelyzetek  # a harmadik golden halmaz
 python feladat.py naplo --archival                 # a próba-napló lezárása, új naplóval
+python feladat.py utvonal                          # egy beszélgetés útvonala, lépegetve
 python -m tools.ablak_meres                        # az előzmény-ablak hosszmérése
 python -m tools.vram_meres --modell qwen3.5:9b     # belefér-e a modell a VRAM-ba
 python feladat.py hangproba                        # felolvasás: megvan-e a Piper és a hang

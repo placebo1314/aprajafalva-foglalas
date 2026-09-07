@@ -242,6 +242,7 @@ def _proba_naplo_ir(
     prompt_verzio: str | None = None,
     allapot: dict | None = None,
     nyomkovetes: dict | None = None,
+    session_id: str | None = None,
 ) -> None:
     """Egy fordulót ír a `naplo/probak.jsonl`-be — l. modul docstring,
     "Próba-napló". A mezők azért ennyien vannak, mert tesztelés közben
@@ -282,6 +283,17 @@ def _proba_naplo_ir(
     PROBA_NAPLO_UTVONAL.parent.mkdir(parents=True, exist_ok=True)
     sor = {
         "idobelyeg": _most_iso(),
+        # MELYIK BESZÉLGETÉS. Enélkül a napló FORDULÓK listája volt, nem
+        # beszélgetéseké: az „új beszélgetés" gomb nem hagyott nyomot,
+        # tehát utólag csak az időbélyegek közti szünetből lehetett
+        # sejteni, hol ér véget az egyik menet és hol kezdődik a másik.
+        # Egy útvonal viszont csak azon belül értelmezhető: az állapot,
+        # a megőrzött paraméterek és az előzmény mind a session-höz
+        # tartoznak (`tools/utvonal.py`).
+        #
+        # A session-azonosító UUID, nem vásárlói adat — nem redaktáljuk,
+        # de nem is köthető személyhez: minden indításnál új.
+        "session_id": session_id,
         "bemenet": redaktal(bemenet),
         "normalizalt": redaktal(normalizalt),
         "reteg": reteg,
@@ -774,8 +786,42 @@ class VasarloApp(tk.Tk):
             wraplength=680,
         ).pack(anchor="w")
 
+    def _gomb_naplo(self, akcio: str, bemenet: str, valasz: dict) -> None:
+        """Egy KOPPINTÁSSAL kiváltott forduló a próba-naplóba.
+
+        A napló sokáig csak a beírt mondatokat rögzítette, a
+        gombnyomásokat nem — így a beszélgetés útvonala az ajánlatnál
+        MEGSZAKADT: a naplóból nem derült ki, hogy a vásárló választott-e
+        időpontot, megerősítette-e, és létrejött-e a foglalás. Épp az a
+        rész hiányzott, ami miatt az egész van.
+
+        A `reteg` itt `felulet:<akcio>`, nem `szabaly` vagy `llm`:
+        koppintásnál nincs mit ÉRTELMEZNI, a szándék egyértelmű. Ez az
+        útvonal-nézőben (`tools/utvonal.py`) is így látszik — és ez a
+        lényeg: egy gombnyomás nem ugyanaz a bizonyíték, mint egy
+        helyesen értelmezett mondat."""
+        _proba_naplo_ir(
+            bemenet,
+            {"eszkoz": akcio, "parameterek": {}},
+            f"felulet:{akcio}",
+            valasz_tipus=valasz.get("tipus") or ("sikeres" if valasz.get("sikeres") else "hiba"),
+            uzenet_kulcs=valasz.get("uzenet_kulcs"),
+            allapot=self.orchestrator.utolso_allapot,
+            session_id=self.session_id,
+            nyomkovetes={
+                "valasz_szovegesen": self._valasz_mondatok(valasz, valasz_szoveg.MOD_SZOVEGES),
+                "valasz_beszelhetoen": self._valasz_mondatok(valasz, valasz_szoveg.MOD_BESZELHETO),
+                "lepesek": [],
+                "mezo_forras": {},
+                "modellhivas_db": 0,
+            },
+        )
+
     def _jelolt_valaszt(self, keret: ttk.Frame, jelolt: dict, uzenet_label: ttk.Label) -> None:
         valasz = self.orchestrator.valaszt(self.session_id, jelolt["slot_id"])
+        self._gomb_naplo(
+            "jelolt_koppintas", _idopont_cimke(jelolt["kezdet"], jelolt["veg"], self.zona), valasz
+        )
         if valasz.get("tipus") != "megerositest_ker":
             uzenet_label.config(
                 text=valasz_szoveg.hiba_szoveg(
@@ -831,6 +877,7 @@ class VasarloApp(tk.Tk):
             return
         kulcs_hash = ideiglenes_hash(azonosito_bevitel)
         valasz = self.orchestrator.megerosit(self.session_id, kulcs_hash)
+        self._gomb_naplo("megerosites", "Igen, foglaljuk le", valasz)
         for widget in keret.winfo_children():
             widget.destroy()
         if valasz.get("tipus") == "visszaigazolas":
@@ -845,7 +892,7 @@ class VasarloApp(tk.Tk):
             uzenet_label.config(text=valasz_szoveg.hiba_szoveg(kulcs, mod=mod))
 
     def _elvet(self, keret: ttk.Frame, uzenet_label: ttk.Label) -> None:
-        self.orchestrator.elvet(self.session_id)
+        self._gomb_naplo("elvetes", "Mégse", self.orchestrator.elvet(self.session_id) or {})
         for widget in keret.winfo_children():
             widget.destroy()
         uzenet_label.config(text=valasz_szoveg.elvetve_szoveg(mod=self._mod()))
@@ -1043,6 +1090,7 @@ class VasarloApp(tk.Tk):
         for widget in self.szo_gombsor.winfo_children():
             widget.destroy()
         valasz = self.orchestrator.alternativa_kereses(self.session_id, dimenzio)
+        self._gomb_naplo(f"alternativa:{dimenzio}", "(alternatíva-gomb)", valasz)
         self._szoveges_valasz_kezel(valasz)
 
     def _mod(self) -> str:
@@ -1240,7 +1288,19 @@ class VasarloApp(tk.Tk):
             # értelmező meg sem szólal — ilyenkor az ő `utolso_reteg`-je
             # az ELŐZŐ fordulóé lenne, ami néma félrevezetés a naplóban.
             valasz.get("reteg") or getattr(self.orchestrator.ertelmezo, "utolso_reteg", None),
-            normalizalt=getattr(self.orchestrator.ertelmezo, "utolso_normalizalt", None),
+            # A NORMALIZÁLT ALAK CSAK AKKOR, ha az értelmező tényleg
+            # futott. Rövidzárnál (`orchestrator:sorszam`,
+            # `orchestrator:megerosites`) a mondat el sem jut a
+            # normalizálóig, tehát az attribútum még az ELŐZŐ fordulóé
+            # — az útvonal-néző fogta meg, ahogy egy „a másodikat
+            # kérem" mellett a két fordulóval korábbi „Törpillához
+            # mennék holnap" állt normalizált alakként. Egy elavult
+            # mező rosszabb, mint a hiányzó: úgy néz ki, mint egy tény.
+            normalizalt=(
+                getattr(self.orchestrator.ertelmezo, "utolso_normalizalt", None)
+                if not (valasz.get("reteg") or "").startswith("orchestrator:")
+                else None
+            ),
             valasz_tipus=valasz.get("tipus") or ("sikeres" if valasz.get("sikeres") else "hiba"),
             valaszido_masodperc=valaszido,
             uzenet_kulcs=valasz.get("uzenet_kulcs"),
@@ -1250,6 +1310,7 @@ class VasarloApp(tk.Tk):
             prompt_verzio=getattr(self._llm_reteg(), "utolso_prompt_verzio", None),
             allapot=self.orchestrator.utolso_allapot,
             nyomkovetes=self._nyomkovetes(valasz, hivasok_elotte),
+            session_id=self.session_id,
         )
         self._szoveges_valasz_kezel(valasz)
 
@@ -1374,6 +1435,18 @@ class VasarloApp(tk.Tk):
                     zona=self.zona,
                 )
             )
+        elif tipus == "visszaigazolas":
+            # A LÉTREJÖTT FOGLALÁS mondata. Sokáig kimaradt innen, mert
+            # ez a metódus a naplózás és a riport kedvéért van, a
+            # foglalás pedig gombnyomásból keletkezett — amit a napló
+            # eddig nem is rögzített. Az útvonal-néző fogta meg: a
+            # beszélgetés utolsó, LEGFONTOSABB fordulójánál üresen
+            # maradt az „amit a vásárló látott" sor.
+            reszek.append(
+                valasz_szoveg.sikeres_foglalas_szoveg(valasz.get("foglalasi_kod", ""), mod=mod)
+            )
+        elif tipus == "elvetve":
+            reszek.append(valasz_szoveg.elvetve_szoveg(mod=mod))
         elif valasz.get("uzenet_kulcs"):
             reszek.append(valasz_szoveg.hiba_szoveg(valasz["uzenet_kulcs"], mod=mod))
         elif valasz.get("sikeres"):

@@ -9,6 +9,7 @@ python feladat.py seed [--ujra]
 python feladat.py vegigjatszas [--db UTVONAL] [--robusztus] [--mod szoveges|beszelheto|mindketto]
 python feladat.py naplo [--utolso N] [--golden SOR] [--fajl UTVONAL] [--archival]
 python feladat.py riport [--utolso N] [--ki UTVONAL] [--fajl UTVONAL] [--megnyit]
+python feladat.py utvonal [--session ELEJE] [--fajl UTVONAL] [--szoveg] [--utolso N]
 python feladat.py hangproba [--mondat "..."] [--csak-diagnozis]
 python feladat.py lint
 
@@ -67,6 +68,14 @@ lépésenkénti idő, és a kimenő válasz MINDKÉT módban. A `naplo`
 összesít, ez elmélyed: az egyik megmondja, hogy baj van, a másik azt,
 hogy mi. A `--fajl` itt is archív naplót nyit meg, és a riport fejléce
 kiírja, melyikből készült.
+
+Az `utvonal` EGY BESZÉLGETÉS útvonalát mutatja lépésről lépésre
+(`tools/utvonal.py`), Előző/Következő gombokkal — és fordulónként azt
+is, MIÉRT oda ment tovább: elkapta-e a kapuőr, mit adott a modell és
+mit a dátumparser, melyik nyert, mely mezők jöttek honnan, hova lépett
+az állapotgép. A `naplo` összesít, a `riport` egy fordulót bont ki
+mélységében, ez pedig a BESZÉLGETÉST teszi az elemzés egységévé. A
+`--szoveg` ablak nélkül, konzolra írja ugyanezt.
 
 A `hangproba` egyetlen mondatot szintetizál és lejátszik
 (`tools/hangproba.py`) — és ha nem megy, MEGMONDJA, miért: nincs Piper,
@@ -140,6 +149,10 @@ def riport(argv: list[str]) -> int:
     return fut([sys.executable, "-m", "tools.beszelgetes_riport", *argv])
 
 
+def utvonal(argv: list[str]) -> int:
+    return fut([sys.executable, "-m", "tools.utvonal", *argv])
+
+
 def hangproba(argv: list[str]) -> int:
     return fut([sys.executable, "-m", "tools.hangproba", *argv])
 
@@ -163,6 +176,7 @@ FELADATOK = {
     "vegigjatszas": vegigjatszas,
     "naplo": naplo,
     "riport": riport,
+    "utvonal": utvonal,
     "hangproba": hangproba,
     "lint": lint,
 }

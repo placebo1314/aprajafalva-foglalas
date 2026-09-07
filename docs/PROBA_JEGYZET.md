@@ -195,6 +195,36 @@ Egy fordulót kinyitva ezt látod, ebben a sorrendben:
 A fejlécben: fordulószám, réteg-megoszlás, p50/p95 válaszidő és
 tendencia, visszakérdezések, kiút/ismétlés száma.
 
+### Egy BESZÉLGETÉS útvonala, lépésről lépésre
+
+```
+python feladat.py utvonal                     # ablak, Előző/Következő gombokkal
+python feladat.py utvonal --szoveg --utolso 1 # ugyanaz konzolra, az utolsó menet
+python feladat.py utvonal --session 355bdfa3  # egy konkrét session (elég az eleje)
+```
+
+A `riport` EGY fordulót bont ki mélységében, ez viszont a
+BESZÉLGETÉST viszi végig: bal oldalt a session-lista (mikor, hány
+forduló, mire jutott), jobb oldalt a lépegető. A nyílbillentyűk is
+lépnek.
+
+Fordulónként három blokk, és a második a lényeg:
+
+| blokk | mire felel |
+|---|---|
+| **Mi történt** | mit írtál be, mit látott belőle a rendszer, mi lett belőle, és **mit látott a vásárló** |
+| **Miért így döntött** | elkapta-e a kapuőr, melyik réteg döntött, mely mezők jöttek honnan, a dátumverseny (modell vs. parser, ki nyert), a bizonyosság |
+| **Hova tovább** | állapotátmenet, mit kínáltunk fel — és mit mondott rá a vásárló |
+
+**Amit érdemes keresni benne:** olyan fordulót, ahol az állapot MARADT,
+pedig haladnia kellett volna; ahol a mezőforrás „modell" olyasminél,
+amit ki sem mondtál; és ahol a dátumot a parser oldotta fel, de nem
+oda, ahova gondoltad.
+
+A `~` jel a session-listában azt jelenti, hogy a beszélgetés határai
+BECSÜLTEK: a 2026-09-21 előtti naplósorokban még nincs
+session-azonosító, ott az időköz csoportosít.
+
 ### A nyers napló, ha az kell
 
 A `naplo/probak.jsonl` fordulónként egy JSON-sor. A fontos mezők:

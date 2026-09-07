@@ -1,6 +1,37 @@
-# Állapot — 2026-09-20 (frissítve: A RENDSZER ROSSZ ÓRÁT MONDOTT —
-helyi idő a megjelenítésben, és a felolvasó három hibája — ADR-033.
-Előzőleg: a bevezetési rés, ADR-032)
+# Állapot — 2026-09-21 (frissítve: A NAPLÓ BESZÉLGETÉSEKRE BOMLIK —
+útvonal-néző, session-azonosító, és a koppintás is nyomot hagy —
+ADR-034. Előzőleg: helyi idő a megjelenítésben, ADR-033)
+
+**A 2026-09-21-i kör három mondata:**
+
+1. **A napló FORDULÓK listája volt, nem beszélgetéseké.** Nem volt
+   session-azonosító: az „új beszélgetés" gomb nem hagyott nyomot,
+   tehát utólag csak az időbélyegek szünetéből lehetett sejteni, hol ér
+   véget az egyik menet. Mostantól minden sorban ott az azonosító, és a
+   régi sorokra a nézet KIÍRJA, hogy a határ becsült.
+2. **A koppintás nem került a naplóba** — csak a beírt mondatok. Az
+   útvonal ezért az AJÁNLATNÁL megszakadt: nem derült ki, választott-e a
+   vásárló, megerősítette-e, létrejött-e a foglalás. Épp az a rész
+   hiányzott, amiért az egész van. A gombos fordulók `felulet:<akcio>`
+   réteggel naplóznak — **egy gombnyomás nem ugyanaz a bizonyíték, mint
+   egy helyesen értelmezett mondat.**
+3. **Két mező elavultan öröklődött**, és ezt az új nézet fogta meg: egy
+   koppintással lefoglalt időpont három naplósorában ugyanaz az átmenet
+   állt (`INDULAS -> AJANLAT_VAR`), a normalizált alak mezőjében pedig a
+   két fordulóval korábbi mondat. **Egy elavult mező rosszabb, mint a
+   hiányzó: úgy néz ki, mint egy tény.**
+
+**Az új nézet** (`python feladat.py utvonal`): session-választó és
+lépegető (Előző/Következő, nyílbillentyűk), fordulónként három blokkal
+— *mi történt*, *miért így döntött* (kapuőr, réteg, rövidzár,
+mezőforrások, a dátumverseny, bizonyosság), *hova tovább* (állapot,
+átmenet, és mit mondott rá a vásárló). A magyarázatot **nem találjuk
+ki**: minden mondata a naplóban álló mezőre mutat vissza; ahol a napló
+hallgat, ott a nézet rövidebb.
+
+**Mérve:** 1097 egységteszt zöld (+21 ebben a körben, köztük három
+valódi Tk-ablakos), a nézet ugyanazt a szöveget adja az ablakban és a
+`--szoveg` kimenetben.
 
 **A 2026-09-20-i kör négy mondata** (kézi próba,
 `docs/HELYI_IDO_ES_FELOLVASO_20260920.md`):

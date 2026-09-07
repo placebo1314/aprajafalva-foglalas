@@ -339,11 +339,26 @@ class Orchestrator:
         Minden váltás ezen megy át, a gombos és a szöveges úton
         egyaránt: a felület közvetlenül is hívja a `valaszt()`/
         `megerosit()`/`elvet()` metódusokat, és ha azok másképp
-        vezetnék az állapotot, a kettő szétcsúszna."""
+        vezetnék az állapotot, a kettő szétcsúszna.
+
+        **A MEGFIGYELÉSI mezőt is itt frissítjük** (`utolso_allapot`),
+        nem csak a `fordulo()` végén. Az útvonal-néző
+        (`tools/utvonal.py`) fogta meg, miért kell: egy koppintással
+        lefoglalt időpont HÁROM naplósorában ugyanaz az átmenet állt
+        (`INDULAS -> AJANLAT_VAR`), mert a gombos utak nem írták felül —
+        a napló tehát azt állította, hogy a foglalás pillanatában a
+        beszélgetés még ajánlatra várt. Egy elavult átmenet rosszabb,
+        mint a semmi: úgy néz ki, mint egy tény."""
+        elotte = allapot.allapot
         vegleges = allapotgep.atmenet(allapot.allapot, uj)
         if vegleges != allapot.allapot:
             allapot.utolso_atmenet = (allapot.allapot, vegleges)
             allapot.allapot = vegleges
+        self.utolso_allapot = {
+            "elotte": elotte,
+            "utana": allapot.allapot,
+            "valtozott": elotte != allapot.allapot,
+        }
 
     def allapot_sor(self, session_id: str) -> str | None:
         """Az ÁLLAPOTSOR a modellnek — hol tart a beszélgetés, és mit
