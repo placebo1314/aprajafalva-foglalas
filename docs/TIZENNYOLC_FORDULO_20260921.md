@@ -170,6 +170,80 @@ frusztráció-figyelő egy SIKERES megerősítést is kiúttá alakított.
 - **Az út hossza még nincs 5 alatt** a régi beszélgetéseken. Az új
   szám épp azért van, hogy ez látszódjon.
 
+## Utóirat: a kiváltó feltétel MÁSNAP teljesült (2026-09-22)
+
+Az ADR-035 ezt írta kiváltó feltételként:
+
+> az `ajanlat_emlekezteto` elnyel egy valódi új kérést (a naplóban
+> emlékeztető olyan mondatra, ami boltot vagy dátumot mondott) — ekkor
+> a kapu túl széles
+
+**Az első végigjátszáson teljesült.** A „csütörtök?" és az „Egy pénteki
+nap kellene" mondatra ugyanaz a felsorolás ment ki, amit a vásárló épp
+nem kért.
+
+A javítás három lépcsős, és a sorrendjük a lényeg:
+
+1. **Ha a mondat NAPOT mond, az kérés** — akkor is, ha a modell nem
+   tudta eszközhívássá alakítani. A nap a mondatban van, a bolt a
+   megőrzött kontextusban: ez elég egy kereséshez
+   (`_kimondott_nap_kereses`).
+2. **Ha ugyanaz a keresés jönne ki**, mint az előző, a kör-megszakító
+   emlékeztet. Ez nem mond ellent az elsőnek: előbb megpróbáljuk
+   teljesíteni a kérést, és csak a keresés szintjén derül ki, hogy
+   ugyanoda jutnánk.
+3. **Ami se nem választás, se nem nap**, arra megy az emlékeztető.
+
+Ugyanez a futás fogott meg egy negyedik hibát is: a bizonytalanság-kapu
+`hianyzo_mezo: "eszkoz"` értékéből **„Ehhez még kellene tudnom:
+eszkoz."** lett a képernyőn. Az „eszkoz" a MI szavunk, nem a vásárlóé —
+most azt kérdezi, amit egy pultos kérdezne („mit szeretnél pontosan").
+
+### Az alkérdés determinisztikus lett
+
+A `tizennyolc` réteg mindkét maradék bukása ugyanaz volt: a helyes
+eszköz (`ajanlat_kerdes`), rossz alkérdéssel. Az irány és a nap-kérdés
+viszont determinisztikusan LÁTSZIK a mondatban:
+
+| mondat | felismerés |
+|---|---|
+| „van későbbi?", „10 után kéne" | `van_kesobbi` |
+| **„nem jó nekem ilyen korán"** | `van_kesobbi` — a KORAI szó, mégis későbbi |
+| „nem jó ilyen későn" | `van_korabbi` — a tükörpár |
+| „ez minden nap van?", „melyik nap?" | `melyik_nap` |
+| „kilenc jó lesz" | — (nincs irány, a modell dönt) |
+
+A „korán" **hamis barát**: szó szerint a korait említi, a jelentése
+mégis az, hogy későbbit kér. Egy szólistás megoldás pontosan fordítva
+döntene — ezért a tagadás külön szabály, nem kivétel.
+
+Ezzel a `tizennyolc` réteg **100%** (12/12), a beszédhelyzetek halmaz
+**94,1%**. A három stabil bukás mind RÉGI és ismert
+(`meggondolas-02`, `kozbevetes-01/02`), ehhez a körhöz nincs közük.
+
+### Az út hossza, mérve
+
+A próba tíz mondatát a VALÓDI felületen végigjátszva:
+
+| | megerősítésig |
+|---|---|
+| az eredeti próba | **17 forduló** |
+| a javítások után | **9 forduló** |
+
+Még mindig a cél (5) fölött — de a maradék hossz már nem a rendszeré: a
+vásárló hat feltáró kérdést tett fel, mielőtt napot mondott volna, és
+mostantól mind a hatra MÁS és hasznos választ kap. Az 5 fordulós cél
+arra vonatkozik, aki tudja, mit akar.
+
+### A köznyelvi szótár határa — szerkezetivé téve
+
+A szótár szavai hétköznapi magyar szavak („beszélgetés", „öröm",
+„robbantás"), és a „jó beszélgetés volt, köszi" mondatban nincs
+foglalási szándék. A teljes úton eddig sem lett belőle keresés (a
+modell `nincs`-et ad, és az ág eldobja a paramétereket) — de az
+VÉLETLEN védelem volt. Mostantól a szótár csak FOGLALÁSI eszközöknél
+tölthet ki boltot, zárt eszközhalmazzal.
+
 ## Reprodukció
 
 ```

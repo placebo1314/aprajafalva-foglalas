@@ -151,6 +151,14 @@ RETEG_SZABALY_TENYVALASZ = "szabaly:tenyvalasz"
 RETEG_SZABALY_TARTALEK = "szabaly:tartalek"
 
 
+# Melyik eszköznél TÖLTHETI ki a köznyelvi szótár a boltot (ADR-035).
+# Zárt halmaz: ami nem foglalásról vagy bolti tényről szól, ott egy
+# hétköznapi szó („beszélgetés", „öröm") nem jelent boltot.
+_KOZNYELVI_BOLTOT_FOGADO = frozenset(
+    {"szabad_idopontok", "legkozelebbi_idopont", "bolt_info", "visszakerdez"}
+)
+
+
 class ForditottKaszkadErtelmezo:
     """Az `Ertelmezo` protokoll fordított kaszkád implementációja — l.
     modul docstring.
@@ -386,7 +394,14 @@ class ForditottKaszkadErtelmezo:
         # szolgáltatást a maga szavával („örömöt szeretnék"), a bolt
         # ebből következik. A modell döntését NEM írjuk felül: csak azt
         # töltjük ki, amit üresen hagyott.
-        if parameterek.get("bolt_id") in (None, MINDEGY):
+        #
+        # **CSAK FOGLALÁSI ESZKÖZÖKRE.** A szótár szavai hétköznapi
+        # magyar szavak — „beszélgetés", „öröm", „robbantás", „vigasz" —,
+        # és egy „jó beszélgetés volt, köszi" mondatban nincs
+        # foglalási szándék. A teljes úton ma sem lett belőle keresés
+        # (a modell `nincs`-et ad, és az ág eldobja a paramétereket),
+        # de az VÉLETLEN védelem: ez a feltétel teszi szerkezetivé.
+        if eszkoz in _KOZNYELVI_BOLTOT_FOGADO and parameterek.get("bolt_id") in (None, MINDEGY):
             koznyelvi = self._koznyelvi_bolt(mondat, kontextus)
             if koznyelvi:
                 parameterek["bolt_id"] = koznyelvi
@@ -421,6 +436,18 @@ class ForditottKaszkadErtelmezo:
             mit = parameterek.get("mit_kerdez")
             if mit not in ajanlat_kerdes.KERDESFAJTAK:
                 return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
+            # AZ IRÁNYT a mondat dönti el, ha kimondja (ADR-035). A
+            # modell az ESZKÖZT megbízhatóan eltalálja, az irányt
+            # billegteti — és egy rossz irányba tolt ablak épp attól
+            # viszi el a keresést, amit a vásárló kért.
+            # A NAP-KÉRDÉS erősebb, mint az irány: az „ez minden nap
+            # van?" mondatban nincs irány, a modell mégis adott egyet.
+            if rule_based.ajanlat_nap_kerdes(mondat):
+                mit = ajanlat_kerdes.MELYIK_NAP
+            else:
+                irany = rule_based.ajanlat_irany(mondat)
+                if irany and mit in ("van_kesobbi", "van_korabbi"):
+                    mit = irany
             uj_parameterek = {"mit": mit}
             sorszam = parameterek.get("sorszam")
             if isinstance(sorszam, int) and sorszam >= 1:

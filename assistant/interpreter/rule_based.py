@@ -605,3 +605,101 @@ def foglalasi_kod_kiolvas(eredeti_mondat: str) -> str | None:
     modelltől: a kód karaktersorozat, ott egy elrontott betű néma hibát
     okozna."""
     return _foglalasi_kod(eredeti_mondat)
+
+
+# ---------------------------------------------------------------------
+# KÉSŐBBI VAGY KORÁBBI — az ajánlat-kérdés IRÁNYA (ADR-035)
+#
+# Mérve (2026-09-21, két futás): a modell az `ajanlat_kerdes` eszközt
+# megbízhatóan eltalálja, az IRÁNYT viszont billegteti — ugyanarra a
+# mondatra egyszer `van_kesobbi`, másszor `van_korabbi`. A `tizennyolc`
+# golden réteg mindkét bukása ez volt.
+#
+# Az irány viszont determinisztikusan LÁTSZIK a mondatban, és a kár
+# nem elhanyagolható: rossz irányba tolt ablak épp attól viszi el a
+# keresést, amit a vásárló kért.
+#
+# **A „korán" HAMIS BARÁT, és ez a modul lényege.** A „nem jó nekem
+# ilyen korán" szó szerint a KORAI-t említi, a jelentése mégis az, hogy
+# későbbit kér. Egy szólistás megoldás pontosan fordítva döntene —
+# ezért a tagadás és a „túl" külön szabály, nem kivétel.
+_KESOBBI_MINTAK = (
+    # Kimondott későbbi: „későbbi", „később", „későbbre", „kései".
+    re.compile(r"\bkés[őo]bb"),
+    re.compile(r"\bkés[őo]i\b"),
+    # Időpont UTÁN: „10 után", „tíz óra után", „ebéd után".
+    re.compile(r"\but[áa]n\b"),
+    # A KORAI ELUTASÍTÁSA — tagadva vagy fokozva. Ez a hamis barát:
+    # a mondat a „korán" szót tartalmazza, a kérés mégis későbbi.
+    re.compile(r"\bnem\b[^.?!]{0,20}\bkor[áa]n"),
+    re.compile(r"\bt[úu]l\s+kor[áa]n"),
+    re.compile(r"\bkor[áa]n\s+van\b"),
+)
+
+_KORABBI_MINTAK = (
+    re.compile(r"\bkor[áa]bb"),
+    re.compile(r"\bhamarabb\b"),
+    re.compile(r"\bel[őo]bb\b"),
+    # Időpont ELŐTT: „10 előtt", „dél előtt".
+    re.compile(r"\bel[őo]tt\b"),
+    re.compile(r"\bnem\b[^.?!]{0,20}\bk[ée]s[őo]"),
+)
+
+
+# NAP-KÉRDÉS a felajánlott időpontokról: „melyik nap?", „ez minden nap
+# van?", „ez mikor van?". Nem irány, hanem a LISTÁRÓL szóló kérdés —
+# és a mondat kimondja, tehát nem kell a modellre bízni.
+_MELYIK_NAP_MINTAK = (
+    re.compile(r"\bmelyik\s+nap"),
+    re.compile(r"\bminden\s+nap\b"),
+    re.compile(r"\bmilyen\s+nap"),
+    re.compile(r"\bmikor\s+van\b"),
+    re.compile(r"\bmelyik\s+napra\b"),
+)
+
+
+def ajanlat_nap_kerdes(mondat: str) -> bool:
+    """A felajánlott időpontok NAPJÁRÓL kérdez-e a mondat.
+
+    Mérve (2026-09-21/22): a modell az `ajanlat_kerdes` eszközt
+    eltalálja, de az „ez minden nap van?" mondatra `van_kesobbi`-t adott
+    — pedig a mondat kimondja, hogy a NAPRA kérdez. Ugyanaz az elv,
+    mint az iránynál: a modell ÉRT, a determinisztikus réteg FELOLD."""
+    return any(minta.search(normalizal(mondat).lower()) for minta in _MELYIK_NAP_MINTAK)
+
+
+def ajanlat_irany(mondat: str) -> str | None:
+    """`"van_kesobbi"` / `"van_korabbi"` / `None` — melyik irányba kér.
+
+    `None`, ha a mondat nem mond irányt: ilyenkor a MODELL döntése áll,
+    nem találunk ki semmit.
+
+    A KÉSŐBBI előbb dől el, mint a korábbi, mert a „nem jó ilyen korán"
+    mindkét mintacsoportra illeszkedne (a „korán" szó miatt) — és a
+    jelentése egyértelműen későbbi."""
+    also = normalizal(mondat).lower()
+    if any(minta.search(also) for minta in _KESOBBI_MINTAK):
+        return "van_kesobbi"
+    if any(minta.search(also) for minta in _KORABBI_MINTAK):
+        return "van_korabbi"
+    return None
+
+
+def kimondott_nap(mondat: str) -> bool:
+    """Tartalmaz-e a mondat KIMONDOTT naptári napot („csütörtök?",
+    „egy pénteki nap kellene", „28-án", „jövő héten")?
+
+    Ugyanazokat a POZITÍV bizonyítékokat nézi, amiket a dátumablak
+    feloldása (`_datum_ablak_explicit`): napnév, naptári dátum, vagy
+    hét-jelző. Nem oldja fel a dátumot — csak azt mondja meg, hogy a
+    vásárló mondott-e egyáltalán napot.
+
+    Kell hozzá (ADR-035): az ajánlat-emlékeztető nem nyelhet el egy
+    valódi kérést, és egy megnevezett nap kérés — akkor is, ha a modell
+    nem tudta eszközhívássá alakítani."""
+    also = normalizal(mondat).lower()
+    return bool(
+        _NAP_JELZO_MINTA.search(also)
+        or _DATUM_JELZO_MINTA.search(also)
+        or _HET_JELZO_MINTA.search(also)
+    )

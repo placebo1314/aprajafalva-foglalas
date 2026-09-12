@@ -243,6 +243,14 @@ SABLONOK: dict[str, dict[str, object]] = {
                 "foglalasi_kod": "mi a foglalási kódod",
                 "datum_tol": "mikorra szeretnél időpontot",
                 "uj_datum": "melyik napra tennéd át",
+                # AZ „ESZKOZ" A MI SZAVUNK, nem a vásárlóé. A
+                # bizonytalanság-kapu ezt a mezőnevet adja, amikor nem
+                # tudja, MIT akar a vásárló — és a nyers tartalék
+                # („Ehhez még kellene tudnom: eszkoz.") kimondva
+                # értelmezhetetlen. A végigjátszás fogta meg,
+                # 2026-09-21. Itt nem a mezőt nevezzük meg, hanem azt
+                # kérdezzük, amit egy pultos kérdezne.
+                "eszkoz": "mit szeretnél pontosan",
             },
         },
         # ------------------------------------------------------------

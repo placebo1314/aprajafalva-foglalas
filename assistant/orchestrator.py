@@ -527,10 +527,10 @@ class Orchestrator:
             # adatgyűjtéshez (ADR-035). A „melyik eszközt akartad?"
             # kérdés amúgy is értelmezhetetlen a vásárlónak — ha már
             # állnak ajánlataink, azokra emlékeztetünk.
-            if allapot.aktualis_jeloltek and allapot.allapot in (
-                allapotgep.AJANLAT_VAR,
-                allapotgep.MEGEROSITES_VAR,
-            ):
+            napi = self._kimondott_nap_kereses(allapot, mondat, most)
+            if napi is not None:
+                return napi
+            if self._emlekeztetni_kell(allapot, mondat):
                 return self._ajanlat_emlekezteto(allapot)
             allapot.sikertelen_ertelmezesek += 1
             return bizonytalan
@@ -587,7 +587,9 @@ class Orchestrator:
             # vásárlónak semmit nem mond —, hanem a szokásos úton
             # kérdezünk vissza.
             if not allapot.aktualis_jeloltek:
-                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+                return self._visszakerdez(
+                    allapot, {"varhato_kerdes_tipusa": "nyitott"}, mondat, most
+                )
             allapot.sikertelen_ertelmezesek = 0
             eredmeny = ajanlat_kerdes.hivas(parameterek, jeloltek=allapot.aktualis_jeloltek)
             if not eredmeny["sikeres"]:
@@ -610,7 +612,9 @@ class Orchestrator:
             if allapot.allapot != allapotgep.MEGEROSITES_VAR or not allapot.valasztott_slot_id:
                 # Nem ebben az állapotban vagyunk — a modell tévedett.
                 # Nem foglalunk és nem is vetünk el semmit.
-                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+                return self._visszakerdez(
+                    allapot, {"varhato_kerdes_tipusa": "nyitott"}, mondat, most
+                )
             if dontes == "nem":
                 valasz = self.elvet(session_id)
                 valasz["jeloltek"] = list(allapot.aktualis_jeloltek)
@@ -630,7 +634,7 @@ class Orchestrator:
             return self._ajanlat_emlekezteto(allapot)
 
         if eszkoz == "visszakerdez":
-            return self._visszakerdez(allapot, parameterek)
+            return self._visszakerdez(allapot, parameterek, mondat, most)
 
         # JELÖLT VÁLASZTÁSA a felajánlott listából (ADR-028) — a modell
         # kimondja, hogy a vásárló a listából választott, és hányadikat.
@@ -666,7 +670,9 @@ class Orchestrator:
                     allapot.allapot,
                     len(allapot.aktualis_jeloltek),
                 )
-                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+                return self._visszakerdez(
+                    allapot, {"varhato_kerdes_tipusa": "nyitott"}, mondat, most
+                )
             jelolt = allapot.aktualis_jeloltek[0]
             valasz = self.valaszt(session_id, jelolt["slot_id"])
             valasz["valasztott_jelolt"] = jelolt
@@ -689,7 +695,9 @@ class Orchestrator:
                     sorszam,
                     len(allapot.aktualis_jeloltek),
                 )
-                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+                return self._visszakerdez(
+                    allapot, {"varhato_kerdes_tipusa": "nyitott"}, mondat, most
+                )
             jelolt = allapot.aktualis_jeloltek[sorszam - 1]
             valasz = self.valaszt(session_id, jelolt["slot_id"])
             valasz["valasztott_jelolt"] = jelolt
@@ -720,7 +728,7 @@ class Orchestrator:
         # ez elméletileg kizárt (kötött dekódolás), a szabály-alapúnál
         # programozói hiba lenne. Nem omlik össze, zárt kérdésre terel.
         return self._visszakerdez(
-            allapot, {"hianyzo_mezo": "eszkoz", "varhato_kerdes_tipusa": "zart"}
+            allapot, {"hianyzo_mezo": "eszkoz", "varhato_kerdes_tipusa": "zart"}, mondat, most
         )
 
     def _bizonytalansag_kezel(self, ertelmezes: dict) -> dict | None:
@@ -962,6 +970,71 @@ class Orchestrator:
 
         return self._kiut_valasz(allapot, ok="frusztracio", eredeti=valasz)
 
+    def _emlekeztetni_kell(self, allapot: _SessionAllapot, mondat: str) -> bool:
+        """Az ajánlat-emlékeztető HELYÉN vagyunk-e (ADR-035).
+
+        Három feltétel, és a harmadik a legfontosabb:
+
+        1. állnak ajánlataink,
+        2. a beszélgetés ajánlat- vagy megerősítés-váró állapotban van,
+        3. **a mondat nem mond ki új NAPOT.**
+
+        A harmadikat az ELSŐ végigjátszás kényszerítette ki — és pontosan
+        az a kiváltó feltétel teljesült, amit az ADR-035 előre kimondott:
+        az emlékeztető elnyelt egy valódi kérést. A „csütörtök?" és az
+        „Egy pénteki nap kellene" mondatra ugyanaz a felsorolás ment ki,
+        amit a vásárló épp NEM kért — pedig mindkettő megnevezett egy
+        napot.
+
+        Az emlékeztető arra való, amikor NINCS mit kezdeni a mondattal:
+        frusztráció, értelmezhetetlen bemenet, bizonytalanság. Ha a
+        vásárló kimond egy napot, az kérés — akkor is, ha a modell nem
+        tudta eszközhívássá alakítani —, és ilyenkor a szokásos
+        visszakérdezés jár, mert az legalább arra kérdez rá, ami
+        hiányzik.
+
+        **A boltot szándékosan NEM nézzük.** Ajánlat közben a bolt már
+        eldőlt; ha a vásárló újra kimondja („a Törpillánál"), az nem új
+        kérés, hanem épp az, amire az emlékeztető való."""
+        if not allapot.aktualis_jeloltek:
+            return False
+        if allapot.allapot not in (allapotgep.AJANLAT_VAR, allapotgep.MEGEROSITES_VAR):
+            return False
+        from assistant.interpreter import rule_based
+
+        return not rule_based.kimondott_nap(mondat)
+
+    def _kimondott_nap_kereses(
+        self, allapot: _SessionAllapot, mondat: str, most: str
+    ) -> dict | None:
+        """A mondatban KIMONDOTT napra keres — ha a modell elakadt
+        (ADR-035).
+
+        Ajánlat közben három dolgot mondhat a vásárló: választ a
+        listából, kérdez róla, vagy MÁSIK NAPOT kér. A harmadikra a
+        modell néha nem ad használható eszközhívást — és eddig ilyenkor
+        vagy az emlékeztető ment ki (elnyelve a kérést), vagy egy
+        értelmezhetetlen visszakérdezés.
+
+        Egyik sem helyes: a nap ott van a mondatban, a bolt pedig a
+        megőrzött kontextusban. **Ez elég egy kereséshez** — ugyanaz az
+        elv, mint a dátumnál (ADR-011): a modell ÉRT, a
+        determinisztikus réteg FELOLD.
+
+        `None`, ha nincs mire keresni (nincs nap a mondatban, vagy nincs
+        megőrzött bolt) — ilyenkor a hívó a szokásos úton megy tovább."""
+        from assistant.interpreter import rule_based
+
+        if not rule_based.kimondott_nap(mondat):
+            return None
+        bolt = allapot.megorzott_parameterek.get("bolt_id")
+        if not bolt or bolt == MINDEGY:
+            return None
+        tol, ig = rule_based.datum_ablak_feloldas(mondat, most)
+        if not tol or not ig:
+            return None
+        return self._szabad_idopontok(allapot, {"datum_tol": tol, "datum_ig": ig})
+
     def _ajanlat_emlekezteto(self, allapot: _SessionAllapot) -> dict:
         """„Az imént ezeket ajánlottam — melyik jó, vagy nézzek mást?"
 
@@ -984,7 +1057,13 @@ class Orchestrator:
             "jeloltek": list(allapot.aktualis_jeloltek),
         }
 
-    def _visszakerdez(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
+    def _visszakerdez(
+        self,
+        allapot: _SessionAllapot,
+        parameterek: dict,
+        mondat: str = "",
+        most: str | None = None,
+    ) -> dict:
         # AJÁNLAT KÖZBEN NEM KÉRDEZÜNK VISSZA (ADR-035). Ha már
         # felajánlottunk időpontokat, egy értelmezhetetlen vagy
         # frusztrált mondatra nem az a helyes válasz, hogy elölről
@@ -994,10 +1073,14 @@ class Orchestrator:
         # Miafasz van veled?" → „Ehhez még kellene tudnom: melyik boltba
         # szeretnél menni." A vásárló joggal válaszolta a következő
         # fordulóban, hogy „de azt már megbeszéltük te láma".
-        if allapot.aktualis_jeloltek and allapot.allapot in (
-            allapotgep.AJANLAT_VAR,
-            allapotgep.MEGEROSITES_VAR,
-        ):
+        # A KIMONDOTT NAP előbb, mint az emlékeztető: ha a vásárló
+        # napot mondott, az KÉRÉS, nem elakadás (l.
+        # `_kimondott_nap_kereses`).
+        if most is not None:
+            napi = self._kimondott_nap_kereses(allapot, mondat, most)
+            if napi is not None:
+                return napi
+        if self._emlekeztetni_kell(allapot, mondat):
             return self._ajanlat_emlekezteto(allapot)
         allapot.sikertelen_ertelmezesek += 1
         allapot.megorzott_parameterek = kovetkezo_kontextus(

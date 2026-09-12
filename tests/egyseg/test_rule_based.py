@@ -11,7 +11,7 @@ from datetime import datetime
 
 import pytest
 
-from assistant.interpreter import ErtelmezesKontextus
+from assistant.interpreter import ErtelmezesKontextus, rule_based
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 
 _MOST = "2026-08-17T09:00:00Z"  # hétfő
@@ -452,7 +452,7 @@ def test_tartalek_ablak_pontosan_egy_hetet_fog_at():
 
 # --- MÉRET-MORFOLÓGIA (ADR-031) --------------------------------------
 #
-# A `nagy` nem illeszkedik a „nagyot" alakra — az első éles próbából
+# A `\bnagy\b` nem illeszkedik a „nagyot" alakra — az első éles próbából
 # származó eset (`mindegy-07`) épp ezen bukott el. A toldalékkészlet
 # ZÁRT, és HÁROM hamis barát szándékosan kimarad: a „nagyon"
 # (fokhatározó), a „nagyobb" (középfok) és a fokhatározói „kicsit"
@@ -487,3 +487,91 @@ def test_a_meret_csak_az_ugyifogyinal_ertelmes():
     from assistant.interpreter.rule_based import szolgaltatas_feloldas
 
     assert szolgaltatas_feloldas("nagy adag altatót kérek", "szundi") is None
+
+
+# --- AZ AJÁNLAT-KÉRDÉS IRÁNYA (ADR-035) -------------------------------
+#
+# Mérve (2026-09-21, két futás): a modell az `ajanlat_kerdes` eszközt
+# eltalálja, az IRÁNYT billegteti — ugyanarra a mondatra egyszer
+# `van_kesobbi`, másszor `van_korabbi`. A `tizennyolc` golden réteg
+# mindkét bukása ez volt.
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    [
+        "van későbbi?",
+        "későbbre kérném",
+        "10 után kéne.",
+        "ebéd után lenne jó",
+    ],
+)
+def test_kesobbi_irany(mondat):
+    assert rule_based.ajanlat_irany(mondat) == "van_kesobbi"
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    [
+        "van korábbi?",
+        "hamarabb nem lehet?",
+        "korábban lenne jó",
+        "10 előtt kéne",
+    ],
+)
+def test_korabbi_irany(mondat):
+    assert rule_based.ajanlat_irany(mondat) == "van_korabbi"
+
+
+@pytest.mark.parametrize(
+    ("mondat", "varhato"),
+    [
+        # A HAMIS BARÁT: a mondat a KORAI szót tartalmazza, a kérés
+        # mégis későbbi. Egy szólistás megoldás pontosan fordítva
+        # döntene — ezért van a tagadás külön szabály.
+        ("nem jó nekem ilyen korán.", "van_kesobbi"),
+        ("túl korán van", "van_kesobbi"),
+        ("ez korán van nekem", "van_kesobbi"),
+        # És a TÜKÖRPÁRJA, hogy a szabály ne csak egy irányba álljon.
+        ("nem jó ilyen későn", "van_korabbi"),
+    ],
+)
+def test_a_tagadas_MEGFORDITJA_az_iranyt(mondat, varhato):
+    assert rule_based.ajanlat_irany(mondat) == varhato
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    [
+        "ez minden nap van?",
+        "melyik nap?",
+        "kilenc jó lesz.",
+        "délelőtt nem megy?",
+        "",
+    ],
+)
+def test_irany_nelkul_NINCS_talalgatas(mondat):
+    """Ha a mondat nem mond irányt, a MODELL döntése áll — nem találunk
+    ki semmit. A `None` itt nem kudarc, hanem tartózkodás."""
+    assert rule_based.ajanlat_irany(mondat) is None
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    ["ez minden nap van?", "melyik nap?", "ez mikor van?", "milyen napokon?"],
+)
+def test_nap_kerdes_felismerese(mondat):
+    """A modell az `ajanlat_kerdes` eszközt eltalálja, az ALKÉRDÉST
+    billegteti: az „ez minden nap van?" mondatra `van_kesobbi`-t adott.
+    A mondat viszont kimondja, hogy a NAPRA kérdez."""
+    assert rule_based.ajanlat_nap_kerdes(mondat) is True
+
+
+@pytest.mark.parametrize(
+    "mondat",
+    ["van későbbi?", "10 után kéne", "nem jó ilyen korán", "napozni mennék"],
+)
+def test_ami_nem_nap_kerdes(mondat):
+    """ELLENPRÓBA: az irány-kérések és a puszta „nap" szó nem
+    nap-kérdés — különben minden későbbi-kérésből az lenne."""
+    assert rule_based.ajanlat_nap_kerdes(mondat) is False

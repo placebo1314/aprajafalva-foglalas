@@ -34,10 +34,18 @@ modellnek) és egy determinisztikus kapuban (ha a modell nem jutott el
 odáig). Az „Örömöt szeretnék" mondatra mérve mindkettő kellett.
 
 **Mérve:** a `tizennyolc` golden réteg (12 eset, a próba mondatai szó
-szerint) **41,7% → 91,7% / 83,3%** — a két utolsó szám UGYANAZT a kódot
-méri, két futáson: tizenkét eseten egy billenés 8,3 pont, tehát a réteg
-a küszöb KÖRÜL áll, nem fölötte. A beszédhelyzetek halmaz 39 → 51 eset,
-96,1% / 90,2%. Egységtesztek: 1122 zöld.
+szerint) **41,7% → 100%**, a beszédhelyzetek halmaz 39 → 51 eset,
+**94,1%**. Egységtesztek: 1146 zöld.
+
+**Az ADR-035 kiváltó feltétele MÁSNAP teljesült** — az emlékeztető
+elnyelt egy valódi kérést („csütörtök?"). A javítás után a mondatban
+KIMONDOTT nap keresést indít, és az alkérdés (későbbi / korábbi /
+melyik nap) determinisztikus lett: a „nem jó ilyen korán" hamis barát,
+szó szerint a korait említi, a jelentése mégis későbbi.
+
+**Az idegen próba tíz mondata a valódi felületen: 17 → 9 forduló** a
+megerősítésig. A cél (5) fölött, de a maradék hossz már a vásárló hat
+feltáró kérdése, és mostantól mind a hatra más és hasznos válasz jön.
 
 **A végigjátszás három hibát talált, amit a golden set nem láthatott**:
 a bizonytalanság-kapu értelmezhetetlen „eszkoz"-kérdését, a jelölt

@@ -11,6 +11,7 @@ from __future__ import annotations
 import time
 
 from assistant import allapotgep
+from assistant import valasz as valasz_szoveg
 from assistant.interpreter import ErtelmezesKontextus
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
 from assistant.orchestrator import (
@@ -2068,3 +2069,98 @@ def test_MAS_kereses_viszont_lefut(tmp_path):
     masodik = orch.fordulo("s1", "és szerdán?", _MOST)
 
     assert masodik["tipus"] in ("ajanlat", "eszkoz_hiba"), "a MÁSIK nap keresése lefut"
+
+
+# --- AZ EMLÉKEZTETŐ HATÁRA (ADR-035, 2026-09-22) ----------------------
+#
+# Az ADR-035 kiváltó feltételként KIMONDTA: „az `ajanlat_emlekezteto`
+# elnyel egy valódi új kérést". Az ELSŐ végigjátszáson teljesült — a
+# „csütörtök?" és az „Egy pénteki nap kellene" mondatra ugyanaz a
+# felsorolás ment ki, amit a vásárló épp NEM kért.
+
+
+def test_a_kimondott_nap_KERESEST_indit_nem_emlekeztetot(tmp_path):
+    """Ajánlat közben a megnevezett nap KÉRÉS — akkor is, ha a modell
+    nem tudta eszközhívássá alakítani. A nap ott van a mondatban, a
+    bolt a megőrzött kontextusban: ez elég egy kereséshez."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    # A modell elakad (üres értelmezés) — a determinisztikus réteg old fel.
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    # MÁSIK nap, mint amire az ajánlat szól (az kedd): ugyanarra a napra
+    # ugyanis a kör-megszakító kapu emlékeztetne, és joggal — l. a
+    # következő tesztet.
+    valasz = orch.fordulo("s1", "és szerdán?", _MOST)
+
+    assert valasz["tipus"] != "ajanlat_emlekezteto", "a nap kérés, nem elakadás"
+    assert valasz["tipus"] in ("ajanlat", "eszkoz_hiba"), "keresés indult"
+
+
+def test_UGYANARRA_a_napra_viszont_emlekeztet(tmp_path):
+    """A két kapu együtt: a kimondott nap keresést indít, de ha az a
+    keresés SZÓ SZERINT ugyanaz, mint az előző, a kör-megszakító
+    emlékeztet (ADR-035).
+
+    Ez nem ellentmondás, hanem a helyes sorrend: előbb megpróbáljuk
+    teljesíteni a kérést, és csak a KERESÉS szintjén derül ki, hogy
+    ugyanoda jutnánk."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    # Az ajánlat 2026-08-18-ra (keddre) szól.
+    valasz = orch.fordulo("s1", "és kedden?", _MOST)
+
+    assert valasz["tipus"] == "ajanlat_emlekezteto"
+
+
+def test_nap_NELKUL_marad_az_emlekezteto(tmp_path):
+    """ELLENPRÓBA: ami nem mond napot, arra továbbra is az emlékeztető
+    jár — különben visszakapnánk azt a hibát, amit az ADR-035 javított."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "Így nem haladunk előre.", _MOST)
+
+    assert valasz["tipus"] == "ajanlat_emlekezteto"
+
+
+def test_a_bolt_ujramondasa_NEM_uj_keres(tmp_path):
+    """Ajánlat közben a bolt már eldőlt. Ha a vásárló újra kimondja, az
+    nem új kérés — épp az, amire az emlékeztető való."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "hát az Ügyifogyinál", _MOST)
+
+    assert valasz["tipus"] == "ajanlat_emlekezteto"
+
+
+def test_ajanlat_nelkul_nincs_nap_kereses(tmp_path):
+    """A kapu csak ajánlat KÖZBEN szólal meg: enélkül minden napot
+    tartalmazó mondat keresést indítana, boltválasztás előtt is."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+
+    valasz = orch.fordulo("s1", "és kedden?", _MOST)
+
+    assert valasz["tipus"] == "visszakerdezes", "előbb a bolt kell"
+
+
+def test_az_eszkoz_mezore_EMBERI_kerdes_megy_ki():
+    """Az „eszkoz" a MI szavunk, nem a vásárlóé. A nyers tartalék
+    („Ehhez még kellene tudnom: eszkoz.") kimondva értelmezhetetlen —
+    a végigjátszás fogta meg."""
+    szoveg = valasz_szoveg.visszakerdezes_szoveg("eszkoz")
+
+    assert "eszkoz" not in szoveg
+    assert "mit szeretnél" in szoveg
