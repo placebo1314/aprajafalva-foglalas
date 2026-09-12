@@ -1425,6 +1425,14 @@ class VasarloApp(tk.Tk):
                     zona=self.zona,
                 )
             )
+        elif tipus == "ajanlat_valasz":
+            reszek.append(valasz_szoveg.ajanlat_valasz_szoveg(valasz, mod=mod, zona=self.zona))
+        elif tipus == "ajanlat_emlekezteto":
+            reszek.append(
+                valasz_szoveg.ajanlat_emlekezteto_szoveg(
+                    valasz.get("jeloltek") or [], mod=mod, zona=self.zona
+                )
+            )
         elif tipus == "megerositest_ker":
             jelolt = valasz.get("valasztott_jelolt") or {}
             reszek.append(
@@ -1514,6 +1522,31 @@ class VasarloApp(tk.Tk):
                     text="Mit lehet itt?",
                     command=lambda: self._szo_kuldes("mit lehet itt?"),
                 ).pack(side="left", padx=(12, 0))
+            return
+
+        if tipus == "ajanlat_valasz":
+            # FELELET a felajánlott időpontokról szóló kérdésre
+            # (ADR-035). Nem új keresés, nem új hold — a jelöltek
+            # gombjai ott maradnak, ahol voltak.
+            self._rendszer_mondat(
+                valasz_szoveg.ajanlat_valasz_szoveg(valasz, mod=mod, zona=self.zona)
+            )
+            return
+
+        if tipus == "ajanlat_emlekezteto":
+            # AJÁNLAT KÖZBEN NEM KÉRDEZÜNK VISSZA (ADR-035). Ugyanazok a
+            # jelöltek, ugyanazok a gombok — nincs új keresés, nincs új
+            # hold. A vásárló ott folytatja, ahol tartott.
+            self._rendszer_mondat(
+                valasz_szoveg.ajanlat_emlekezteto_szoveg(
+                    valasz.get("jeloltek") or [], mod=mod, zona=self.zona
+                )
+            )
+            self._eredmeny_render(
+                self.szo_jelolt_keret,
+                {"tipus": "ajanlat", "jeloltek": valasz.get("jeloltek") or []},
+                self.szo_uzenet,
+            )
             return
 
         if tipus == "visszakerdezes":

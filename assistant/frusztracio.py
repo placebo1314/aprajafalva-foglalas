@@ -62,6 +62,11 @@ _EREDMENYTELEN_PONT = 1
 # `kiut` szándékosan nincs köztük: az már maga a válasz a frusztrációra.
 _EREDMENYTELEN_TIPUSOK = frozenset({"visszakerdezes", "elutasitas", "eszkoz_hiba"})
 
+# Ami ELŐRE VISZ: a számláló nullázódik tőle. Az `ajanlat_emlekezteto`
+# szándékosan NINCS köztük — az nem haladás, csak nem is romlás: se nem
+# nulláz, se nem gyűjt pontot (l. `_EREDMENYTELEN_TIPUSOK`).
+ELOREVIVO_TIPUSOK = frozenset({"ajanlat", "visszaigazolas", "megerositest_ker"})
+
 
 def kimondott_jel(mondat: str) -> bool:
     """Tartalmaz-e a mondat kimondott frusztráció-jelet? A normalizálón
@@ -97,7 +102,13 @@ class Frusztracio:
     def fordulo(self, mondat: str, valasz_tipus: str | None) -> None:
         """Egy lezárt forduló beszámítása. `valasz_tipus` a `fordulo()`
         válaszának `tipus` mezője."""
-        if valasz_tipus == "ajanlat" or valasz_tipus == "visszaigazolas":
+        # AMI ELŐRE VISZ, az nulláz. A `megerositest_ker` 2026-09-21 óta
+        # tartozik ide (ADR-035): az idegen próbában a vásárló KELLETLEN
+        # igenje után a rendszer kiutat ajánlott — „ne kínlódj vele
+        # tovább" —, pedig épp akkor jutottak el a foglalás küszöbéig.
+        # Egy sikeres megerősítés-kérés nem eredménytelen forduló, még
+        # akkor sem, ha a mondat, ami idevezetett, dühös volt.
+        if valasz_tipus in ELOREVIVO_TIPUSOK:
             self.pont = 0
             return
         if kimondott_jel(mondat):

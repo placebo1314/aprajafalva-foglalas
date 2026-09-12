@@ -160,10 +160,15 @@ def _reteg_cimke(reteg: str | None) -> str:
     )
 
 
-def _kartya(cimke: str, ertek: str, megjegyzes: str = "") -> str:
+def _kartya(cimke: str, ertek: str, megjegyzes: str = "", *, riaszto: bool = False) -> str:
+    """Egy szám a fejlécben. `riaszto=True` esetén piros — ma egyetlen
+    kártya használja (az út hossza, ADR-035): ha egy beszélgetés a
+    kitűzött fordulószám fölött ér csak célba, azt ne lehessen
+    elolvasni anélkül, hogy feltűnne."""
+    szin = ' style="color:#a00"' if riaszto else ""
     return (
         f'<div class="kartya"><div class="cimke">{_e(cimke)}</div>'
-        f'<div class="ertek">{ertek}</div>'
+        f'<div class="ertek"{szin}>{ertek}</div>'
         f'<div class="megjegyzes">{_e(megjegyzes)}</div></div>'
     )
 
@@ -243,6 +248,23 @@ def fejlec_osszegzes(sorok: list[dict]) -> str:
             f"ajánlat: {tipusok.get('ajanlat', 0)} · elhárítás: {tipusok.get('elutasitas', 0)}",
         )
     )
+    # AZ ÚT HOSSZA (ADR-035): hány forduló az első kéréstől a
+    # foglalásig. A többi kártya azt mondja meg, hogy a rendszer jól
+    # dolgozik-e; ez azt, hogy a VÁSÁRLÓ eljut-e valahova. Az idegen
+    # próbában minden forduló külön-külön rendben volt, a beszélgetés
+    # mégis tizennyolc fordulóra nyúlt.
+    ut = osszes.get("ut_hosszak") or {}
+    if ut.get("n"):
+        rossz = ut["leghosszabb"] >= ut["cel"]
+        kartyak.append(
+            _kartya(
+                "út a foglalásig",
+                f"átlag {ut['atlag']:.1f} forduló",
+                f"leghosszabb: {ut['leghosszabb']} · cél: {ut['cel']} alatt "
+                f"({ut['cel_alatt']}/{ut['n']})",
+                riaszto=rossz,
+            )
+        )
     kiut = tipusok.get("kiut", 0)
     ismetles = len(mintak.get("ismetelt_visszakerdezes", []))
     kartyak.append(

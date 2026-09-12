@@ -194,7 +194,12 @@ def _koszones_e(also: str) -> bool:
 # „nem-értem"-ágra.
 _KINALAT_MINTAK = (
     re.compile(r"\bmilyen(ek)?\s+(vannak|van|lehetőség|szolgáltatás)"),
-    re.compile(r"\bmi(t|k)?\s+(lehet|van|kapható|árul|kínál)"),
+    # A „van” SZÁNDÉKOSAN kimaradt innen (2026-09-21): a „mi van
+    # veled?” nem katalógus-kérdés, hanem indulat — a második idegen
+    # próba 10. fordulójában a kapuőr épp ezt nyelte el, és
+    # felsorolással válaszolt egy frusztrált mondatra. A HELY-hez
+    # kötött alakokat („mi van itt/nálatok”) a következő minta fogja.
+    re.compile(r"\bmi(t|k)?\s+(lehet|kapható|árul|kínál)"),
     re.compile(r"\bmi\s+(van|újság)\s+(itt|nálatok|maguknál|önöknél)"),
     re.compile(r"\bmit\s+(tudok|lehet)\s+(itt|nálatok)\s+(foglalni|kérni|venni)"),
     re.compile(r"\bmik\s+a\s+(lehetőségek|szolgáltatások|boltok)"),

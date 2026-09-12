@@ -69,11 +69,19 @@ ALLAPOTOK = (INDULAS, HIANYZO_ADAT, AJANLAT_VAR, MEGEROSITES_VAR, KESZ, KIUT)
 # - **KESZ-ből nem megy vissza semmi a foglalási ágra.** Egy lezárt
 #   foglalás után az új kérés ÚJ beszélgetés (INDULAS): a lefoglalt
 #   időpontot nem lehet „még egyszer" megerősíteni.
+# - **AJANLAT_VAR és MEGEROSITES_VAR NEM megy vissza HIANYZO_ADAT-ba**
+#   (ADR-035). Az idegen próba 10. fordulója mutatta meg, miért: a
+#   „Így nem haladunk előre. Miafasz van veled?" mondatra a rendszer
+#   visszakérdezett, hogy MELYIK BOLTBA szeretne menni — pedig két
+#   fordulóval korábban maga ajánlott fel időpontokat ugyanabban a
+#   boltban. **Egy frusztrált mondat nem törli az ajánlatokat.** Aki
+#   tényleg új adatot akar megadni, az új KÉRÉST mond, és az
+#   AJANLAT_VAR-ba vagy INDULAS-ba visz.
 ATMENETEK: dict[str, frozenset[str]] = {
     INDULAS: frozenset({INDULAS, HIANYZO_ADAT, AJANLAT_VAR, KIUT, KESZ}),
     HIANYZO_ADAT: frozenset({INDULAS, HIANYZO_ADAT, AJANLAT_VAR, KIUT}),
-    AJANLAT_VAR: frozenset({INDULAS, HIANYZO_ADAT, AJANLAT_VAR, MEGEROSITES_VAR, KIUT}),
-    MEGEROSITES_VAR: frozenset({INDULAS, HIANYZO_ADAT, AJANLAT_VAR, MEGEROSITES_VAR, KESZ, KIUT}),
+    AJANLAT_VAR: frozenset({INDULAS, AJANLAT_VAR, MEGEROSITES_VAR, KIUT}),
+    MEGEROSITES_VAR: frozenset({INDULAS, AJANLAT_VAR, MEGEROSITES_VAR, KESZ, KIUT}),
     KESZ: frozenset({INDULAS, KESZ}),
     KIUT: frozenset({INDULAS, HIANYZO_ADAT, AJANLAT_VAR, KIUT}),
 }
@@ -101,8 +109,24 @@ _VALASZ_ALLAPOT = {
 # mutatta meg, miért fontos — ott a „csak a választ beszéled?" mondat a
 # KESZ állapotból AJANLAT_VAR-ba rántotta vissza a beszélgetést, egy már
 # lezárt foglalás után.
+#
+# Az `ajanlat_emlekezteto` (ADR-035) ugyanebből a családból való: a
+# visszakérdezés HELYETT megy ki, amikor már állnak ajánlataink — és
+# épp az a dolga, hogy NE mozdítsa el a beszélgetést arról a pontról,
+# ahova eljutott.
 _ALLAPOTTARTO = frozenset(
-    {"elutasitas", "eszkoz_hiba", "hiba", "meta_valasz", "koszones", "kinalat"}
+    {
+        "elutasitas",
+        "eszkoz_hiba",
+        "hiba",
+        "meta_valasz",
+        "koszones",
+        "kinalat",
+        "ajanlat_emlekezteto",
+        # AZ AJÁNLATRÓL SZÓLÓ KÉRDÉS felelete (ADR-035) sem mozdít: a
+        # vásárló nem választott és nem is kért újat — kérdezett.
+        "ajanlat_valasz",
+    }
 )
 
 _KORNYEZETI_VALTOZO = "APRAJAFALVA_ALLAPOT_SOR"
@@ -129,11 +153,20 @@ def atmenet(honnan: str, hova: str) -> str:
     **Miért nem kivétel.** Egy nem engedélyezett átmenet fejlesztői
     tévedés — a vásárló viszont nem eshet ki tőle a beszélgetésből
     (blueprint 7.: a vesztes ág is legyen kellemes). A naplóban ott
-    marad, tehát nem néma."""
+    marad, tehát nem néma.
+
+    **Miért MARAD az állapot, és miért nem INDULAS-ba tér** (ADR-035
+    óta). Az `INDULAS` első ránézésre a biztonságos választás: üres lap,
+    semmi nem romolhat el. Csakhogy a beszélgetésben épp az a
+    legdrágább, ha elfelejtjük, hol tartunk — az idegen próba 10.
+    fordulójában a rendszer így vesztette el a saját ajánlatait egy
+    frusztrált mondat miatt. A maradás nem "kisebb rossz": a tiltott
+    átmenet azt jelenti, hogy a levezetés hibás, nem azt, hogy a
+    beszélgetés elölről kezdődik."""
     if hova in ATMENETEK.get(honnan, frozenset()):
         return hova
-    _LOG.warning("nem engedélyezett állapotátmenet: %s -> %s (INDULAS-ba térünk)", honnan, hova)
-    return INDULAS
+    _LOG.warning("nem engedélyezett állapotátmenet: %s -> %s (az állapot marad)", honnan, hova)
+    return honnan
 
 
 def bekapcsolva() -> bool:

@@ -245,6 +245,14 @@ def _master_data_load(conn) -> dict:
         ),
         ar="40 arany",
     )
+    # KÖZNYELVI NEVEK (0005. migráció): ahogy a VÁSÁRLÓ kéri, nem ahogy
+    # a bolt nevezi. Nem szinonimaszótár — a bolt szerkesztett tudása
+    # arról, milyen szavakkal érkeznek hozzá.
+    torzsadat_repo.service_koznyelvi_update(
+        conn,
+        service_id=szundi_service_id,
+        nevek=["alvás", "álom", "altatófőzet", "nyugalom", "pihenés"],
+    )
 
     ugyifogyi_id = torzsadat_repo.shop_create(
         conn, org_id=org_id, name="Ügyifogyi", id_=_id("bolt:ugyifogyi")
@@ -281,6 +289,11 @@ def _master_data_load(conn) -> dict:
         ),
         ar="kis petárda 20 arany, nagy petárda 55 arany",
     )
+    torzsadat_repo.service_koznyelvi_update(
+        conn,
+        service_id=ugyifogyi_service_id,
+        nevek=["tűzijáték", "durranás", "rakéta", "csillagszóró", "robbantás"],
+    )
 
     torpilla_id = torzsadat_repo.shop_create(
         conn, org_id=org_id, name="Törpilla", id_=_id("bolt:torpilla")
@@ -316,6 +329,15 @@ def _master_data_load(conn) -> dict:
             "kell, a Törpilla ezt kimondja, és nem tartja bent."
         ),
         ar="adomány alapú",
+    )
+    # AZ ELSŐ IDEGEN PRÓBA nyitómondata: „Örömöt szeretnék." A rendszer
+    # nem jutott el az örömtől a Törpilláig, és azt kérdezte vissza,
+    # melyik boltba szeretne menni — tizennyolc fordulós beszélgetés
+    # első fordulója. Az „öröm" azóta itt van, a törzsadatban.
+    torzsadat_repo.service_koznyelvi_update(
+        conn,
+        service_id=torpilla_service_id,
+        nevek=["öröm", "nagy öröm", "beszélgetés", "vigasz", "meghallgatás", "jókedv"],
     )
 
     boltok = {"szundi": szundi_id, "ugyifogyi": ugyifogyi_id, "torpilla": torpilla_id}

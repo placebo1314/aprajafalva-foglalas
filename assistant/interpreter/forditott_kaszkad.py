@@ -101,11 +101,11 @@ import re
 import time
 
 from assistant import kapuor
-from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, rule_based
+from assistant.interpreter import ErtelmezesKontextus, Ertelmezo, llm_based, rule_based
 from assistant.interpreter.llm_based import LLMErtelmezo, Mintavetel
 from assistant.interpreter.normalizalo import normalizal
 from assistant.interpreter.rule_based import SzabalyAlapuErtelmezo
-from assistant.tools import katalogus
+from assistant.tools import ajanlat_kerdes, katalogus
 from assistant.tools.katalogus import (
     BOLT_EGYERTELMU_SZOLGALTATAS,
     BOLT_SLUGOK,
@@ -337,6 +337,30 @@ class ForditottKaszkadErtelmezo:
         telt = max(0.0, time.monotonic() - kezdet - eddig)
         nyom.append({"nev": nev, "masodperc": round(telt, 4)})
 
+    def _koznyelvi_bolt(self, mondat: str, kontextus: ErtelmezesKontextus) -> str | None:
+        """A bolt SLUGJA a mondat köznyelvi szavaiból (ADR-035).
+
+        A szótár a törzsadatból jön (`kinalat.koznyelvi_szotar`), és ez
+        a kapu akkor szólal meg, amikor a modell nem jutott el az
+        „örömtől" a Törpilláig. Ugyanaz az elv, mint a dátumnál
+        (ADR-011): a modell ÉRT, a determinisztikus réteg FELOLD.
+
+        A LEGHOSSZABB illeszkedő alak nyer („nagy öröm" az „öröm"
+        előtt): a hosszabb kifejezés többet mond, és ha mindkettő
+        ugyanarra a boltra visz, a választás úgyis közömbös.
+
+        Szóhatárt nézünk, nem részszöveget: az „alvás" ne illeszkedjen
+        az „alváshiány"-ra, és a „rakéta" a „rakétázás"-ra. Ez ugyanaz
+        a hamis barát, amit a méret-felismerésnél már megfogtunk
+        (`rule_based._MERET_MINTAK`)."""
+        if not kontextus.kinalat_szotar:
+            return None
+        szoveg = normalizal(mondat).lower()
+        for alak in sorted(kontextus.kinalat_szotar, key=len, reverse=True):
+            if re.search(rf"(?<!\w){re.escape(alak)}\w*", szoveg):
+                return kontextus.kinalat_szotar[alak]
+        return None
+
     def _determinisztikus_kapuk(
         self, llm_eredmeny: dict, mondat: str, most: str, kontextus: ErtelmezesKontextus
     ) -> dict:
@@ -357,11 +381,55 @@ class ForditottKaszkadErtelmezo:
         # épp elengedtek — pontosan az a hiba, amiért a szentinel van.
         if parameterek.get("bolt_id") not in {*BOLT_SLUGOK, MINDEGY}:
             parameterek.pop("bolt_id", None)
+        # KÖZNYELVI NÉV → BOLT (ADR-035). Ha a modell nem adott boltot,
+        # vagy elengedettnek jelölte, de a mondat kimond egy
+        # szolgáltatást a maga szavával („örömöt szeretnék"), a bolt
+        # ebből következik. A modell döntését NEM írjuk felül: csak azt
+        # töltjük ki, amit üresen hagyott.
+        if parameterek.get("bolt_id") in (None, MINDEGY):
+            koznyelvi = self._koznyelvi_bolt(mondat, kontextus)
+            if koznyelvi:
+                parameterek["bolt_id"] = koznyelvi
         if parameterek.get("szolgaltatas_id") not in {*SZOLGALTATAS_SLUGOK, MINDEGY}:
             parameterek.pop("szolgaltatas_id", None)
 
         if eszkoz == "nincs":
             return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
+
+        if eszkoz == "megerosites_valasz":
+            # MEGEROSITES_VAR ÁLLAPOTBAN a séma háromértékű (ADR-035):
+            # igen / nem / mas_kerdes. A HANGULAT átmegy, de csak a
+            # naplóba: aki igent mond, annak igenje van, akkor is, ha
+            # közben sóhajt („igen...ha máshogy nem megy").
+            dontes = parameterek.get("dontes")
+            if dontes not in llm_based.MEGEROSITES_DONTESEK:
+                return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
+            uj_parameterek = {"dontes": dontes}
+            if parameterek.get("hangulat"):
+                uj_parameterek["hangulat"] = parameterek["hangulat"]
+            return {
+                "eszkoz": "megerosites_valasz",
+                "parameterek": uj_parameterek,
+                "bizonyossag": bizonyossag,
+            }
+
+        if eszkoz == "ajanlat_kerdes":
+            # A FELAJÁNLOTT IDŐPONTOKRÓL kérdez (ADR-035). A
+            # kérdésfajtát zárt halmaz védi; az ÁLLAPOT-ellenőrzés
+            # (van-e egyáltalán ajánlatunk) az orchestratoré — csak ő
+            # ismeri a jelölteket.
+            mit = parameterek.get("mit_kerdez")
+            if mit not in ajanlat_kerdes.KERDESFAJTAK:
+                return {"eszkoz": "nincs", "parameterek": {}, "bizonyossag": bizonyossag}
+            uj_parameterek = {"mit": mit}
+            sorszam = parameterek.get("sorszam")
+            if isinstance(sorszam, int) and sorszam >= 1:
+                uj_parameterek["sorszam"] = sorszam
+            return {
+                "eszkoz": "ajanlat_kerdes",
+                "parameterek": uj_parameterek,
+                "bizonyossag": bizonyossag,
+            }
 
         if eszkoz == "dontsd_el_te":
             # NINCS paramétere: a vásárló épp azt mondta, hogy neki

@@ -441,6 +441,45 @@ Ez adta a végigjátszás új ellenőrzését is: beszélhető módban minden
 forduló, ami gombot rajzol, KÉRDEZZEN is a kimondott szövegben. Gomb
 önmagában néma.
 
+### 1.16 Minden forduló jó volt, a beszélgetés mégis rossz (2026-09-21, ADR-035)
+
+**A bukás** (második idegen próba): tizennyolc forduló egy foglalásig,
+a tizedikben frusztráció. És ami ebben a legfontosabb: **egyetlen
+forduló sem volt önmagában hibás.** A keresés lefutott, a
+visszakérdezés a hiányzó boltra kérdezett, a kiút a frusztrációra
+reagált — minden válasz védhető, külön-külön.
+
+**A tanulság általánosítható:** minden mérőszámunk a FORDULÓRA nézett
+(réteg-megoszlás, válaszidő, pontosság esetenként), és egyik sem a
+beszélgetésre. Egy rendszer, amit fordulónként mérnek, fordulónként is
+optimalizálódik — és közben elveszítheti azt, amiért van. Ezért lett
+új mérőszám az ÚT HOSSZA: hány forduló az első kéréstől a foglalásig,
+kitűzött céllal (5 alatt).
+
+**A mérőszám hiánya nem semleges.** Nem arról van szó, hogy nem
+tudtuk a számot: arról, hogy a rendszer öt külön hibája közül egyiket
+sem jelezte SEMMI. A golden set mind a tizennyolc fordulót
+elfogadhatónak minősítette volna.
+
+### 1.17 Aki kérdez, annak nem keresni kell (2026-09-21, ADR-035)
+
+**A bukás**: öt egymás utáni forduló („Van későbbi?", „10 után kéne",
+„nem jó ilyen korán", „ez minden nap van?", „melyik nap?") — és mind
+az ötre UGYANAZ a keresés futott le, ugyanazzal az ablakkal,
+ugyanazzal az eredménnyel.
+
+**A tanulság általánosítható:** a rendszernek volt egy kimondott
+ajánlata, de nem tudott BESZÉLNI róla. Minden mondatot új kérésként
+olvasott, mert csak arra volt szava. **Ha egy rendszer csak cselekedni
+tud, akkor a kérdést is cselekvésnek fogja érteni** — rokon az
+1.12-vel (a modell nem tud olyat mondani, amire nincs szava), de egy
+szinttel feljebb: ott a szerződésből hiányzott egy érték, itt egy
+egész beszédaktus.
+
+A javítás mellékhatása a fontosabb: a „van későbbi?" nem csak KÉRDÉS,
+hanem KÉRÉS is — az ablakot tolni kell, különben ugyanazt találjuk meg
+megint. Egy kérdés megválaszolása gyakran állapotváltozás is.
+
 ### 2.9d A MINDEGY ragadóssága — MEGOLDVA (2026-09-12, ADR-031)
 
 **A bukás** (`mindegy-07`, `elengedes-10/11`): aki elengedett egy mezőt

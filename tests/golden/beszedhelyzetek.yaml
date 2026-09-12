@@ -67,6 +67,10 @@ meta:
     elesbol: 0.90
     # ELSŐ TALÁLKOZÁS (ADR-032) — a bevezetési rés esetei.
     elso_talalkozas: 0.90
+    # TIZENNYOLC FORDULÓ (ADR-035) — a második idegen próba mondatai,
+    # szó szerint. A réteg CÉLJA nem a pontosság maximalizálása: azt
+    # méri, hogy az öt szerkezeti hiba egyike sem tért vissza.
+    tizennyolc: 0.90
 
 esetek:
 
@@ -850,3 +854,270 @@ esetek:
       tudja, hova megy — ott a három bolt felsorolása zaj lenne. A
       `bolt_info` termék-ága a válasz.
     cimkek: [elso_talalkozas, ellenproba, tenyvalasz]
+
+  # ---------------------------------------------------------------------
+  # 14. réteg — TIZENNYOLC FORDULÓ (12 eset)
+  #
+  # A MÁSODIK IDEGEN PRÓBA (2026-09-11, `naplo/probak.jsonl`,
+  # session 8292e38a). A barátunk tizennyolc fordulóból foglalt le egy
+  # időpontot, és a tizedikben azt írta: „Így nem haladunk előre."
+  #
+  # Minden mondat SZÓ SZERINT a naplóból való, és a várt válasz az,
+  # aminek történnie KELLETT VOLNA — nem az, ami történt. Öt szerkezeti
+  # hibát mérnek (ADR-035):
+  #
+  # 1. az állapotgép visszalépett AJANLAT_VAR-ból (10. forduló)
+  # 2. a hezitáló igen keresésbe fordult (14. forduló)
+  # 3. az ajánlatról szóló kérdésekre újra keresett (3-7. forduló)
+  # 4. az ajánlat nem mondta ki a napot (7. forduló kérdése)
+  # 5. az „öröm" nem vezetett el a Törpilláig (1. forduló)
+  # ---------------------------------------------------------------------
+
+  - id: tizennyolc-01-oromot-szeretnek
+    bemenet: "Szia. Örömöt szeretnék. Van nálatok? Mikor?"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, legkozelebbi_idopont]
+      parameterek:
+        bolt_id: torpilla
+    tilos:
+      - kitalalt_bolt
+    megjegyzes: >
+      AZ 1. FORDULÓ. Ami történt: „Ehhez még kellene tudnom: melyik
+      boltba szeretnél menni." — pedig a mondat MEGMONDJA, mit akar:
+      örömöt. A Törpilla szolgáltatása „boldogság", és a modell nem
+      jutott el az egyiktől a másikig.
+
+      A javítás nem prompt-fegyelem: a köznyelvi nevek a TÖRZSADATBA
+      kerültek (0005. migráció), és onnan mennek a modellnek — „torpilla:
+      boldogság (öröm, nagy öröm, beszélgetés…)". Ha egy bolt holnap más
+      szóval is árulja, az admin írja be.
+    cimkek: [tizennyolc, koznyelvi_nev, elesbol]
+
+  - id: tizennyolc-02-hol-kapni-oromot
+    bemenet: "Hát hol kapni örömöt?"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [szabad_idopontok, kinalat, bolt_info]
+      parameterek:
+        bolt_id: torpilla
+    megjegyzes: >
+      A 2. FORDULÓ, és itt a rendszer MEGTALÁLTA a Törpillát — csak épp
+      egy fordulóval később, mint kellett volna. Az eset azt őrzi, hogy
+      ez ne romoljon el: ugyanaz a szó, ugyanaz a bolt.
+    cimkek: [tizennyolc, koznyelvi_nev]
+
+  - id: tizennyolc-03-van-kesobbi
+    bemenet:
+      - "Hát hol kapni örömöt?"
+      - "Van késõbbi?"
+    felajanlott:
+      - "1. 2026-12-21 08:00–08:15"
+      - "2. 2026-12-21 08:20–08:35"
+      - "3. 2026-12-21 09:00–09:15"
+    igenyel_llm: true
+    varhato:
+      eszkoz: ajanlat_kerdes
+      parameterek:
+        mit: van_kesobbi
+    megjegyzes: >
+      A 3. FORDULÓ. Ami történt: a rendszer UGYANAZT a keresést futtatta
+      le újra, ugyanazzal az ablakkal — és ugyanazt a 8:00-t ajánlotta
+      vissza. A vásárló ezt még négyszer próbálta, más szavakkal.
+
+      A „van későbbi?" nem új keresés, hanem KÉRDÉS a felajánlottakról —
+      és egyben kérés: a következő keresés ablaka a legkésőbbi ajánlat
+      MÖGÉ tolódik (`assistant/tools/ajanlat_kerdes.py`).
+    cimkek: [tizennyolc, ajanlat_kerdes, tobbfordulos]
+
+  - id: tizennyolc-04-tiz-utan-kene
+    bemenet:
+      - "Hát hol kapni örömöt?"
+      - "10 után kéne."
+    felajanlott:
+      - "1. 2026-12-21 08:00–08:15"
+      - "2. 2026-12-21 08:20–08:35"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [ajanlat_kerdes, szabad_idopontok]
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      A 4. FORDULÓ. Ugyanaz a kérés, konkrét órával. KÉT viselkedés
+      elfogadható: kérdésként kezelni (későbbit kér), vagy új keresésnek
+      — de az utóbbi csak akkor, ha az ablak TÉNYLEG tízre tolódik.
+      Ami NEM elfogadható, az a változatlan ablakú újrakeresés; ezt a
+      `tilos` nem tudja megfogni, a `tizennyolc-03` viszont igen.
+    cimkek: [tizennyolc, ajanlat_kerdes, tobbfordulos]
+
+  - id: tizennyolc-05-nem-jo-ilyen-koran
+    bemenet:
+      - "Hát hol kapni örömöt?"
+      - "nem jó nekem ilyen korán."
+    felajanlott:
+      - "1. 2026-12-21 08:00–08:15"
+      - "2. 2026-12-21 08:20–08:35"
+    igenyel_llm: true
+    varhato:
+      eszkoz: ajanlat_kerdes
+      parameterek:
+        mit: van_kesobbi
+    megjegyzes: >
+      Az 5. FORDULÓ. Nem kérdés, hanem PANASZ — a jelentése mégis
+      ugyanaz: későbbit kér. A rendszer harmadszor futtatta ugyanazt a
+      keresést.
+    cimkek: [tizennyolc, ajanlat_kerdes, tobbfordulos]
+
+  - id: tizennyolc-06-ez-minden-nap-van
+    bemenet:
+      - "Hát hol kapni örömöt?"
+      - "ez minden nap van?"
+    felajanlott:
+      - "1. 2026-12-21 08:00–08:15"
+      - "2. 2026-12-21 08:20–08:35"
+    igenyel_llm: true
+    varhato:
+      eszkoz: ajanlat_kerdes
+      parameterek:
+        mit: melyik_nap
+    megjegyzes: >
+      A 6. FORDULÓ. Tiszta kérdés a felajánlottakról — a válasz a
+      jelöltek listájában van, keresés nélkül. A rendszer negyedszer
+      keresett ugyanazzal az ablakkal.
+    cimkek: [tizennyolc, ajanlat_kerdes, tobbfordulos]
+
+  - id: tizennyolc-07-de-melyik-nap
+    bemenet:
+      - "Hát hol kapni örömöt?"
+      - "akkor a legkésõbbit. De melyik nap?"
+    felajanlott:
+      - "1. 2026-12-21 08:00–08:15"
+      - "2. 2026-12-21 08:20–08:35"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [ajanlat_kerdes, jelolt_valasztas]
+    megjegyzes: >
+      A 7. FORDULÓ, és ez a legbeszédesebb az egész próbában: a vásárló
+      MEGKÉRDEZTE, melyik napra szólnak az időpontok, amiket felkínáltunk.
+      Nem tudta — mert a mondat csak órákat mondott, a dátum pedig
+      kizárólag a gombokon állt.
+
+      Azóta az ajánlat kimondja a napot, naponként csoportosítva:
+      „Kedden, december huszonkettedikén: 8:00, 9:30 vagy 10:20."
+    cimkek: [tizennyolc, ajanlat_kerdes, tobbfordulos]
+
+  - id: tizennyolc-08-igy-nem-haladunk
+    bemenet:
+      - "Hát hol kapni örömöt?"
+      - "Így nem haladunk elõre. Mi van veled?"
+    felajanlott:
+      - "1. 2026-12-21 08:00–08:15"
+      - "2. 2026-12-21 08:20–08:35"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [nincs, ajanlat_kerdes, visszakerdez]
+    tilos:
+      - kitalalt_bolt
+      - kitalalt_datum
+    megjegyzes: >
+      A 10. FORDULÓ — a frusztráció (a mondat trágár része nélkül). Ami
+      történt: a rendszer VISSZAKÉRDEZETT, hogy melyik boltba szeretne
+      menni. Az állapotgép AJANLAT_VAR-ból HIANYZO_ADAT-ba lépett:
+      elfelejtette, hogy percekkel korábban maga ajánlott fel
+      időpontokat ugyanabban a boltban. A vásárló a következő fordulóban
+      ezt írta: „de azt már megbeszéltük te láma."
+
+      **Az ÉRTELMEZŐ szintjén ez a mondat tényleg értelmezhetetlen** —
+      ezért elfogadható a `nincs` is. A javítás nem itt van, hanem az
+      orchestratorban: ajánlat közben a visszakérdezés HELYETT az
+      ajánlat-emlékeztető megy ki, és az állapot marad (ADR-035, tiltott
+      átmenet + `tests/egyseg/test_allapotgep.py`).
+    cimkek: [tizennyolc, frusztracio, tobbfordulos]
+
+  - id: tizennyolc-09-azt-mar-megbeszeltuk
+    bemenet:
+      - "Hát hol kapni örömöt?"
+      - "Így nem haladunk elõre."
+      - "de azt már megbeszéltük te láma."
+    felajanlott:
+      - "1. 2026-12-21 08:00–08:15"
+      - "2. 2026-12-21 08:20–08:35"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [nincs, ajanlat_kerdes, visszakerdez]
+    tilos:
+      - kitalalt_bolt
+    megjegyzes: >
+      A 11. FORDULÓ. A vásárló KIMONDJA, hogy a rendszer elfelejtette,
+      amit megbeszéltek — és igaza van. Az eset a mondatot magát őrzi:
+      bármit válaszolunk rá, boltot KITALÁLNI nem szabad.
+    cimkek: [tizennyolc, frusztracio, tobbfordulos]
+
+  - id: tizennyolc-10-igen-ha-mashogy-nem-megy
+    bemenet:
+      - "egy csütörtöki napot nézzünk."
+      - "kilenc jó lesz."
+      - "igen...ha máshogy nem megy."
+    felajanlott:
+      - "1. 2026-12-24 08:20–08:35"
+      - "2. 2026-12-24 08:40–08:55"
+      - "3. 2026-12-24 09:00–09:15"
+    igenyel_llm: true
+    varhato:
+      eszkoz: megerosites_valasz
+      parameterek:
+        dontes: igen
+    allapot: MEGEROSITES_VAR
+    megjegyzes: >
+      A 14. FORDULÓ, és a legdrágább. A vásárló IGENT mondott a
+      megerősítés-kérdésre, csak kelletlenül — a rendszer pedig új
+      keresést indított, eldobta a kiválasztott időpontot, és a
+      frusztráció-figyelő rögtön utána kiutat ajánlott: „ne kínlódj vele
+      tovább."
+
+      A javítás nem kulcsszólista (a „jó, legyen", „hát ha muszáj",
+      „rendben, csak végezzünk" végtelen sok alakban létezik), hanem a
+      KÖTÖTT DEKÓDOLÁS szűkítése: MEGEROSITES_VAR állapotban a séma
+      három értéket enged — igen, nem, mas_kerdes (ADR-035). A hangulat
+      külön mezőbe mehet, de a döntést nem változtatja.
+    cimkek: [tizennyolc, hezitalo_igen, megerosites, tobbfordulos]
+
+  - id: tizennyolc-11-legyen-nyolc-csak-vegezzunk
+    bemenet:
+      - "egy csütörtöki napot nézzünk."
+      - "kilenc jó lesz."
+      - "legyen egy 8as idõpont, csak hogy végezzünk."
+    felajanlott:
+      - "1. 2026-12-24 08:20–08:35"
+      - "2. 2026-12-24 08:40–08:55"
+      - "3. 2026-12-24 09:00–09:15"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [jelolt_valasztas, megerosites_valasz, szabad_idopontok]
+    megjegyzes: >
+      A 15. FORDULÓ. A „csak hogy végezzünk" hangulat, nem tartalom —
+      a mondat lényege, hogy a NYOLCAST kéri. Több viselkedés
+      elfogadható (a listából választ, vagy új keresést indít nyolcra),
+      de egyik sem járhat azzal, hogy a beszélgetés elölről kezdődik.
+    cimkek: [tizennyolc, hezitalo_igen, tobbfordulos]
+
+  - id: tizennyolc-12-ellenproba-tenyleg-mast-kerdez
+    bemenet:
+      - "egy csütörtöki napot nézzünk."
+      - "kilenc jó lesz."
+      - "és meddig tart egyáltalán?"
+    felajanlott:
+      - "1. 2026-12-24 08:20–08:35"
+      - "2. 2026-12-24 09:00–09:15"
+    igenyel_llm: true
+    varhato:
+      elfogadhato_eszkozok: [bolt_info, megerosites_valasz, ajanlat_kerdes]
+    allapot: MEGEROSITES_VAR
+    tilos:
+      - kitalalt_datum
+    megjegyzes: >
+      ELLENPRÓBA a hezitáló igenre: MEGEROSITES_VAR állapotban is
+      elhangozhat valódi kérdés. Ilyenkor a helyes válasz a `mas_kerdes`
+      (vagy a tényválasz) — NEM az, hogy igennek vesszük. A szűkített
+      séma pontosan ezért háromértékű, nem kétértékű.
+    cimkek: [tizennyolc, ellenproba, megerosites, tobbfordulos]

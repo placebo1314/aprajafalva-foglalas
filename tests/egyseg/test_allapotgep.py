@@ -67,9 +67,12 @@ def test_minden_allapotbol_lehet_ujat_kezdeni():
 
 def test_a_lezart_foglalas_utan_nincs_visszaut_a_megerositesre():
     """Egy már lefoglalt időpontot nem lehet „még egyszer"
-    megerősíteni — a KESZ-ből csak új beszélgetés indulhat."""
+    megerősíteni — a KESZ-ből csak új beszélgetés indulhat.
+
+    A tiltás 2026-09-21 óta MARADÁST jelent, nem INDULAS-t (ADR-035):
+    a foglalás akkor is megvan, ha közben valami furcsa történt."""
     assert a.MEGEROSITES_VAR not in a.ATMENETEK[a.KESZ]
-    assert a.atmenet(a.KESZ, a.MEGEROSITES_VAR) == a.INDULAS
+    assert a.atmenet(a.KESZ, a.MEGEROSITES_VAR) == a.KESZ
 
 
 def test_ajanlat_nelkul_nincs_megerosites():
@@ -79,12 +82,42 @@ def test_ajanlat_nelkul_nincs_megerosites():
 
 def test_a_tiltott_atmenet_nem_dob_kivetelt(caplog):
     """Egy nem engedélyezett átmenet FEJLESZTŐI tévedés — a vásárló nem
-    eshet ki tőle a beszélgetésből. De nem is néma: a naplóban ott van."""
+    eshet ki tőle a beszélgetésből. De nem is néma: a naplóban ott van.
+
+    **2026-09-21 óta MARAD az állapot, nem INDULAS-ba tér** (ADR-035):
+    a beszélgetésben az a legdrágább, ha elfelejtjük, hol tartunk."""
     with caplog.at_level("WARNING"):
         eredmeny = a.atmenet(a.KESZ, a.MEGEROSITES_VAR)
 
-    assert eredmeny == a.INDULAS
+    assert eredmeny == a.KESZ
     assert "nem engedélyezett állapotátmenet" in caplog.text
+
+
+def test_az_AJANLAT_VAR_nem_megy_vissza_HIANYZO_ADATBA():
+    """AZ IDEGEN PRÓBA 10. FORDULÓJA. A „Így nem haladunk előre.
+    Miafasz van veled?" mondatra a rendszer visszakérdezett, hogy MELYIK
+    BOLTBA szeretne menni — pedig két fordulóval korábban maga ajánlott
+    fel időpontokat ugyanabban a boltban.
+
+    Egy frusztrált mondat nem törli az ajánlatokat. Aki tényleg új
+    adatot akar megadni, az új KÉRÉST mond."""
+    assert a.HIANYZO_ADAT not in a.ATMENETEK[a.AJANLAT_VAR]
+    assert a.atmenet(a.AJANLAT_VAR, a.HIANYZO_ADAT) == a.AJANLAT_VAR
+
+
+def test_a_MEGEROSITES_VAR_sem_megy_vissza_HIANYZO_ADATBA():
+    """Ugyanaz egy fokkal később: a „biztosan lefoglaljam?" kérdés után
+    egy értelmezhetetlen mondat nem kezdheti elölről az adatgyűjtést."""
+    assert a.HIANYZO_ADAT not in a.ATMENETEK[a.MEGEROSITES_VAR]
+    assert a.atmenet(a.MEGEROSITES_VAR, a.HIANYZO_ADAT) == a.MEGEROSITES_VAR
+
+
+def test_az_uj_keres_viszont_TOVABBVISZ():
+    """A tiltás nem zárja be a beszélgetést: aki új kérést mond, annak
+    az ajánlat (AJANLAT_VAR) vagy az új téma (INDULAS) jár."""
+    assert a.atmenet(a.AJANLAT_VAR, a.AJANLAT_VAR) == a.AJANLAT_VAR
+    assert a.atmenet(a.AJANLAT_VAR, a.INDULAS) == a.INDULAS
+    assert a.atmenet(a.MEGEROSITES_VAR, a.KESZ) == a.KESZ
 
 
 def test_minden_allapotnak_van_atmenet_szabalya():

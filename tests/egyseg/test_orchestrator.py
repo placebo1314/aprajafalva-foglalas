@@ -1192,7 +1192,11 @@ def test_frusztracio_sikeres_ajanlat_utan_nem_szolal_meg(tmp_path):
     otodik = orch.fordulo("s1", "e", _MOST)
 
     assert negyedik["tipus"] == "ajanlat"
-    assert otodik["tipus"] == "visszakerdezes", "a sikeres ajánlatnak nulláznia kellett"
+    # A LÉNYEG: NEM kiút. Hogy közben visszakérdezés helyett
+    # ajánlat-emlékeztető megy ki, az ADR-035: ajánlat közben nem
+    # kérdezünk vissza, mert az elfelejtené, amit már megbeszéltünk.
+    assert otodik["tipus"] == "ajanlat_emlekezteto", "a sikeres ajánlatnak nulláznia kellett"
+    assert otodik["tipus"] != "kiut"
 
 
 # --- sorszámos hivatkozás (assistant/sorszam.py) -----------------------
@@ -1388,15 +1392,21 @@ def test_jelolt_valasztas_csak_ajanlat_utan(tmp_path):
 
 def test_jelolt_valasztas_tartomanyon_kivul_nem_kerekit(tmp_path):
     """Egy elrontott választás nem visszakérdezést okoz, hanem MÁS
-    IDŐPONTOT foglal le — a negyedikre ezért nem kerekítünk."""
+    IDŐPONTOT foglal le — a negyedikre ezért nem kerekítünk.
+
+    A válasz 2026-09-21 óta `ajanlat_emlekezteto` (ADR-035): a
+    tartományon kívüli sorszám sem törli az ajánlatokat, és nem kezdi
+    elölről a boltkérdést. A LÉNYEG változatlan: **nem foglalunk**."""
     conn = _conn(tmp_path)
     ctx = _seed(conn)
     ertelmezo = _ScriptedErtelmezo([{"eszkoz": "jelolt_valasztas", "parameterek": {"sorszam": 9}}])
-    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    orch, jeloltek = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
 
     valasz = orch.fordulo("s1", "a kilencediket", _MOST)
 
-    assert valasz["tipus"] == "visszakerdezes"
+    assert valasz["tipus"] == "ajanlat_emlekezteto"
+    assert valasz["tipus"] != "megerositest_ker", "a negyedikre NEM kerekítünk"
+    assert len(valasz["jeloltek"]) == len(jeloltek), "az ajánlatok megmaradnak"
 
 
 # --- BEVEZETÉS: köszönés, katalógus, kiút-kapu (ADR-032) -------------
@@ -1862,3 +1872,199 @@ def test_mindegy_tulel_egy_fordulot_ugyanugy_mint_egy_konkret_ertek(tmp_path):
         },
     )
     assert kovetkezo == {"bolt_id": "ugyifogyi", "szolgaltatas_id": MINDEGY}
+
+
+# --- TIZENNYOLC FORDULÓ (ADR-035) -------------------------------------
+#
+# A MÁSODIK IDEGEN PRÓBA (2026-09-11): 18 forduló egy foglalásig, a
+# tizedikben frusztráció. Öt szerkezeti hiba; az alábbiak azokat őrzik,
+# amik az orchestratorban javultak.
+
+
+def test_ajanlat_kozben_NEM_kerdezunk_vissza(tmp_path):
+    """A 10. FORDULÓ. „Így nem haladunk előre." → a rendszer
+    visszakérdezett, hogy MELYIK BOLTBA szeretne menni — pedig két
+    fordulóval korábban maga ajánlott fel időpontokat ugyanabban a
+    boltban. Az állapotgép AJANLAT_VAR-ból HIANYZO_ADAT-ba lépett."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "Így nem haladunk előre.", _MOST)
+
+    assert valasz["tipus"] == "ajanlat_emlekezteto"
+    assert len(valasz["jeloltek"]) == len(ajanlat["jeloltek"]), "az ajánlatok megmaradnak"
+    assert orch._allapot("s1").allapot == "AJANLAT_VAR", "és az állapot is"
+
+
+def test_az_ajanlat_emlekezteto_nem_keres_ujra(tmp_path):
+    """Nem új ajánlat: ugyanazok a jelöltek, ugyanazok a holdok. Ezért
+    mondhatja azt, hogy „az imént ezeket ajánlottam"."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo([_visszakerdez_valasz()])
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "mi van?", _MOST)
+
+    assert [j["slot_id"] for j in valasz["jeloltek"]] == [j["slot_id"] for j in ajanlat["jeloltek"]]
+
+
+def test_a_hezitalo_igen_FOGLAL(tmp_path):
+    """A 14. FORDULÓ. „igen...ha máshogy nem megy." → a rendszer új
+    keresést indított, és eldobta a kiválasztott időpontot.
+
+    A modell MEGEROSITES_VAR-ban már csak három értéket adhat vissza
+    (szűkített séma); ez a teszt azt méri, hogy az orchestrator az
+    `igen`-t tényleg megerősítésnek veszi."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    # Az „az elsőt" fordulót a determinisztikus sorszám-rövidzár oldja
+    # meg, az értelmező meg sem szólal — ezért csak EGY szkriptelt
+    # válasz kell.
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "megerosites_valasz",
+                "parameterek": {"dontes": "igen", "hangulat": "kelletlen"},
+            }
+        ]
+    )
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    orch.fordulo("s1", "az elsőt", _MOST)
+
+    valasz = orch.fordulo("s1", "igen...ha máshogy nem megy.", _MOST)
+
+    assert valasz["tipus"] == "megerositest_ker"
+    assert orch._allapot("s1").allapot == "MEGEROSITES_VAR", "nem esett vissza keresésbe"
+
+
+def test_a_hezitalo_NEM_elvet(tmp_path):
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [{"eszkoz": "megerosites_valasz", "parameterek": {"dontes": "nem"}}]
+    )
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    orch.fordulo("s1", "az elsőt", _MOST)
+
+    valasz = orch.fordulo("s1", "hát mégsem", _MOST)
+
+    assert valasz["tipus"] == "elvetve"
+    assert valasz["jeloltek"], "a többi jelölt még áll"
+
+
+def test_a_mas_kerdes_nem_foglal_es_nem_is_vet_el(tmp_path):
+    """ELLENPRÓBA: MEGEROSITES_VAR-ban is elhangozhat valódi kérdés.
+    A séma ezért háromértékű, nem kétértékű."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [{"eszkoz": "megerosites_valasz", "parameterek": {"dontes": "mas_kerdes"}}]
+    )
+    orch, _ = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    orch.fordulo("s1", "az elsőt", _MOST)
+
+    valasz = orch.fordulo("s1", "és meddig tart egyáltalán?", _MOST)
+
+    assert valasz["tipus"] == "ajanlat_emlekezteto"
+    assert orch._allapot("s1").valasztott_slot_id is not None, "a választás megmarad"
+
+
+def test_az_ajanlatrol_szolo_kerdes_nem_keres_ujra(tmp_path):
+    """A 6. FORDULÓ: „ez minden nap van?" A válasz a jelöltek
+    listájában van — a rendszer négyszer keresett helyette."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [{"eszkoz": "ajanlat_kerdes", "parameterek": {"mit": "melyik_nap"}}]
+    )
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+
+    valasz = orch.fordulo("s1", "ez minden nap van?", _MOST)
+
+    assert valasz["tipus"] == "ajanlat_valasz"
+    assert valasz["napok"] == ["2026-08-18"]
+    assert orch._allapot("s1").aktualis_jeloltek == ajanlat["jeloltek"], "nem keresett újra"
+
+
+def test_a_van_kesobbi_ELTOLJA_az_ablakot(tmp_path):
+    """A 3-5. FORDULÓ: „Van későbbi?", „10 után kéne", „nem jó ilyen
+    korán" — mindháromra ugyanaz a keresés futott le, ugyanazzal az
+    ablakkal. A kérdés egyben kérés."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [{"eszkoz": "ajanlat_kerdes", "parameterek": {"mit": "van_kesobbi"}}]
+    )
+    orch, ajanlat = _ajanlat_harom_jelolttel(conn, ctx, ertelmezo)
+    legkesobbi = max(j["kezdet"] for j in ajanlat["jeloltek"])
+
+    valasz = orch.fordulo("s1", "van későbbi?", _MOST)
+
+    assert valasz.get("ablak_tolva") == "van_kesobbi"
+    if valasz["tipus"] == "ajanlat":
+        assert all(j["kezdet"] > legkesobbi for j in valasz["jeloltek"]), (
+            "ugyanazt találtuk volna meg újra"
+        )
+
+
+def test_ugyanaz_a_kereses_masodszor_NEM_fut_le_ujra(tmp_path):
+    """AZ IDEGEN PRÓBA 3-7. FORDULÓJA. Öt egymás utáni fordulóra
+    ugyanaz a keresés futott le, ugyanazzal az ablakkal, ugyanazzal az
+    eredménnyel — és a vásárló a hetedikre azt írta, hogy „Így nem
+    haladunk előre".
+
+    Ez a kapu MODELLFÜGGETLEN: akkor is megfogja a kört, ha a modell
+    történetesen keresésnek érti a „nem jó ilyen korán" mondatot."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    kereses = {
+        "bolt_id": "ugyifogyi",
+        "datum_tol": "2026-08-18T00:00:00Z",
+        "datum_ig": "2026-08-18T23:59:59Z",
+    }
+    ertelmezo = _ScriptedErtelmezo([{"eszkoz": "szabad_idopontok", "parameterek": dict(kereses)}])
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+    elso = orch.kereses_strukturaltan("s1", dict(kereses))
+    assert elso["tipus"] == "ajanlat"
+
+    masodik = orch.fordulo("s1", "nem jó nekem ilyen korán.", _MOST)
+
+    assert masodik["tipus"] == "ajanlat_emlekezteto", "ugyanazt nem keressük meg kétszer"
+    assert [j["slot_id"] for j in masodik["jeloltek"]] == [
+        j["slot_id"] for j in elso["jeloltek"]
+    ], "és a holdokat sem cserélgetjük"
+
+
+def test_MAS_kereses_viszont_lefut(tmp_path):
+    """A kapu nem zárja be a beszélgetést: aki más napot vagy más
+    boltot kér, azt megkeressük."""
+    conn = _conn(tmp_path)
+    ctx = _seed(conn)
+    ertelmezo = _ScriptedErtelmezo(
+        [
+            {
+                "eszkoz": "szabad_idopontok",
+                "parameterek": {
+                    "bolt_id": "ugyifogyi",
+                    "datum_tol": "2026-08-19T00:00:00Z",
+                    "datum_ig": "2026-08-19T23:59:59Z",
+                },
+            }
+        ]
+    )
+    orch = Orchestrator(conn, ertelmezo, org_id=ctx["org_id"])
+    orch.kereses_strukturaltan(
+        "s1",
+        {
+            "bolt_id": "ugyifogyi",
+            "datum_tol": "2026-08-18T00:00:00Z",
+            "datum_ig": "2026-08-18T23:59:59Z",
+        },
+    )
+
+    masodik = orch.fordulo("s1", "és szerdán?", _MOST)
+
+    assert masodik["tipus"] in ("ajanlat", "eszkoz_hiba"), "a MÁSIK nap keresése lefut"

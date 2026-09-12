@@ -67,6 +67,28 @@ class ErtelmezesKontextus:
     # (`elozmenyek`) ezt csak közvetve mutatja; az állapot kimondva
     # egyértelmű.
     allapot_sor: str | None = None
+    # KÍNÁLAT-SOR (ADR-035): a boltok szolgáltatásai és a KÖZNYELVI
+    # nevük, a törzsadatból — „Törpilla: boldogság (öröm, nagy öröm,
+    # beszélgetés…)".
+    #
+    # Miért nem a rendszerpromptba írjuk: mert adat. A promptban a
+    # boltnevek slugjai állnak (azokra enum is van), de azt, hogy a
+    # vásárló milyen szóval kéri a szolgáltatást, a BOLT tudja, nem mi.
+    # Az első idegen próba nyitómondata („Örömöt szeretnék") ezen bukott
+    # el: a modell nem jutott el az örömtől a Törpilláig.
+    kinalat_sor: str | None = None
+    # A SESSION ÁLLAPOTA nyersen (`allapotgep.ALLAPOTOK`) — nem
+    # ugyanaz, mint az `allapot_sor`: az a modellnek szóló MONDAT, ez a
+    # kódnak szóló ÉRTÉK. Azért kell külön, mert a séma is függ tőle:
+    # MEGEROSITES_VAR állapotban a modell csak igent, nemet vagy
+    # kérdést adhat vissza (ADR-035).
+    allapot: str | None = None
+    # KÖZNYELVI SZÓTÁR: köznyelvi alak -> bolt slug, a törzsadatból
+    # (ADR-035). A `kinalat_sor` a MODELLNEK szól, ez a
+    # determinisztikus kapunak: ha a modell nem jutott el az „örömtől"
+    # a Törpilláig, a kapu eljut. Ugyanaz az elv, mint a dátumnál
+    # (ADR-011): a modell idéz, a determinisztikus réteg old fel.
+    kinalat_szotar: dict[str, str] = field(default_factory=dict)
 
 
 @runtime_checkable

@@ -213,6 +213,68 @@ def hibamintak(sorok: list[dict]) -> dict[str, list[int]]:
     return dict(talalatok)
 
 
+# A CÉL: ennyi forduló alatt kell eljutni az első kéréstől a
+# foglalásig. Nem jóslat, hanem KITŰZÖTT szám (ADR-035): az idegen
+# próba 18 fordulóból foglalt, és ebből tíz olyan volt, amiben a
+# rendszer nem vitte előre a beszélgetést.
+UT_HOSSZ_CEL = 5
+
+# Az első kérésnek NEM számít: a köszönés és a katalógus-kérdés a
+# bevezetés, nem a foglalás útja (ADR-032). A számláló attól a
+# fordulótól indul, amelyikben a vásárló ténylegesen kért valamit.
+_BEVEZETO_TIPUSOK = frozenset({"koszones", "kinalat", "meta_valasz"})
+
+
+def ut_hosszak(sorok: list[dict]) -> dict:
+    """HÁNY FORDULÓ az első kéréstől a foglalásig, beszélgetésenként.
+
+    **Ez a kör legfontosabb mérőszáma** (ADR-035). A réteg-megoszlás és
+    a válaszidő azt mondja meg, hogy a rendszer jól dolgozik-e; ez azt,
+    hogy a VÁSÁRLÓ eljut-e valahova. Az idegen próba minden fordulója
+    külön-külön rendben volt — a beszélgetés egésze mégis tizennyolc
+    forduló lett.
+
+    Csak a FOGLALÁSSAL végződő beszélgetéseket számoljuk: egy félbehagyott
+    menetről nem tudjuk, hány forduló KELLETT volna. A `session_id`
+    nélküli, régi sorokat kihagyjuk — ott a beszélgetés határa becslés.
+    """
+    beszelgetesek: dict[str, list[dict]] = {}
+    for sor in sorok:
+        azonosito = sor.get("session_id")
+        if azonosito:
+            beszelgetesek.setdefault(azonosito, []).append(sor)
+
+    hosszak: list[int] = []
+    reszletek: list[dict] = []
+    for azonosito, fordulok in beszelgetesek.items():
+        veg = next(
+            (i for i, sor in enumerate(fordulok) if sor.get("valasz_tipus") == "visszaigazolas"),
+            None,
+        )
+        if veg is None:
+            continue
+        kezdet = next(
+            (
+                i
+                for i, sor in enumerate(fordulok)
+                if sor.get("valasz_tipus") not in _BEVEZETO_TIPUSOK
+            ),
+            0,
+        )
+        hossz = veg - kezdet + 1
+        hosszak.append(hossz)
+        reszletek.append({"session_id": azonosito, "fordulo": hossz})
+
+    return {
+        "n": len(hosszak),
+        "atlag": sum(hosszak) / len(hosszak) if hosszak else None,
+        "leghosszabb": max(hosszak) if hosszak else None,
+        "cel_alatt": sum(1 for h in hosszak if h < UT_HOSSZ_CEL),
+        "cel": UT_HOSSZ_CEL,
+        "beszelgetesek": sorted(reszletek, key=lambda r: -r["fordulo"]),
+    }
+
+
 def elemez(sorok: list[dict]) -> dict:
     """A teljes összesítés, nyomtatás NÉLKÜL — hogy tesztelhető legyen
     (`tests/egyseg/test_naplo_elemzo.py`), és hogy egy jövőbeli felület
@@ -280,6 +342,9 @@ def elemez(sorok: list[dict]) -> dict:
         "bizonyossag": {k: dict(v) for k, v in bizonyossag_savok.items()},
         "onkonzisztencia": dict(egyetertesek),
         "hibamintak": hibamintak(sorok),
+        # AZ ÚT HOSSZA: hány forduló az első kéréstől a foglalásig
+        # (ADR-035). A kör legfontosabb mérőszáma — l. `ut_hosszak`.
+        "ut_hosszak": ut_hosszak(sorok),
     }
 
 
@@ -316,6 +381,18 @@ def jelentes(osszesites: dict) -> str:
         for atmenet, darab in sorted(osszesites.get("atmenetek", {}).items(), key=lambda p: -p[1]):
             ki(f"    {atmenet:38s} {darab:4d}")
 
+    ut = osszesites.get("ut_hosszak") or {}
+    if ut.get("n"):
+        ki("\n-- AZ ÚT HOSSZA (első kéréstől a foglalásig) --")
+        ki(f"  foglalással végződő beszélgetés: {ut['n']}")
+        ki(f"  átlag: {ut['atlag']:.1f} forduló     leghosszabb: {ut['leghosszabb']}")
+        ki(f"  a cél alatt ({ut['cel']} forduló): {ut['cel_alatt']} / {ut['n']}")
+        for reszlet in ut["beszelgetesek"][:5]:
+            jel = " " if reszlet["fordulo"] < ut["cel"] else "!"
+            ki(f"  {jel} {reszlet['session_id'][:8]}  {reszlet['fordulo']:2d} forduló")
+    elif osszesites.get("fordulok"):
+        ki("\n-- AZ ÚT HOSSZA --")
+        ki("  Nincs foglalással végződő, session-azonosítóval ellátott beszélgetés.")
     ki("\n-- Válasz-típusok --")
     for tipus, darab in sorted(osszesites["valasz_tipusok"].items(), key=lambda p: -p[1]):
         ki(f"  {tipus:22s} {darab:4d}  {_arany(darab, osszesites['fordulok'])}")

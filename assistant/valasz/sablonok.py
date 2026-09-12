@@ -133,12 +133,35 @@ SABLONOK: dict[str, dict[str, object]] = {
             # olvasható vissza, és a képernyőolvasónak sem magától
             # értetődő. A gombok megmaradnak — a kettő nem egymás
             # helyett van.
-            "ajanlat_bevezetes_idokkel": "Ezeket az időpontokat találtam: {idok}. Melyik jó?",
+            # A NAP ELÖL, mert az a kérdés, amit a vásárló feltett
+            # („De melyik nap?"). A „találtam" bevezető elmaradt: három
+            # szó, ami semmit nem mond, és elé tolja a lényeget.
+            "ajanlat_bevezetes_idokkel": "{idok}. Melyik jó?",
+            # AZ AJÁNLAT EMLÉKEZTETŐJE (ADR-035): a visszakérdezés
+            # HELYETT megy ki, ha már állnak ajánlataink. Az idegen
+            # próba 10. fordulója mutatta meg, miért kell: egy
+            # frusztrált mondatra a rendszer elölről kérdezte a boltot,
+            # amit két fordulóval korábban megbeszéltek.
+            "ajanlat_emlekezteto": (
+                "Az imént ezeket ajánlottam — {idok}. Melyik jó, vagy nézzek mást?"
+            ),
             # A `legkozelebbi_idopont` eszköz válasza: EGY időpont,
             # a feltett kérdésre adott közvetlen felelet. Külön
             # mondat, mert a "melyik jó?" itt félrevezető lenne —
             # nincs miből választani, és nem is kértek választékot.
             "ajanlat_bevezetes_legkozelebbi": "A legkorábbi szabad időpont:",
+        },
+        # ------------------------------------------------------------
+        # ajanlat_valasz — FELELET a felajánlott időpontokról szóló
+        # kérdésre (ADR-035). Nem új ajánlat: ugyanazokból a
+        # jelöltekből felel, amiket az imént kimondtunk, ezért kezdődik
+        # névmással.
+        # ------------------------------------------------------------
+        "ajanlat_valasz": {
+            "melyik_nap_egy": "Ezek mind {napok} vannak.",
+            "melyik_nap_tobb": "Ezek {napok} vannak.",
+            "mikor_van": "A {sorszam} időpont {idopont}.",
+            "nincs_adat": "Erről nem tudok többet mondani.",
         },
         # ------------------------------------------------------------
         # alternativa — "ha nincs hely, alternatíva jöjjön" (blueprint
@@ -463,6 +486,7 @@ SABLONOK: dict[str, dict[str, object]] = {
                 # KETTŐ időpont, nem több — l. `beszelheto.py`, 5.
                 # szabály: három felolvasott időpont megjegyezhetetlen.
                 "ajanlat_ketto": "A legkorábbi {elso}, de van {masodik} is. Melyik jó?",
+                "ajanlat_emlekezteto": "Az imént ezeket ajánlottam: {idok}. Melyik jó?",
                 "ajanlat_legkozelebbi": "A legkorábbi szabad időpont {elso}. Jó lesz?",
             },
             # A visszakérdezés hangon KÉRDÉS, nem bevezetett felsorolás:

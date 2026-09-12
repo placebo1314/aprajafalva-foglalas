@@ -1,6 +1,48 @@
-# Állapot — 2026-09-21 (frissítve: A NAPLÓ BESZÉLGETÉSEKRE BOMLIK —
-útvonal-néző, session-azonosító, és a koppintás is nyomot hagy —
-ADR-034. Előzőleg: helyi idő a megjelenítésben, ADR-033)
+# Állapot — 2026-09-21 (frissítve: TIZENNYOLC FORDULÓ — öt szerkezeti
+hiba egy beszélgetésben, és új mérőszám: az ÚT HOSSZA — ADR-035.
+Előzőleg: útvonal-néző, ADR-034)
+
+**A 2026-09-21-i kör négy mondata** (második idegen próba, 18 forduló,
+`docs/adr/035-tizennyolc-fordulo.md`):
+
+1. **Minden forduló jó volt, a beszélgetés mégis rossz.** A keresés
+   lefutott, a visszakérdezés a hiányzó boltra kérdezett, a kiút a
+   frusztrációra reagált — minden válasz védhető, külön-külön. Mégis
+   tizennyolc forduló kellett egy foglaláshoz. Minden mérőszámunk a
+   FORDULÓRA nézett; egyik sem a beszélgetésre. Ezért lett új szám az
+   ÚT HOSSZA (első kéréstől a foglalásig), kitűzött céllal: **5 alatt**.
+2. **Az állapotgép nem léphet vissza.** A 10. fordulóban egy frusztrált
+   mondatra AJANLAT_VAR → HIANYZO_ADAT történt: a rendszer elfelejtette,
+   hogy percekkel korábban maga ajánlott fel időpontokat. Tiltott
+   átmenet lett, és a tiltás MARADÁST jelent, nem INDULAS-t — a
+   beszélgetésben az a legdrágább, ha elfelejtjük, hol tartunk.
+3. **A hezitáló igen az igen.** Az „igen...ha máshogy nem megy" mondatból
+   új keresés lett, és a kiválasztott időpont elveszett. A javítás nem
+   kulcsszólista, hanem a séma szűkítése: MEGEROSITES_VAR állapotban a
+   modell három értéket adhat (igen / nem / mas_kerdes). A hangulat
+   külön mezőbe mehet, a döntést nem változtatja.
+4. **Aki kérdez, annak nem keresni kell.** Öt egymás utáni forduló
+   („Van későbbi?", „ez minden nap van?", „melyik nap?") — és mind az
+   ötre ugyanaz a keresés futott le, ugyanazzal az ablakkal. Az új
+   `ajanlat_kerdes` a JELÖLTEKBŐL felel, keresés nélkül; a „van
+   későbbi?" pedig eltolja az ablakot a legkésőbbi ajánlat mögé.
+
+**Az ötödik javítás**: a szolgáltatások köznyelvi neve a törzsadatba
+került (0005. migráció) — „öröm, nagy öröm, beszélgetés" → boldogság →
+Törpilla. Két helyen használjuk: a rendszerprompt kínálat-sorában (a
+modellnek) és egy determinisztikus kapuban (ha a modell nem jutott el
+odáig). Az „Örömöt szeretnék" mondatra mérve mindkettő kellett.
+
+**Mérve:** a `tizennyolc` golden réteg (12 eset, a próba mondatai szó
+szerint) **41,7% → 91,7% / 83,3%** — a két utolsó szám UGYANAZT a kódot
+méri, két futáson: tizenkét eseten egy billenés 8,3 pont, tehát a réteg
+a küszöb KÖRÜL áll, nem fölötte. A beszédhelyzetek halmaz 39 → 51 eset,
+96,1% / 90,2%. Egységtesztek: 1122 zöld.
+
+**A végigjátszás három hibát talált, amit a golden set nem láthatott**:
+a bizonytalanság-kapu értelmezhetetlen „eszkoz"-kérdését, a jelölt
+nélküli `ajanlat_kerdes` hibaüzenetét, és azt, hogy a
+frusztráció-figyelő egy SIKERES megerősítést is kiúttá alakított.
 
 **A 2026-09-21-i kör három mondata:**
 

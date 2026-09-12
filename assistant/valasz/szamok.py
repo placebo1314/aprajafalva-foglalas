@@ -163,6 +163,18 @@ _HONAPOK = (
 _NAPNEVEK = ("hétfőn", "kedden", "szerdán", "csütörtökön", "pénteken", "szombaton", "vasárnap")
 
 
+# SORSZÁMNEVEK a felajánlott listára hivatkozáshoz („a második
+# időpont"). Csak addig, ameddig jelöltet ajánlunk — ennél hosszabb
+# listát úgysem mondanánk ki (`ajanlat_mondat`).
+_SORSZAMNEVEK = ("első", "második", "harmadik", "negyedik", "ötödik", "hatodik")
+
+
+def sorszam_szoval(n: int) -> str:
+    """`2` → `"második"`. A tartományon túl a számjegyes alak marad:
+    kimondhatatlan sorszámot nem találunk ki."""
+    return _SORSZAMNEVEK[n - 1] if 1 <= n <= len(_SORSZAMNEVEK) else f"{n}."
+
+
 def nap_szoval(nap: int) -> str:
     """A hónap napja helyhatározós alakban: 22 → „huszonkettedikén"."""
     if not 1 <= nap <= 31:
@@ -194,6 +206,18 @@ def ora_perc_szoval(ora: int, perc: int = 0) -> str:
     időpont nyolc óra tizenöt")."""
     alap = f"{szam_szoval(ora)} óra"
     return alap if perc == 0 else f"{alap} {szam_szoval(perc)}"
+
+
+def ora_perc_szoval_rovid(ora: int, perc: int = 0) -> str:
+    """`(9, 30)` → `"kilenc harminc"`; `(10, 0)` → `"tíz óra"`.
+
+    Az „óra" szó NÉLKÜL — egy felsorolás második tagjától kezdve ez a
+    természetes alak („nyolc óra, kilenc harminc, tíz húsz"). Egész
+    óránál viszont marad az „óra", mert a puszta „tíz" egy felsorolásban
+    számnak hangzik, nem időpontnak."""
+    if perc == 0:
+        return f"{szam_szoval(ora)} óra"
+    return f"{szam_szoval(ora)} {szam_szoval(perc)}"
 
 
 def idopont_kor(ora: int, perc: int = 0) -> str:
@@ -241,7 +265,7 @@ def idopont_rovid(iso: str) -> str:
     return f"{iso[:10]} {ora_perc_rovid(iso)}"
 
 
-def ido_iso_szoval(iso: str, *, kor: bool = True) -> str:
+def ido_iso_szoval(iso: str, *, kor: bool = True, napnevvel: bool = False) -> str:
     """Teljes ISO-időbélyeg (`"2026-12-22T08:00:00Z"`) mondható alakja:
     `"december huszonkettedikén nyolc órakor"`.
 
@@ -249,8 +273,14 @@ def ido_iso_szoval(iso: str, *, kor: bool = True) -> str:
     hanem mert a vásárlónak a HELYI idő a valóság, és egy „UTC" szó
     felolvasva pontosan azt a bizonytalanságot szüli, amit el akarunk
     kerülni. A helyi időre váltás a megjelenítő réteg dolga (CLAUDE.md
-    4. invariáns), és ez a függvény azt kapja, amit kap."""
-    datum_resz = datum_szoval(iso[:10])
+    4. invariáns), és ez a függvény azt kapja, amit kap.
+
+    `napnevvel=True`: a hét napja is elhangzik („kedden, december
+    huszonkettedikén nyolc órakor"). Az ajánlatnál ez kell (ADR-035):
+    a vásárló a hét napját tartja fejben, nem a dátumot — az idegen
+    próbában három időpontot kapott óra szerint, és külön meg kellett
+    kérdeznie, melyik napra szólnak."""
+    datum_resz = datum_szoval(iso[:10], napnevvel=napnevvel)
     ora, perc = int(iso[11:13]), int(iso[14:16])
     ido_resz = idopont_kor(ora, perc) if kor else ora_perc_szoval(ora, perc)
     return f"{datum_resz} {ido_resz}"

@@ -34,12 +34,14 @@ import time
 from dataclasses import dataclass, field
 
 from assistant import allapotgep
+from assistant import frusztracio as frusztracio_modul
 from assistant import valasz as valasz_szoveg
 from assistant.frusztracio import Frusztracio
 from assistant.interpreter import ErtelmezesKontextus, Ertelmezo
 from assistant.megerosites import NEM, megerosito_valasz
 from assistant.sorszam import sorszam_hivatkozas
 from assistant.tools import (
+    ajanlat_kerdes,
     bolt_info,
     foglalas_athelyezes,
     foglalas_lekerdezes,
@@ -278,6 +280,8 @@ class Orchestrator:
         # ebből tölti a `allapot`/`atmenet` mezőt. Nem a válasz része
         # (l. `fordulo`), mert a válasz a felület szerződése.
         self.utolso_allapot: dict | None = None
+        self._kinalat_sor_gyorsitotar: str | None = None
+        self._kinalat_szotar_gyorsitotar: dict[str, str] | None = None
 
     def _allapot(self, session_id: str) -> _SessionAllapot:
         if session_id not in self._sessionok:
@@ -359,6 +363,30 @@ class Orchestrator:
             "utana": allapot.allapot,
             "valtozott": elotte != allapot.allapot,
         }
+
+    def _kinalat_sor(self) -> str | None:
+        """A modellnek szóló kínálat-sor, gyorsítótárazva.
+
+        A törzsadat egy beszélgetés alatt nem változik, a szerkesztése
+        pedig admin-művelet — nem érdemes fordulónként újra lekérdezni.
+        Ha valaha élesben szerkeszthetővé válik, ez a gyorsítótár az
+        első hely, amit el kell dobni."""
+        if self.org_id is None:
+            return None
+        if self._kinalat_sor_gyorsitotar is None:
+            self._kinalat_sor_gyorsitotar = kinalat.prompt_sor(self.conn, org_id=self.org_id) or ""
+        return self._kinalat_sor_gyorsitotar or None
+
+    def _kinalat_szotar(self) -> dict[str, str]:
+        """Köznyelvi alak → bolt slug, gyorsítótárazva (l.
+        `_kinalat_sor`: ugyanaz a törzsadat, ugyanaz az indok)."""
+        if self.org_id is None:
+            return {}
+        if self._kinalat_szotar_gyorsitotar is None:
+            self._kinalat_szotar_gyorsitotar = kinalat.koznyelvi_szotar(
+                self.conn, org_id=self.org_id
+            )
+        return self._kinalat_szotar_gyorsitotar
 
     def allapot_sor(self, session_id: str) -> str | None:
         """Az ÁLLAPOTSOR a modellnek — hol tart a beszélgetés, és mit
@@ -472,6 +500,18 @@ class Orchestrator:
                 jeloltek_szama=len(allapot.aktualis_jeloltek),
                 hianyzo_mezo=allapot.utolso_hianyzo_mezo,
             ),
+            # A KÍNÁLAT-SOR (ADR-035): mit lehet itt kérni, és milyen
+            # SZAVAKKAL kérik. A törzsadatból, fordulónként — a
+            # lekérdezés két indexelt sor, az ára elhanyagolható a
+            # modellhívás mellett.
+            kinalat_sor=self._kinalat_sor(),
+            # A KÖZNYELVI SZÓTÁR a determinisztikus kapunak (ADR-035):
+            # ha a modell nem jutott el az „örömtől" a Törpilláig, a
+            # kapu eljut.
+            kinalat_szotar=self._kinalat_szotar(),
+            # A NYERS ÁLLAPOT a sémaválasztáshoz (ADR-035): a modell
+            # MEGEROSITES_VAR-ban csak igent, nemet vagy kérdést adhat.
+            allapot=allapot.allapot,
         )
         ertelmezes = self.ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
         self.utolso_ertelmezes = ertelmezes
@@ -483,6 +523,15 @@ class Orchestrator:
         # (blueprint 10. szakasz).
         bizonytalan = self._bizonytalansag_kezel(ertelmezes)
         if bizonytalan is not None:
+            # AJÁNLAT KÖZBEN a bizonytalanság sem visz vissza az
+            # adatgyűjtéshez (ADR-035). A „melyik eszközt akartad?"
+            # kérdés amúgy is értelmezhetetlen a vásárlónak — ha már
+            # állnak ajánlataink, azokra emlékeztetünk.
+            if allapot.aktualis_jeloltek and allapot.allapot in (
+                allapotgep.AJANLAT_VAR,
+                allapotgep.MEGEROSITES_VAR,
+            ):
+                return self._ajanlat_emlekezteto(allapot)
             allapot.sikertelen_ertelmezesek += 1
             return bizonytalan
 
@@ -523,6 +572,62 @@ class Orchestrator:
                 "tipus": "koszones" if eszkoz == "koszones" else "kinalat",
                 "boltok": eredmeny["boltok"],
             }
+
+        # KÉRDÉS A MÁR FELAJÁNLOTT IDŐPONTOKRÓL (ADR-035). Nem keresünk
+        # újra: a válasz a jelöltek listájában van.
+        #
+        # A „van későbbi?" és a „nem jó ilyen korán" viszont KÉRÉS is:
+        # ilyenkor a keresés ablaka eltolódik a legkésőbbi ajánlat mögé.
+        # Enélkül ugyanazt találnánk meg megint — az idegen próbában ez
+        # ötször egymás után megtörtént.
+        if eszkoz == "ajanlat_kerdes":
+            # NINCS MIRE KÉRDEZNI: a modell ajánlatról kérdezett, de
+            # ajánlat nincs (a vásárló épp most kezdett, vagy közben új
+            # keresés futott). Nem hibaüzenettel válaszolunk — az a
+            # vásárlónak semmit nem mond —, hanem a szokásos úton
+            # kérdezünk vissza.
+            if not allapot.aktualis_jeloltek:
+                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+            allapot.sikertelen_ertelmezesek = 0
+            eredmeny = ajanlat_kerdes.hivas(parameterek, jeloltek=allapot.aktualis_jeloltek)
+            if not eredmeny["sikeres"]:
+                return self._ajanlat_emlekezteto(allapot)
+            if eredmeny.get("uj_ablak_tol") or eredmeny.get("uj_ablak_ig"):
+                return self._ablakkal_ujrakeres(allapot, session_id, eredmeny, most)
+            return {"tipus": "ajanlat_valasz", **eredmeny}
+
+        # MEGERŐSÍTÉS-VÁLASZ A MODELLTŐL (ADR-035). A determinisztikus
+        # rövidzár (`assistant/megerosites.py`) a ZÁRT alakokat fogja
+        # meg („igen", „mégse kell"); ez az ág a hezitálóké:
+        # „igen...ha máshogy nem megy", „jó, legyen", „hát ha muszáj".
+        #
+        # MEGEROSITES_VAR-ban a séma háromértékű, tehát a modell mást
+        # nem is adhat vissza — és épp ez a lényeg: az idegen próba 14.
+        # fordulójában a kelletlen igenből új keresés lett, és a
+        # kiválasztott időpont elveszett.
+        if eszkoz == "megerosites_valasz":
+            dontes = parameterek.get("dontes")
+            if allapot.allapot != allapotgep.MEGEROSITES_VAR or not allapot.valasztott_slot_id:
+                # Nem ebben az állapotban vagyunk — a modell tévedett.
+                # Nem foglalunk és nem is vetünk el semmit.
+                return self._visszakerdez(allapot, {"varhato_kerdes_tipusa": "nyitott"})
+            if dontes == "nem":
+                valasz = self.elvet(session_id)
+                valasz["jeloltek"] = list(allapot.aktualis_jeloltek)
+                return valasz
+            if dontes == "igen":
+                # Ugyanaz, mint a rövidzárnál: a foglaláshoz vásárlói
+                # kulcs kell, azt a felület kéri be — az igen tehát a
+                # kérdés MEGISMÉTLÉSE, nem maga a foglalás.
+                valasz = {"tipus": "megerositest_ker", "slot_id": allapot.valasztott_slot_id}
+                for jelolt in allapot.aktualis_jeloltek:
+                    if jelolt["slot_id"] == allapot.valasztott_slot_id:
+                        valasz["valasztott_jelolt"] = jelolt
+                        break
+                return valasz
+            # MAS_KERDES: a vásárló nem a kérdésre felelt. Nem
+            # találgatunk — megismételjük, mit ajánlottunk.
+            return self._ajanlat_emlekezteto(allapot)
 
         if eszkoz == "visszakerdez":
             return self._visszakerdez(allapot, parameterek)
@@ -661,8 +766,16 @@ class Orchestrator:
                 "ok": "bizonytalan_szandek",
             }
 
+        parameterek = ertelmezes.get("parameterek") or {}
         for mezo in _KRITIKUS_MEZOK:
             ertek = bizonyossag.get(mezo)
+            # AZ ELENGEDETT MEZŐ NEM BIZONYTALAN (ADR-035). A MINDEGY a
+            # vásárló kimondott döntése (ADR-024) — rákérdezni arra,
+            # amit épp elengedett, pontosan az a hiba, amiért a
+            # szentinel egyáltalán van. A logprob itt alacsony lehet (a
+            # MINDEGY ritka token), de nem a szándékról szól.
+            if parameterek.get(mezo) == MINDEGY:
+                continue
             if ertek is not None and ertek < self.kuszobok.kritikus_mezo:
                 return {
                     "tipus": "visszakerdezes",
@@ -828,6 +941,18 @@ class Orchestrator:
         if valasz.get("tipus") == "kiut":
             return valasz
 
+        # AMI ELŐRE VITT, azt nem írjuk felül kiúttal (ADR-035). Az
+        # idegen próba 14. fordulójában a vásárló IGENT mondott — „igen,
+        # ha máshogy nem megy" —, és mert a mondatban ott volt egy
+        # frusztráció-jel („nem megy"), a rendszer erre ajánlotta fel,
+        # hogy menjen be a boltba élőben. A foglalás küszöbén.
+        #
+        # A jel valódi: a vásárló tényleg kelletlen volt. De a FORDULÓ
+        # sikerült — és egy sikerült fordulót nem lehet kudarcnak
+        # minősíteni a hangulat miatt.
+        if valasz.get("tipus") in frusztracio_modul.ELOREVIVO_TIPUSOK:
+            return valasz
+
         # KÉT külön feltétel, mert a két kiútnak más a kérdése. Az
         # ELSŐHÖZ pontgyűjtés kell (onnan tudjuk meg, hogy baj van); a
         # MÁSODIKHOZ az, hogy a felajánlott kiút UTÁN a vásárló még
@@ -837,7 +962,43 @@ class Orchestrator:
 
         return self._kiut_valasz(allapot, ok="frusztracio", eredeti=valasz)
 
+    def _ajanlat_emlekezteto(self, allapot: _SessionAllapot) -> dict:
+        """„Az imént ezeket ajánlottam — melyik jó, vagy nézzek mást?"
+
+        A visszakérdezés HELYETT megy ki, amikor már állnak ajánlataink
+        (ADR-035). Három dolgot csinál egyszerre, és mindhárom számít:
+
+        1. **Megtartja az ajánlatokat** — a jelöltek és a holdjaik
+           érvényben maradnak, nincs újabb keresés.
+        2. **Megtartja az állapotot** — a `visszakerdezes` típus
+           `HIANYZO_ADAT`-ba vinné, ami ebből az állapotból már tiltott
+           átmenet (`allapotgep.ATMENETEK`); ez a válasz állapottartó.
+        3. **Nem tesz úgy, mintha értette volna.** Nem foglal, nem
+           választ — visszaadja a szót, de a beszélgetés ELÉRT pontjáról,
+           nem az elejéről.
+
+        A frusztráció-figyelő ettől függetlenül dolgozik: ha a vásárló
+        tényleg elakadt, a kiút továbbra is megszólal."""
+        return {
+            "tipus": "ajanlat_emlekezteto",
+            "jeloltek": list(allapot.aktualis_jeloltek),
+        }
+
     def _visszakerdez(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
+        # AJÁNLAT KÖZBEN NEM KÉRDEZÜNK VISSZA (ADR-035). Ha már
+        # felajánlottunk időpontokat, egy értelmezhetetlen vagy
+        # frusztrált mondatra nem az a helyes válasz, hogy elölről
+        # kérdezzük a boltot — azt két fordulóval korábban megbeszéltük.
+        #
+        # AZ IDEGEN PRÓBA 10. FORDULÓJA: „Így nem haladunk előre.
+        # Miafasz van veled?" → „Ehhez még kellene tudnom: melyik boltba
+        # szeretnél menni." A vásárló joggal válaszolta a következő
+        # fordulóban, hogy „de azt már megbeszéltük te láma".
+        if allapot.aktualis_jeloltek and allapot.allapot in (
+            allapotgep.AJANLAT_VAR,
+            allapotgep.MEGEROSITES_VAR,
+        ):
+            return self._ajanlat_emlekezteto(allapot)
         allapot.sikertelen_ertelmezesek += 1
         allapot.megorzott_parameterek = kovetkezo_kontextus(
             allapot.megorzott_parameterek, {"eszkoz": "visszakerdez", "parameterek": parameterek}
@@ -950,6 +1111,51 @@ class Orchestrator:
             teljes = {k: v for k, v in teljes.items() if k != "szolgaltatas_id"}
         return teljes
 
+    def _ablakkal_ujrakeres(
+        self, allapot: _SessionAllapot, session_id: str, kerdes: dict, most: str
+    ) -> dict:
+        """„Van későbbi?" — ELTOLT ablakkal keres újra (ADR-035).
+
+        A kérdés egyben kérés: aki későbbit kér, az nem ugyanazt a
+        listát akarja még egyszer. Az idegen próbában öt egymás utáni
+        fordulóban ugyanaz a három időpont jött vissza, mert a keresés
+        ablaka nem mozdult — a vásárló joggal írta a hetedik fordulóra,
+        hogy „Így nem haladunk előre".
+
+        Az ablak MÁSIK vége marad, ahol volt: aki későbbit kér, nem
+        mondta, hogy a hét végéig ne nézzünk. Ha az eltolt ablakban
+        nincs semmi, a szokásos „nincs szabad időpont" válasz megy ki —
+        az eszköz alternatíva-ajánlásával együtt."""
+        alap = dict(allapot.utolso_kereses or allapot.megorzott_parameterek)
+        parameterek = {
+            kulcs: alap[kulcs]
+            for kulcs in ("bolt_id", "szolgaltatas_id", "napszak")
+            if kulcs in alap
+        }
+        parameterek["datum_tol"] = kerdes.get("uj_ablak_tol") or alap.get("datum_tol") or most
+        parameterek["datum_ig"] = kerdes.get("uj_ablak_ig") or alap.get("datum_ig") or most
+        # A NAPSZAK ELENGEDÉSE, ha későbbit kérnek: a „nem jó ilyen
+        # korán" épp azt mondja, hogy a korábbi napszak nem jó — egy
+        # megőrzött `delelott` itt pont a keresést szűkítené oda,
+        # ahonnan el akarunk lépni.
+        if kerdes.get("mit") == ajanlat_kerdes.VAN_KESOBBI:
+            parameterek.pop("napszak", None)
+        valasz = self._szabad_idopontok(allapot, parameterek)
+        # MIÉRT tolódott az ablak — a felület ezt mondja ki, hogy a
+        # vásárló lássa: nem ugyanazt kereste meg a rendszer újra.
+        valasz["ablak_tolva"] = kerdes.get("mit")
+        return valasz
+
+    @staticmethod
+    def _ugyanaz_a_kereses(elozo: dict, mostani: dict) -> bool:
+        """Két keresés ugyanaz-e — a `session_id`-t nem számítva.
+
+        Csak a KERESÉST meghatározó mezőket hasonlítjuk: ami nem
+        befolyásolja az eredményt, az nem is teheti különbözővé a két
+        kérést."""
+        mezok = ("bolt_id", "szolgaltatas_id", "datum_tol", "datum_ig", "napszak")
+        return all(elozo.get(mezo) == mostani.get(mezo) for mezo in mezok)
+
     def _szabad_idopontok(self, allapot: _SessionAllapot, parameterek: dict) -> dict:
         teljes = self._idegen_szolgaltatast_eldob(
             {
@@ -966,6 +1172,24 @@ class Orchestrator:
         felismert_ablak = {
             k: teljes[k] for k in ("bolt_id", "datum_tol", "datum_ig", "napszak") if k in teljes
         }
+
+        # UGYANAZ A KERESÉS MÁSODSZOR (ADR-035). Ha a kérés minden
+        # paramétere megegyezik az előzővel, és az ajánlataink még
+        # állnak, a keresés szükségszerűen ugyanazt adná vissza — az
+        # idegen próbában ez ÖTSZÖR történt meg egymás után, és a
+        # vásárló a hetedik fordulóra azt írta, hogy „Így nem haladunk
+        # előre".
+        #
+        # Ilyenkor nem keresünk újra (a holdokat sem cserélgetjük),
+        # hanem emlékeztetünk arra, amit felajánlottunk — és FELKÍNÁLJUK,
+        # hogy nézzünk mást. A kör így nem zárul be: a következő
+        # fordulóban a vásárló mondhat mást.
+        if (
+            allapot.aktualis_jeloltek
+            and allapot.utolso_kereses
+            and self._ugyanaz_a_kereses(allapot.utolso_kereses, teljes)
+        ):
+            return self._ajanlat_emlekezteto(allapot)
 
         eredmeny = szabad_idopontok.hivas(self.conn, teljes, org_id=self.org_id)
 

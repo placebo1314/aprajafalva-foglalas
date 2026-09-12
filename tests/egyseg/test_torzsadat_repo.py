@@ -131,6 +131,7 @@ def test_service_description_update(conn, org, shop):
             "alap_idotartam_perc": 5,
             "termekleiras": "durranó",
             "ar": "100 arany",
+            "koznyelvi_nevek": [],
         }
     ]
 
@@ -187,6 +188,7 @@ def test_services_list_one_elem_alap_with_duration(conn, org, shop):
             "alap_idotartam_perc": 5,
             "termekleiras": "",
             "ar": "",
+            "koznyelvi_nevek": [],
         }
     ]
 
@@ -240,6 +242,7 @@ def test_service_update_renames_name_and_duration(conn, org, shop):
             "alap_idotartam_perc": 20,
             "termekleiras": "",
             "ar": "",
+            "koznyelvi_nevek": [],
         }
     ]
 

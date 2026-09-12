@@ -40,6 +40,11 @@ from core.repo import torzsadat_repo
 # a részletet a `bolt_info` adja, ha a vásárló rákérdez.
 _LEIRAS_MAX_MONDAT = 1
 
+# Hány köznyelvi alak megy a modellnek szolgáltatásonként. Minden szó
+# latencia (`docs/PLATFORM_TANULSAGOK.md`), és a lista eleje a
+# leggyakoribb — a bolt sorrendje szándék, nem véletlen.
+_KOZNYELVI_MAX = 4
+
 
 def _rovid_leiras(termekleiras: str) -> str:
     """A termékleírás ELSŐ mondata. Üres leírásból üres string — a
@@ -85,6 +90,12 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
                         "nev": szolgaltatas["nev"],
                         "leiras": _rovid_leiras(szolgaltatas["termekleiras"]),
                         "idotartam_perc": szolgaltatas["alap_idotartam_perc"],
+                        # AHOGY A VÁSÁRLÓ KÉRI (0005. migráció). A
+                        # katalógus-válaszban nem jelenik meg — a
+                        # felsorolás a bolt SAJÁT szavaival szól —,
+                        # a modellnek szóló kínálat-sorba viszont
+                        # ez a fontos rész (`prompt_sor`).
+                        "koznyelvi_nevek": szolgaltatas["koznyelvi_nevek"],
                     }
                     for szolgaltatas in torzsadat_repo.services_list(conn, shop_id=bolt_id)
                 ],
@@ -94,3 +105,62 @@ def hivas(conn, parameterek: dict, *, org_id: str) -> dict:
     if not boltok:
         return hiba.hiba_eredmeny(hiba.Ok.ISMERETLEN_BOLT, "ismeretlen_bolt")
     return hiba.sikeres_eredmeny(boltok=boltok)
+
+
+def prompt_sor(conn, *, org_id: str) -> str | None:
+    """A KÍNÁLAT egyetlen sorban, a modellnek (ADR-035).
+
+        Kínálat: szundi: altató (alvás, álom, altatófőzet); ugyifogyi:
+        petárda (tűzijáték, durranás, rakéta); torpilla: boldogság
+        (öröm, nagy öröm, beszélgetés)
+
+    **Miért nem a rendszerpromptba égetve.** Mert adat: a bolt tudja,
+    milyen szóval kérik nála a szolgáltatást, nem mi. Az első idegen
+    próba nyitómondata ezen bukott el — „Örömöt szeretnék. Van
+    nálatok?" —, és a rendszer azt kérdezte vissza, melyik boltba
+    szeretne menni. Az „öröm" azóta a `szolgaltatas.koznyelvi_nevek`
+    oszlopban áll (0005. migráció): ha egy bolt holnap más szóval is
+    árulja, az admin írja be, nem mi írjuk át a promptot.
+
+    A SLUG megy ki, nem a bolt neve: a modellnek a slugot kell
+    visszaadnia (arra van enum a sémában), és a kettő között nem
+    hagyunk fordítási lépést.
+
+    `None`, ha nincs mit mondani — üres törzsadatnál a hallgatás a
+    pontos állítás."""
+    eredmeny = hivas(conn, {"session_id": "prompt"}, org_id=org_id)
+    if not eredmeny["sikeres"]:
+        return None
+    reszek = []
+    for bolt in eredmeny["boltok"]:
+        for szolgaltatas in bolt["szolgaltatasok"]:
+            nevek = szolgaltatas.get("koznyelvi_nevek") or []
+            koznyelvi = f" ({', '.join(nevek[:_KOZNYELVI_MAX])})" if nevek else ""
+            reszek.append(f"{bolt['bolt_id']}: {szolgaltatas['nev']}{koznyelvi}")
+    if not reszek:
+        return None
+    return "Kínálat: " + "; ".join(reszek)
+
+
+def koznyelvi_szotar(conn, *, org_id: str) -> dict[str, str]:
+    """KÖZNYELVI ALAK → bolt slug, a törzsadatból (ADR-035).
+
+    A `prompt_sor` a modellnek szól; ez a determinisztikus kapunak. Ha
+    a modell nem jutott el az „örömtől" a Törpilláig — és mérve nem
+    mindig jut el —, a kapu eljut.
+
+    A szolgáltatás SAJÁT neve is bekerül („boldogság"), nem csak a
+    köznyelvi alakok: ugyanaz a felhasználás, és a hívónak nem kell két
+    szótárat kezelnie. Ütközésnél az ELSŐ bolt nyer (a katalógus
+    sorrendje szerint) — egy szó, ami két boltra is illik, nem szótár
+    kérdése, hanem törzsadat-hiba, és a bolt döntse el, ne mi."""
+    eredmeny = hivas(conn, {"session_id": "szotar"}, org_id=org_id)
+    if not eredmeny["sikeres"]:
+        return {}
+    szotar: dict[str, str] = {}
+    for bolt in eredmeny["boltok"]:
+        for szolgaltatas in bolt["szolgaltatasok"]:
+            nevek = [szolgaltatas["nev"], *(szolgaltatas.get("koznyelvi_nevek") or [])]
+            for nev in nevek:
+                szotar.setdefault(nev.strip().lower(), bolt["bolt_id"])
+    return szotar

@@ -147,7 +147,7 @@ def services_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
     megadva — ez a `bolt_info` eszköznek jelzi, hogy nincs tényleges
     válasz, nem NULL-ellenőrzést igényel."""
     rows = conn.execute(
-        "SELECT id, nev, alap_idotartam_perc, termekleiras, ar "
+        "SELECT id, nev, alap_idotartam_perc, termekleiras, ar, koznyelvi_nevek "
         "FROM szolgaltatas WHERE bolt_id = ? ORDER BY nev",
         (shop_id,),
     ).fetchall()
@@ -158,9 +158,18 @@ def services_list(conn: sqlite3.Connection, *, shop_id: str) -> list[dict]:
             "alap_idotartam_perc": row[2],
             "termekleiras": row[3],
             "ar": row[4],
+            # KÖZNYELVI NEVEK: ahogy a VÁSÁRLÓ hívja (0005. migráció).
+            # Listaként adjuk vissza, nem nyers stringként — a tárolási
+            # alak (vesszős lista) a séma dolga, a hívóé a lista.
+            "koznyelvi_nevek": _koznyelvi_lista(row[5]),
         }
         for row in rows
     ]
+
+
+def _koznyelvi_lista(nyers: str | None) -> list[str]:
+    """A vesszővel tárolt köznyelvi nevek listája, üresek nélkül."""
+    return [resz.strip() for resz in (nyers or "").split(",") if resz.strip()]
 
 
 def exception_day_create(
@@ -229,6 +238,19 @@ def service_update(
     conn.execute(
         "UPDATE szolgaltatas SET nev = ?, alap_idotartam_perc = ? WHERE id = ?",
         (name, alap_duration_minute, service_id),
+    )
+
+
+def service_koznyelvi_update(
+    conn: sqlite3.Connection, *, service_id: str, nevek: list[str]
+) -> None:
+    """A köznyelvi nevek (0005. migráció) — ahogy a VÁSÁRLÓ hívja a
+    szolgáltatást. Külön függvény, mert külön szerkesztői döntés: a
+    boltnak nem kell hozzányúlnia a leíráshoz ahhoz, hogy felvegyen egy
+    új szinonimát."""
+    conn.execute(
+        "UPDATE szolgaltatas SET koznyelvi_nevek = ? WHERE id = ?",
+        (", ".join(nev.strip() for nev in nevek if nev.strip()), service_id),
     )
 
 

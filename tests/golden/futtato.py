@@ -145,6 +145,12 @@ class Eset:
     # valódi állapotgépből jön (`allapotgep.prompt_sor`). Az eset azt
     # rögzíti, MIT ajánlottunk — nem azt, hogy a vásárló mit mondott rá.
     felajanlott: list[str] = field(default_factory=list)
+    # MELYIK ÁLLAPOTBAN hangzik el az UTOLSÓ forduló (ADR-035). A
+    # `felajanlott` magában AJANLAT_VAR-t jelent; a
+    # MEGEROSITES_VAR-t (ahol a séma háromértékű) az esetnek KI
+    # KELL MONDANIA — enélkül a szűkített sémát meg sem lehetne
+    # mérni, mert a mérés mindig a bő sémával futna.
+    allapot: str | None = None
     # Ez az eset olyan képességet mér, amit a determinisztikus réteg
     # nem tud (pl. a szándék kemény részének elengedése) — a
     # determinisztikus regressziós védőháló kihagyja, a mérés nem.
@@ -198,6 +204,7 @@ def betolt(utvonal: Path = GOLDEN_UTVONAL) -> tuple[dict, list[Eset]]:
             reszleges_elfogadas=e.get("reszleges_elfogadas"),
             tilos=e.get("tilos", []),
             felajanlott=e.get("felajanlott", []),
+            allapot=e.get("allapot"),
             igenyel_llm=bool(e.get("igenyel_llm", False)),
         )
         for e in adat["esetek"]
@@ -283,6 +290,11 @@ _ENGEDELYEZETT_ESZKOZOK = _VALODI_ESZKOZOK | {
     "meta_valasz",
     "koszones",
     "kinalat",
+    # ADR-035: kérdés a FELAJÁNLOTT időpontokról, és a megerősítés
+    # háromértékű válasza. Mindkettő irányítási érték, nem
+    # `assistant/tools/` eszköz — mint a `visszakerdez`.
+    "ajanlat_kerdes",
+    "megerosites_valasz",
 }
 
 # Minden mezőnév, ami egyáltalán előfordulhat egy értelmező-kimenetben:
@@ -684,7 +696,10 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
     from assistant.orchestrator import kovetkezo_kontextus
 
     def hivo(
-        bemenet: str | list[str], most: str, felajanlott: list[str] | None = None
+        bemenet: str | list[str],
+        most: str,
+        felajanlott: list[str] | None = None,
+        allapot: str | None = None,
     ) -> tuple[dict | None, float, int, str | None]:
         eset_felajanlott = list(felajanlott or [])
         kezdet = time.monotonic()
@@ -715,13 +730,33 @@ def ertelmezo_hivo(ertelmezo) -> HivoFuggveny:
                     elozmenyek.append(
                         (KI_RENDSZER, "Felajánlott időpontok: " + "; ".join(eset_felajanlott))
                     )
+                    # AZ ÁLLAPOTSOR az eset által KIMONDOTT állapoté,
+                    # ha van ilyen — különben az ajánlat-váróé. A
+                    # kettőnek egyeznie kell a sémával, amit a
+                    # `kontextus.allapot` választ: két különböző
+                    # állapotot mondani a modellnek néma mérési hiba.
                     allapot_sor = allapotgep.prompt_sor(
-                        allapotgep.AJANLAT_VAR, jeloltek_szama=len(eset_felajanlott)
+                        allapot or allapotgep.AJANLAT_VAR,
+                        jeloltek_szama=len(eset_felajanlott),
                     )
                 kontextus = ErtelmezesKontextus(
                     megorzott_parameterek=dict(megorzott),
                     elozmenyek=list(elozmenyek),
                     allapot_sor=allapot_sor,
+                    # A KÍNÁLAT a demóadatból (ADR-035) — ugyanaz, amit
+                    # a felület is átad. Enélkül a mérés olyan
+                    # rendszert mérne, ami nem tudja, milyen szóval
+                    # kérik nála a szolgáltatásokat.
+                    kinalat_sor=_kinalat_sor(),
+                    kinalat_szotar=_kinalat_szotar(),
+                    # AJÁNLAT UTÁN a megerősítés-állapot sémája
+                    # szűkített; az ajánlatra hivatkozó eseteknél az
+                    # AJANLAT_VAR a valós állapot.
+                    allapot=(
+                        allapot
+                        if allapot and sorszam == len(fordulok)
+                        else (allapotgep.AJANLAT_VAR if allapot_sor else None)
+                    ),
                 )
                 kimenet = ertelmezo.ertelmez(mondat, most=most, kontextus=kontextus)
                 hivo.fordulo_idok.append(time.monotonic() - fordulo_kezdet)
@@ -764,16 +799,69 @@ class BurkoltHivo:
         self.fordulo_idok: list[float] = []
         self.utolso_egyetertes: int | None = None
 
-    def __call__(self, bemenet: str | list[str], most: str, felajanlott: list[str] | None = None):
+    def __call__(
+        self,
+        bemenet: str | list[str],
+        most: str,
+        felajanlott: list[str] | None = None,
+        allapot: str | None = None,
+    ):
         # A `felajanlott` (ADR-030: mit ajánlottunk fel az utolsó forduló
         # előtt) ugyanúgy átmegy, mint minden más — a burkoló csak a
         # fordulónkénti adatokat gyűjti, a hívás alakját nem szűkíti.
-        eredmeny = self._alap(bemenet, most, felajanlott)
+        eredmeny = self._alap(bemenet, most, felajanlott, allapot)
         self.fordulo_kimenetek = list(getattr(self._alap, "fordulo_kimenetek", []) or [])
         self.fordulo_idok = list(getattr(self._alap, "fordulo_idok", []) or [])
         if self._konyveles is not None:
             self.utolso_egyetertes = self._konyveles(eredmeny)
         return eredmeny
+
+
+# A DEMÓADAT KÍNÁLATA — a köznyelvi nevek a törzsadatból (ADR-035). A
+# mérés ugyanazt kapja, amit a felület: enélkül olyan rendszert mérnénk,
+# ami nem tudja, milyen szóval kérik nála a szolgáltatásokat.
+#
+# Ha a demóadat nincs betöltve (`python feladat.py seed`), a kínálat
+# üres, és a köznyelvi esetek buknak — ez NEM néma: a futtató kiírja.
+_KINALAT_GYORSITOTAR: dict[str, object] = {}
+
+
+def _demo_kinalat() -> tuple[str | None, dict[str, str]]:
+    if "ertek" not in _KINALAT_GYORSITOTAR:
+        _KINALAT_GYORSITOTAR["ertek"] = _demo_kinalat_betolt()
+    return _KINALAT_GYORSITOTAR["ertek"]  # type: ignore[return-value]
+
+
+def _demo_kinalat_betolt() -> tuple[str | None, dict[str, str]]:
+    try:
+        from assistant.tools import kinalat
+        from core.repo import migracio, torzsadat_repo
+        from seed.betolt import ALAP_DB_PATH
+
+        if not ALAP_DB_PATH.exists():
+            return None, {}
+        conn = migracio.conn_nyitas(str(ALAP_DB_PATH))
+        orgok = torzsadat_repo.orgs_list(conn)
+        if not orgok:
+            return None, {}
+        org_id = orgok[0]["id"]
+        return (
+            kinalat.prompt_sor(conn, org_id=org_id),
+            kinalat.koznyelvi_szotar(conn, org_id=org_id),
+        )
+    except Exception as kivetel:  # noqa: BLE001 — a mérés nem állhat meg ettől
+        print(
+            f"FIGYELEM: a demóadat kínálata nem tölthető be ({kivetel}) — üres kínálattal mérünk."
+        )
+        return None, {}
+
+
+def _kinalat_sor() -> str | None:
+    return _demo_kinalat()[0]
+
+
+def _kinalat_szotar() -> dict[str, str]:
+    return _demo_kinalat()[1]
 
 
 def fut(meta: dict, esetek: list[Eset], hivo: HivoFuggveny) -> list[EsetEredmeny]:
@@ -782,7 +870,7 @@ def fut(meta: dict, esetek: list[Eset], hivo: HivoFuggveny) -> list[EsetEredmeny
     eredmenyek = []
     for eset in esetek:
         kimenet, telt, tokenszam, hiba = (
-            hivo(eset.bemenet, most, eset.felajanlott)
+            hivo(eset.bemenet, most, eset.felajanlott, eset.allapot)
             if eset.felajanlott
             else hivo(eset.bemenet, most)
         )

@@ -173,7 +173,9 @@ def test_ajanlat_beszelhetoen_ket_idopontot_mond_nem_tobbet() -> None:
     vész el: a képernyőn ott marad, és a következő fordulóban kérhető."""
     szoveg = valasz.ajanlat_mondat(JELOLTEK, mod=BESZELHETO)
     assert szoveg == (
-        "A legkorábbi december huszonkettedikén nyolc órakor, "
+        # A NAPNÉV 2026-09-21 óta elhangzik (ADR-035): a vásárló a hét
+        # napját tartja fejben, nem a dátumot.
+        "A legkorábbi kedden, december huszonkettedikén nyolc órakor, "
         "de van kilenc harminckor is. Melyik jó?"
     )
     assert "tizenegy" not in szoveg

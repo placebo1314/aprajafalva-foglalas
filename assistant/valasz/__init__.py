@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import random
 
-from assistant.tools import katalogus
+from assistant.tools import ajanlat_kerdes, katalogus
 from assistant.valasz import beszelheto as beszelheto_modul
 from assistant.valasz import helyi_ido, ragozas, szamok
 from assistant.valasz.sablonok import SABLONOK
@@ -197,6 +197,68 @@ def ajanlat_bevezetes_szoveg(*, nyelv: str = _NYELV_ALAPERTELMEZETT) -> str:
     return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_bevezetes"]
 
 
+def _napokra_bont(kezdetek: list[str]) -> list[tuple[str, list[str]]]:
+    """`[(nap, [kezdet, …]), …]` — a jelöltek NAPONKÉNT csoportosítva,
+    az eredeti sorrendet megtartva.
+
+    Azonos kezdet csak egyszer: a pontozó egy időpontra több jelöltet is
+    adhat (más hosszúságú szolgáltatásokra), a gombokon a hossz
+    megkülönbözteti őket, a mondatban nem."""
+    napok: dict[str, list[str]] = {}
+    for kezdet in kezdetek:
+        nap = napok.setdefault(kezdet[:10], [])
+        if kezdet[11:16] not in [meglevo[11:16] for meglevo in nap]:
+            nap.append(kezdet)
+    return list(napok.items())
+
+
+def ajanlat_idopontok_szoveg(
+    kezdetek: list[str], *, nyelv: str = _NYELV_ALAPERTELMEZETT, mod: str = MOD_SZOVEGES
+) -> str:
+    """A felajánlott időpontok felsorolása, NAPONKÉNT csoportosítva:
+
+        Kedden, december huszonkettedikén: nyolc óra, kilenc harminc,
+        tíz húsz.
+
+    **Miért kell kimondani a napot** (ADR-035). Az idegen próba 7.
+    fordulója ez volt: „akkor a legkésőbbit. De melyik nap?" — a
+    vásárló három időpontot kapott óra szerint, és nem tudta, melyik
+    napra szólnak. A dátum ott volt a gombokon, de a MONDATBAN nem, és
+    hangon gomb sincs.
+
+    A `kezdetek` HELYI idejű ISO-időbélyegek (`helyi_ido.py`) — a
+    konverzió a hívóé.
+    """
+    csoportok = _napokra_bont(kezdetek)
+    if not csoportok:
+        return ""
+    beszelt = _beszelheto_e(mod)
+    reszek = []
+    for nap, napi_kezdetek in csoportok:
+        # A NAPNÉV is elhangzik („kedden, december huszonkettedikén"):
+        # a vásárló a hét napját tartja fejben, nem a dátumot.
+        nap_szoveg = szamok.datum_szoval(nap, napnevvel=True)
+        if beszelt:
+            # AZ ELSŐ időpont mondja ki az „óra" szót, a többi nem:
+            # „nyolc óra, kilenc harminc, tíz húsz". Kimondva ez a
+            # természetes — az „óra" minden tagban ismételve darabos,
+            # elhagyva viszont az elsőnél nem derülne ki, hogy időpontok
+            # következnek.
+            idok = [
+                szamok.ora_perc_szoval(int(kezdet[11:13]), int(kezdet[14:16]))
+                if index == 0
+                else szamok.ora_perc_szoval_rovid(int(kezdet[11:13]), int(kezdet[14:16]))
+                for index, kezdet in enumerate(napi_kezdetek)
+            ]
+        else:
+            nap_szoveg = nap_szoveg.capitalize()
+            idok = [szamok.ora_perc_rovid(kezdet) for kezdet in napi_kezdetek]
+        reszek.append(f"{nap_szoveg}: {_felsorolas(idok)}")
+    # TÖBB NAP esetén pontosvessző választ: a felsorolásban már van
+    # vessző, és a kettő egymásba folyna.
+    return "; ".join(reszek) if len(reszek) > 1 else reszek[0]
+
+
 def ajanlat_mondat(
     jeloltek: list[dict],
     *,
@@ -242,13 +304,11 @@ def ajanlat_mondat(
         # jelöltet is adhat (más hosszúságú szolgáltatásokra). A
         # gombokon a hossz megkülönbözteti őket, a mondatban nem —
         # „8:00, 8:00 vagy 8:20" felsorolás lenne belőle.
-        egyediek: list[str] = []
-        for kezdet in kezdetek:
-            ora_perc = szamok.ora_perc_rovid(kezdet)
-            if ora_perc not in egyediek:
-                egyediek.append(ora_perc)
+        # A NAP IS ELHANGZIK, naponként csoportosítva (ADR-035):
+        # „Kedden, december huszonkettedikén: 8:00, 9:30 vagy 10:20."
+        # Az azonos kezdeteket a csoportosító vonja össze.
         return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_bevezetes_idokkel"].format(
-            idok=_felsorolas(egyediek)
+            idok=ajanlat_idopontok_szoveg(kezdetek, nyelv=nyelv, mod=mod)
         )
 
     if not kezdetek:
@@ -256,7 +316,7 @@ def ajanlat_mondat(
         # időpontot hozzá: a bevezető mondat megy át a kimeneti kapun.
         return kimenet(ajanlat_bevezetes_szoveg(nyelv=nyelv), mod)
 
-    elso = szamok.ido_iso_szoval(kezdetek[0], kor=True)
+    elso = szamok.ido_iso_szoval(kezdetek[0], kor=True, napnevvel=True)
     # A MÁSODIK időpont az első ELTÉRŐ kezdetű jelölt, nem egyszerűen a
     # következő. A fej nélküli végigjátszás fogta meg, miért: a
     # pontozó egy időpontra több jelöltet is adhat (más hosszúságú
@@ -281,6 +341,68 @@ def ajanlat_mondat(
         masodik = szamok.ido_iso_szoval(kovetkezo, kor=True)
     sablon = _beszelheto_sablon(nyelv, "visszaigazolas", "ajanlat_ketto")
     return kimenet(sablon.format(elso=elso, masodik=masodik), mod)
+
+
+def ajanlat_emlekezteto_szoveg(
+    jeloltek: list[dict],
+    *,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+    mod: str = MOD_SZOVEGES,
+    zona: str | None = None,
+) -> str:
+    """„Az imént ezeket ajánlottam — …. Melyik jó, vagy nézzek mást?"
+
+    A visszakérdezés HELYETT megy ki, ha már állnak ajánlataink
+    (ADR-035). Nem új ajánlat: ugyanazokat az időpontokat mondja
+    vissza, tehát az „imént" szó pontos állítás.
+
+    Hangon rövidebb: ott nincs képernyő, amire a felsorolás
+    visszanézhető lenne, és a „vagy nézzek mást?" a második kérdés
+    lenne egy fordulóban (`assistant/valasz/beszelheto.py`)."""
+    kezdetek = [helyi_ido.helyi_iso(j["kezdet"], zona) for j in jeloltek if j.get("kezdet")]
+    idok = ajanlat_idopontok_szoveg(kezdetek, nyelv=nyelv, mod=mod)
+    if _beszelheto_e(mod):
+        sablon = _beszelheto_sablon(nyelv, "visszaigazolas", "ajanlat_emlekezteto")
+        return kimenet(sablon.format(idok=idok), mod)
+    return SABLONOK[nyelv]["visszaigazolas"]["ajanlat_emlekezteto"].format(idok=idok)
+
+
+def ajanlat_valasz_szoveg(
+    valasz: dict,
+    *,
+    nyelv: str = _NYELV_ALAPERTELMEZETT,
+    mod: str = MOD_SZOVEGES,
+    zona: str | None = None,
+) -> str:
+    """Felelet a felajánlott időpontokról szóló kérdésre (ADR-035).
+
+    Nem új ajánlat: ugyanazokból a jelöltekből felel, amiket az imént
+    kimondtunk. Ezért kezdődik az „Ezek…" névmással — a vásárló épp
+    azokról kérdezett."""
+    sablonok = SABLONOK[nyelv]["ajanlat_valasz"]
+    mit = valasz.get("mit")
+
+    if mit == ajanlat_kerdes.MIKOR_VAN:
+        kezdet = helyi_ido.helyi_iso((valasz.get("jelolt") or {}).get("kezdet", ""), zona)
+        if _beszelheto_e(mod):
+            idopont = szamok.ido_iso_szoval(kezdet, napnevvel=True)
+        else:
+            nap = szamok.datum_szoval(kezdet[:10], napnevvel=True)
+            idopont = f"{nap}, {szamok.ora_perc_rovid(kezdet)}"
+        # A SORSZÁM kimondva szó, írásban szám: „a második időpont"
+        # vs. „A 2. időpont". A pont utáni szám felolvasva
+        # értelmezhetetlen („a kettő pont időpont").
+        sorszam = valasz.get("sorszam") or 1
+        sorszam_alak = szamok.sorszam_szoval(sorszam) if _beszelheto_e(mod) else f"{sorszam}."
+        return kimenet(sablonok["mikor_van"].format(sorszam=sorszam_alak, idopont=idopont), mod)
+
+    # MELYIK_NAP: a napok, az ajánlat sorrendjében — és ha csak egy nap
+    # van, azt mondjuk ki, nem azt, hogy „ezeken a napokon".
+    napok = [szamok.datum_szoval(nap, napnevvel=True) for nap in valasz.get("napok") or []]
+    if not napok:
+        return kimenet(sablonok["nincs_adat"], mod)
+    kulcs = "melyik_nap_egy" if len(napok) == 1 else "melyik_nap_tobb"
+    return kimenet(sablonok[kulcs].format(napok=_felsorolas(napok, "és")), mod)
 
 
 def kiut_szoveg(

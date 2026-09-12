@@ -61,7 +61,7 @@ from dataclasses import dataclass
 
 from assistant.interpreter import KI_RENDSZER, KI_VASARLO, ErtelmezesKontextus, ablak
 from assistant.interpreter.peldak import PELDAK, PELDAK_V2
-from assistant.tools import semak
+from assistant.tools import ajanlat_kerdes, semak
 
 _LOG = logging.getLogger(__name__)
 
@@ -96,6 +96,12 @@ ESZKOZOK = [
     # el, hanem magát a VÁLASZTÁST. Ezért nem érték, hanem irányítás —
     # az orchestrator hajtja végre (a pontozó első jelöltje, ADR-006).
     "dontsd_el_te",
+    # KÉRDÉS A MÁR FELAJÁNLOTT IDŐPONTOKRÓL (ADR-035). Az idegen próba
+    # ÖT egymás utáni fordulóban ezt kérdezte („Van későbbi?", „10 után
+    # kéne", „ez minden nap van?", „melyik nap?"), és a rendszer mind az
+    # ötször ÚJRA KERESETT, ugyanazzal az eredménnyel. A válasz a
+    # kezünkben volt — a jelöltek listájában.
+    "ajanlat_kerdes",
     "foglalas_lemondas",
     "visszakerdez",
     "nincs",
@@ -191,6 +197,13 @@ FORMAT_SEMA = {
                 # ismeri a jelölteket) — a séma csak azt mondja ki, hogy
                 # egész szám, nem időpont és nem szöveg.
                 "sorszam": {"type": "integer"},
+                # Az `ajanlat_kerdes` mezője: MIT kérdez a vásárló a
+                # felajánlott időpontokról. Zárt halmaz — a
+                # `assistant/tools/ajanlat_kerdes.py::KERDESFAJTAK`.
+                "mit_kerdez": {
+                    "type": "string",
+                    "enum": list(ajanlat_kerdes.KERDESFAJTAK),
+                },
                 "hianyzo_mezo": {
                     "type": "string",
                     "enum": ["bolt_id", "szolgaltatas_id", "foglalasi_kod"],
@@ -203,6 +216,66 @@ FORMAT_SEMA = {
     "required": ["eszkoz", "parameterek"],
     "additionalProperties": False,
 }
+
+
+# ---------------------------------------------------------------------
+# ÁLLAPOTFÜGGŐ SÉMA (ADR-035)
+#
+# MEGEROSITES_VAR állapotban MI tettünk fel egy zárt kérdést („biztosan
+# lefoglaljam?"), tehát a válasz is zárt halmaz. A modellnek ilyenkor
+# nincs mit keresnie — és épp ez volt az idegen próba 14. fordulója:
+#
+#     „igen...ha máshogy nem megy."
+#     → szabad_idopontok, új keresés, a kiválasztott időpont eldobva
+#
+# A mondat IGEN volt, csak kelletlen. A modell a hezitálást bizonytalan
+# szándéknak olvasta, és mivel a séma megengedte, keresésbe fordult.
+# A javítás NEM kulcsszólista (a „jó, legyen", „hát ha muszáj",
+# „rendben, csak végezzünk" végtelen sok alakban létezik), hanem a
+# KÖTÖTT DEKÓDOLÁS szűkítése: ebben az állapotban a modell fizikailag
+# nem tud mást mondani, mint igent, nemet vagy azt, hogy a vásárló
+# valami MÁST kérdezett.
+#
+# A HANGULAT külön mező: naplózzuk (a próba-naplóban látszik, hogy a
+# vásárló kelletlenül mondott igent), de a DÖNTÉST nem befolyásolja.
+# Aki igent mond, annak igenje van, akkor is, ha közben sóhajt.
+MEGEROSITES_DONTESEK = ["igen", "nem", "mas_kerdes"]
+
+_MEGEROSITES_SEMA = {
+    "type": "object",
+    "properties": {
+        "eszkoz": {"type": "string", "enum": ["megerosites_valasz"]},
+        "parameterek": {
+            "type": "object",
+            "properties": {
+                "dontes": {"type": "string", "enum": MEGEROSITES_DONTESEK},
+                "hangulat": {
+                    "type": "string",
+                    "description": (
+                        "a vásárló hangulata egy szóban, ha kivehető "
+                        "(kelletlen, siettet, lelkes) — a döntést NEM befolyásolja"
+                    ),
+                },
+            },
+            "required": ["dontes"],
+            "additionalProperties": False,
+        },
+    },
+    "required": ["eszkoz", "parameterek"],
+    "additionalProperties": False,
+}
+
+
+def format_sema(allapot: str | None = None) -> dict:
+    """A kötött dekódolás sémája — az ÁLLAPOTTÓL függően.
+
+    Alapból a teljes séma (`FORMAT_SEMA`); `MEGEROSITES_VAR`-ban a
+    szűkített, háromértékű (l. fent). Nem optimalizálás: strukturális
+    garancia arra, hogy a zárt kérdésre zárt válasz jöjjön."""
+    if allapot == "MEGEROSITES_VAR":
+        return _MEGEROSITES_SEMA
+    return FORMAT_SEMA
+
 
 # Rövid, mert minden szó latencia (Vapi-tanulság) — DE mérve (l.
 # spike/EREDMENY.md és a golden mérés): a séma mezőleírásai önmagukban
@@ -224,11 +297,19 @@ Eszközök:
 - visszakerdez: ha egy kritikus adat (jellemzően a bolt) hiányzik a mondatból —
   ekkor NE találj ki boltot vagy dátumot, inkább kérdezz
 - jelolt_valasztas: CSAK akkor, ha a beszélgetésben felajánlottunk időpontokat,
-  és a vásárló ezek KÖZÜL választ („a fél kilences jó lesz", „a középső") —
-  add meg a sorszámot (1-től), ne az időpontot
+  és a vásárló ezek KÖZÜL választ („a fél kilences jó lesz", „a középső",
+  „kilenc jó lesz", „legyen a nyolcas") — add meg a sorszámot (1-től), ne az
+  időpontot
 - dontsd_el_te: ha a vásárló RÁD BÍZZA a választást („nekem mind jó, válassz
   te", „amelyik neked jó", „mindegy, foglalj egyet") — ilyenkor NE kérdezz
   vissza és ne adj listát
+- ajanlat_kerdes: CSAK ha felajánlottunk időpontokat, és a vásárló EZEKRŐL
+  KÉRDEZ — nem választ közülük és nem is mond új napot. mit_kerdez:
+  melyik_nap („melyik nap?", „ez minden nap van?"), van_kesobbi („van
+  későbbi?", „nem jó ilyen korán", „10 után kéne"), van_korabbi („van
+  korábbi?"), mikor_van + sorszam („a másodikat mikorra?"). Ha a vásárló
+  VÁLASZT egy időpontot, az jelolt_valasztas; ha új napot mond, az
+  szabad_idopontok.
 - nincs: ha a kérés nem foglalással/bolttal kapcsolatos
 
 Boltok: szundi (altató), ugyifogyi (petárda), torpilla (boldogság).
@@ -409,19 +490,42 @@ def prompt_verzio() -> str:
     return nev if nev in PROMPTOK else ALAP_PROMPT_VERZIO
 
 
-def rendszerprompt(verzio: str, *, most: str, van_osszefoglalo: bool) -> str:
+def rendszerprompt(
+    verzio: str, *, most: str, van_osszefoglalo: bool, kinalat_sor: str | None = None
+) -> str:
     """A kész rendszerprompt — a verzióhoz tartozó szöveg ÉS a hozzá
     tartozó példakészlet együtt mozog (a v2 példái a v1 promptjában
-    értelmetlenek lennének, és fordítva)."""
+    értelmetlenek lennének, és fordítva).
+
+    `kinalat_sor`: a boltok szolgáltatásai a KÖZNYELVI nevükkel, a
+    törzsadatból (ADR-035) — „torpilla: boldogság (öröm, nagy öröm,
+    beszélgetés)". A statikus boltsor helyére kerül.
+
+    **Miért a rendszerpromptban, és nem a beszélgetés elé.** Mérve
+    (2026-09-21): a beszélgetés első soraként a modell NEM jutott el az
+    „Örömöt szeretnék"-től a Törpilláig — ott a kínálat adatnak
+    látszott a párbeszédben, nem annak a szótárnak, ami szerint
+    dolgozik. Az eszközlista mellett viszont igen."""
     peldak = "\n".join(
         f"{mondat}\n-> {json.dumps(kimenet, ensure_ascii=False)}"
         for mondat, kimenet in PELDAKESZLETEK[verzio]
     )
-    return PROMPTOK[verzio].format(
+    szoveg = PROMPTOK[verzio].format(
         most=most,
         peldak=peldak,
         osszefoglalo_utmutato=(_OSSZEFOGLALO_UTMUTATO if van_osszefoglalo else ""),
     )
+    # A KÍNÁLAT-SOR a statikus boltsor HELYÉRE kerül, nem mellé: két,
+    # részben átfedő felsorolás a modellnek zaj lenne (ADR-035).
+    if kinalat_sor:
+        szoveg = szoveg.replace(STATIKUS_BOLT_SOR, kinalat_sor)
+    return szoveg
+
+
+# A statikus boltsor, amit a törzsadatból épített kínálat-sor kivált.
+# Ha a prompt szövege változik, ez a csere NÉMÁN elmaradna — ezért
+# őrzi teszt (`tests/egyseg/test_kinalat.py`).
+STATIKUS_BOLT_SOR = "Boltok: szundi (altató), ugyifogyi (petárda), torpilla (boldogság)."
 
 
 # Ki mondta -> ahogy a promptban megjelenik. A modell párbeszédet lát,
@@ -801,11 +905,18 @@ class LLMErtelmezo:
             "messages": [
                 {
                     "role": "system",
-                    "content": rendszerprompt(verzio, most=most, van_osszefoglalo=van_osszefoglalo),
+                    "content": rendszerprompt(
+                        verzio,
+                        most=most,
+                        van_osszefoglalo=van_osszefoglalo,
+                        kinalat_sor=kontextus.kinalat_sor,
+                    ),
                 },
                 {"role": "user", "content": beszelgetes},
             ],
-            "format": FORMAT_SEMA,
+            # ÁLLAPOTFÜGGŐ SÉMA (ADR-035): MEGEROSITES_VAR-ban a modell
+            # csak igent, nemet vagy „mást kérdezett"-et adhat vissza.
+            "format": format_sema(kontextus.allapot),
             "stream": False,
             "think": False,  # explicit — l. modul docstring
             "options": {

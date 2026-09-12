@@ -158,7 +158,7 @@ def test_rollback_fully_restore(db_path):
     conn = migracio.conn_nyitas(db_path)
     migracio.migral(conn)
     rolled_back = migracio.rollback(conn)
-    assert rolled_back == ["0004", "0003", "0002", "0001"]
+    assert rolled_back == ["0005", "0004", "0003", "0002", "0001"]
 
     tablak = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     conn.close()

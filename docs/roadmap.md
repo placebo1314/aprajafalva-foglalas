@@ -203,7 +203,25 @@ megjelennek, és a kilépőkód is jelzi őket. Ez az első ellenőrzés, ami
 nem az ÉRTELMEZÉST méri, hanem azt, hogy **mit kap meg az, aki nem
 látja a képernyőt.**
 
-**Kilépési feltétel:** 150-200 eset — **teljesült** (192, ebből nyelvi
+**2026-09-21:** a beszédhelyzetek halmaz 39 → **51 eset** — új réteg a
+`tizennyolc` (12 eset): a MÁSODIK idegen próba mondatai, szó szerint.
+A barátunk tizennyolc fordulóból foglalt, és a tizedikben azt írta,
+hogy „Így nem haladunk előre" (`docs/TIZENNYOLC_FORDULO_20260921.md`).
+Együtt **204 eset**.
+
+A halmaz ekkor kapott két új képességet, mindkettőt azért, mert enélkül
+a javítás MÉRHETETLEN lett volna: az eset kimondhatja, MELYIK
+ÁLLAPOTBAN hangzik el az utolsó fordulója (`allapot:`) — különben a
+MEGEROSITES_VAR szűkített sémáját sosem mérnénk —, és a futtató átadja
+az értelmezőnek a DEMÓADAT kínálatát (köznyelvi nevekkel), ahogy a
+felület is.
+
+**Új mérőszám a golden seten kívül:** az ÚT HOSSZA (első kéréstől a
+foglalásig, beszélgetésenként) a `naplo` és a `riport` fejlécében.
+Cél: 5 forduló alatt. Ez az első szám, ami nem a fordulót méri, hanem
+a beszélgetést.
+
+**Kilépési feltétel:** 150-200 eset — **teljesült** (204, ebből nyelvi
 85); futtatható értékelő — **kész**; két modell összehasonlítható —
 **kész** (2026-09-05-re öt modell van megmérve ugyanazon a halmazon).
 Ami a lezáráshoz még hiányzik: SZITUÁCIÓS esetek (naptárállapot →
