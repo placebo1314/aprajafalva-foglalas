@@ -311,6 +311,20 @@ class AdminApp(tk.Tk):
         ttk.Label(service_form, text="Ár:").grid(row=3, column=0, sticky="w")
         self.service_price_field = ttk.Entry(service_form)
         self.service_price_field.grid(row=3, column=1, sticky="ew")
+        # KÖZNYELVI NEVEK (ADR-035): ahogy a VÁSÁRLÓ kéri, nem ahogy a
+        # bolt nevezi. Az első idegen próba nyitómondata „Örömöt
+        # szeretnék" volt — a „boldogság" szolgáltatásig nem jutott el a
+        # rendszer. Ez a mező zárja azt a rést, és a BOLT tudja
+        # kitölteni, nem mi: ha holnap más szóval is kérik, ide kell
+        # beírni, nem a promptba.
+        ttk.Label(service_form, text="Köznyelvi nevek:").grid(row=4, column=0, sticky="w")
+        self.service_colloquial_field = ttk.Entry(service_form)
+        self.service_colloquial_field.grid(row=4, column=1, sticky="ew")
+        ttk.Label(
+            service_form,
+            text="vesszővel elválasztva — ezekkel a szavakkal is megtalálják",
+            foreground="#666",
+        ).grid(row=5, column=1, sticky="w")
         service_form.columnconfigure(1, weight=1)
         service_buttons = ttk.Frame(jobb)
         service_buttons.pack(fill="x", pady=(2, 10))
@@ -883,12 +897,16 @@ class AdminApp(tk.Tk):
         service_id = self._selected_id(self.service_list, self._service_id_list)
         self.service_description_field.delete("1.0", "end")
         self.service_price_field.delete(0, "end")
+        self.service_colloquial_field.delete(0, "end")
         if service_id is None:
             return
         service = self._service_details.get(service_id)
         if service:
             self.service_description_field.insert("1.0", service["termekleiras"])
             self.service_price_field.insert(0, service["ar"])
+            # A repo LISTÁT ad vissza, a mező vesszős szöveget vár — a
+            # tárolási alak a sémáé, a szerkesztési alak az adminé.
+            self.service_colloquial_field.insert(0, ", ".join(service["koznyelvi_nevek"]))
 
     def _service_update_ui(self) -> None:
         service_id = self._selected_id(self.service_list, self._service_id_list)
@@ -917,6 +935,11 @@ class AdminApp(tk.Tk):
             service_id=service_id,
             termekleiras=self.service_description_field.get("1.0", "end"),
             ar=self.service_price_field.get(),
+        )
+        api.service_koznyelvi_update(
+            self.conn,
+            service_id=service_id,
+            nevek=self.service_colloquial_field.get(),
         )
         self._master_data_message_write("Szolgáltatás módosítva.")
         self._shop_selected()

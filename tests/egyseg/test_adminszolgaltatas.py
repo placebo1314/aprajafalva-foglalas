@@ -639,3 +639,43 @@ def test_conflict_list_shop_by_filterable(conn, master):
 
     all = api.conflict_list(conn, org_id=master["szervezet_id"])
     assert len(all) > 0
+
+
+# --- KÖZNYELVI NEVEK (ADR-035) ----------------------------------------
+#
+# Az első idegen próba nyitómondata „Örömöt szeretnék" volt, és a
+# Törpilla szolgáltatása „boldogság" néven fut. Azt, hogy milyen
+# SZAVAKKAL kérik nálunk a szolgáltatást, a BOLT tudja — tehát
+# szerkeszthetőnek kell lennie, nem a promptba égetve.
+
+
+def test_koznyelvi_nevek_szerkesztese(conn, master):
+    eredmeny = api.service_koznyelvi_update(
+        conn, service_id=master["szolgaltatas_id"], nevek="tűzijáték, durranás,  rakéta "
+    )
+
+    assert eredmeny["hiba"] is None
+    szolgaltatas = torzsadat_repo.services_list(conn, shop_id=master["bolt_id"])[0]
+    assert szolgaltatas["koznyelvi_nevek"] == ["tűzijáték", "durranás", "rakéta"]
+
+
+def test_a_koznyelvi_nevek_eljutnak_a_SZOTARIG(conn, master):
+    """Amit az admin beír, annak a determinisztikus kapuban kell
+    megjelennie — különben a szerkesztés díszlet."""
+    from assistant.tools import kinalat
+
+    api.service_koznyelvi_update(conn, service_id=master["szolgaltatas_id"], nevek="tűzijáték")
+
+    szotar = kinalat.koznyelvi_szotar(conn, org_id=master["szervezet_id"])
+    assert szotar.get("tűzijáték") == "ugyifogyi"
+
+
+def test_az_ures_mezo_torli_a_neveket(conn, master):
+    """Az admin vissza is vonhat egy szinonimát — az üres mező nem
+    hiba, hanem döntés."""
+    api.service_koznyelvi_update(conn, service_id=master["szolgaltatas_id"], nevek="tűzijáték")
+
+    api.service_koznyelvi_update(conn, service_id=master["szolgaltatas_id"], nevek="")
+
+    szolgaltatas = torzsadat_repo.services_list(conn, shop_id=master["bolt_id"])[0]
+    assert szolgaltatas["koznyelvi_nevek"] == []

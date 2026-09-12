@@ -235,6 +235,33 @@ def service_description_update(
     return {"hiba": None}
 
 
+def service_koznyelvi_update(conn: sqlite3.Connection, *, service_id: str, nevek: str) -> dict:
+    """KÖZNYELVI NEVEK — ahogy a VÁSÁRLÓ kéri a szolgáltatást (ADR-035).
+
+    A bemenet vesszővel elválasztott lista EGY szövegmezőből („öröm,
+    nagy öröm, beszélgetés") — az admin így írja, és nem kell hozzá
+    listakezelő felület.
+
+    **Miért adminból szerkeszthető, és miért nem a promptban van.** Az
+    első idegen próba nyitómondata ez volt: „Örömöt szeretnék." A
+    Törpilla szolgáltatása „boldogság" néven fut, és a rendszer nem
+    jutott el az egyiktől a másikig. Azt, hogy milyen SZAVAKKAL kérik
+    nálunk a szolgáltatást, a BOLT tudja, nem mi — ha holnap
+    „vidámságot" is árulnak, azt ide kell beírni, nem a kódba
+    (blueprint 10., „Bolti tudás — szerkesztett adat, nem
+    modell-tudás").
+
+    Innen két helyre megy: a modellnek szóló kínálat-sorba
+    (`assistant/tools/kinalat.py::prompt_sor`) és a determinisztikus
+    kapuba (`koznyelvi_szotar`)."""
+    torzsadat_repo.service_koznyelvi_update(
+        conn,
+        service_id=service_id,
+        nevek=nevek.split(","),
+    )
+    return {"hiba": None}
+
+
 def exception_day_add(
     conn: sqlite3.Connection,
     *,
